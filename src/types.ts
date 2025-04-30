@@ -65,9 +65,10 @@ export interface GameState {
   allPlayersMoved: boolean; // Flag to indicate when all players have completed their moves
 }
 
-// New enum for draft modes
+// Updated enum for draft modes with All Pick
 export enum DraftMode {
   None = 'none',
+  AllPick = 'allpick', // New mode added
   Single = 'single',
   Random = 'random',
   PickAndBan = 'pickandban'

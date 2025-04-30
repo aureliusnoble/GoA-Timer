@@ -114,3 +114,7 @@ The application uses Tailwind CSS for styling. Custom styles can be added in:
 - Single: 3x as many heroes as players (remember all players must be shown a unique set of 3)
 - Random: Heroes + 2 of players
 - Ban and Pick: 2x as many heroes as players.
+
+-Tooltip. Once all players selected a hero make it go away
+tiebreaker: Team (should click to flip. )
+- Deploy

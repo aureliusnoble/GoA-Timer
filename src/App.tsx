@@ -1,7 +1,6 @@
 // src/App.tsx
 import React, { useState, useEffect, useReducer, useRef } from 'react';
 import './App.css';
-import HeroSelection from './components/HeroSelection';
 import GameSetup from './components/GameSetup';
 import GameTimer from './components/GameTimer';
 import DraftingSystem from './components/DraftingSystem';
@@ -361,40 +360,6 @@ function App() {
     return [];
   };
 
-  // Handle hero selection (for non-draft mode)
-  const handleHeroSelect = (hero: Hero, playerIndex: number) => {
-    const updatedPlayers = [...localPlayers];
-    
-    // If this player already has a hero, remove it
-    if (updatedPlayers[playerIndex]) {
-      const previousHero = updatedPlayers[playerIndex].hero;
-      if (previousHero) {
-        // If the same hero is passed back, we're clearing the selection (Change button)
-        if (previousHero.id === hero.id) {
-          setSelectedHeroes(selectedHeroes.filter(h => h.id !== previousHero.id));
-          updatedPlayers[playerIndex] = {
-            ...updatedPlayers[playerIndex],
-            hero: null
-          };
-          setLocalPlayers(updatedPlayers);
-          return; // Exit early, we're just clearing the hero
-        } else {
-          // Otherwise, we're changing to a new hero, so remove the old one
-          setSelectedHeroes(selectedHeroes.filter(h => h.id !== previousHero.id));
-        }
-      }
-    }
-    
-    // Update player's hero
-    updatedPlayers[playerIndex] = {
-      ...updatedPlayers[playerIndex],
-      hero: hero
-    };
-    
-    setLocalPlayers(updatedPlayers);
-    setSelectedHeroes([...selectedHeroes, hero]);
-  };
-
   // Add a new player
   const addPlayer = (team: Team) => {
     // Don't add more than 10 players
@@ -471,6 +436,25 @@ function App() {
     nameCheckRef.current = false; // Reset name check when names change
   };
 
+  // Check if we have enough heroes in the selected expansions for different draft modes
+  const canUseDraftMode = (mode: DraftMode): boolean => {
+    const playerCount = localPlayers.length;
+    const availableHeroCount = filteredHeroes.length;
+    
+    switch(mode) {
+      case DraftMode.AllPick:
+        return availableHeroCount >= playerCount;
+      case DraftMode.Single:
+        return availableHeroCount >= playerCount * 3;
+      case DraftMode.Random:
+        return availableHeroCount >= playerCount + 2;
+      case DraftMode.PickAndBan:
+        return availableHeroCount >= playerCount * 2;
+      default:
+        return false;
+    }
+  };
+
   // Start the drafting process
   const startDrafting = () => {
     // Check for duplicate names
@@ -503,6 +487,12 @@ function App() {
       return;
     }
     
+    // Check if we have enough heroes in selected expansions
+    if (!canUseDraftMode(DraftMode.AllPick)) {
+      alert('Not enough heroes in selected expansions. Please select more expansions or reduce player count.');
+      return;
+    }
+    
     // Set an initial random tiebreaker coin and show animation
     const initialCoinSide = Math.random() > 0.5 ? Team.Titans : Team.Atlanteans;
     dispatch({ 
@@ -519,7 +509,6 @@ function App() {
   };
 
   // Handle draft mode selection
-  // Only the modified handleSelectDraftMode function from App.tsx
 const handleSelectDraftMode = (mode: DraftMode) => {
   let initialDraftingState: DraftingState;
   const totalPlayerCount = localPlayers.length;
@@ -534,23 +523,41 @@ const handleSelectDraftMode = (mode: DraftMode) => {
   const deepShuffledHeroes = shuffleArray([...availableHeroesForDraft]);
   
   switch (mode) {
+    case DraftMode.AllPick:
+      // All Pick mode - start with full hero pool, no assignments
+      initialDraftingState = {
+        mode,
+        currentTeam: firstTeam,
+        availableHeroes: deepShuffledHeroes,
+        assignedHeroes: [],
+        selectedHeroes: [],
+        bannedHeroes: [],
+        currentStep: 0,
+        pickBanSequence: [],
+        isComplete: false
+      };
+      break;
+      
     case DraftMode.Single:
       // Create a new shuffled array for each player's options
+      // Ensure no duplicate heroes between players
+      const heroPool = [...deepShuffledHeroes];
       const assignedHeroes = localPlayers.map(player => {
-        // Get 3 random heroes for this player from the deep shuffled array
-        // Take a new slice each time to ensure different heroes
-        const sliceStart = Math.floor(Math.random() * (deepShuffledHeroes.length - 3));
-        const heroOptions = shuffleArray(deepShuffledHeroes.slice(sliceStart, sliceStart + 3));
-        
-        // If we didn't get 3 heroes, grab from the beginning
-        if (heroOptions.length < 3) {
-          const remaining = 3 - heroOptions.length;
-          heroOptions.push(...deepShuffledHeroes.slice(0, remaining));
+        // Take 3 unique heroes from the pool
+        const heroOptions: Hero[] = [];
+        for (let i = 0; i < 3; i++) {
+          if (heroPool.length > 0) {
+            // Get a random hero from what's left in the pool
+            const randomIndex = Math.floor(Math.random() * heroPool.length);
+            heroOptions.push(heroPool[randomIndex]);
+            // Remove this hero from the pool so it's not assigned to other players
+            heroPool.splice(randomIndex, 1);
+          }
         }
         
         return {
           playerId: player.id,
-          heroOptions: shuffleArray(heroOptions) // Extra shuffle for good measure
+          heroOptions: heroOptions
         };
       });
       
@@ -668,8 +675,8 @@ const handleSelectDraftMode = (mode: DraftMode) => {
     }
     
     // Handle next team selection based on draft mode
-    if (draftingState.mode === DraftMode.Single) {
-      // For Single draft, always alternate teams
+    if (draftingState.mode === DraftMode.Single || draftingState.mode === DraftMode.AllPick) {
+      // For Single draft and All Pick, always alternate teams
       newCurrentTeam = draftingState.currentTeam === Team.Titans ? Team.Atlanteans : Team.Titans;
     } else if (draftingState.mode === DraftMode.Random) {
       // For Random draft, check if current team has all picks and switch if necessary
@@ -823,57 +830,7 @@ const handleSelectDraftMode = (mode: DraftMode) => {
     setIsDraftingMode(false);
     setShowDraftModeSelection(false);
   };
-
-  // Start the game
-  const startGame = () => {
-    // Check for duplicate names
-    const duplicateNames = findDuplicateNames();
-    if (duplicateNames.length > 0) {
-      alert(`Players must have unique names. Duplicates found: ${duplicateNames.join(', ')}`);
-      return;
-    }
-    
-    // Validate team composition
-    const titansPlayers = localPlayers.filter(p => p.team === Team.Titans && p.hero);
-    const atlanteansPlayers = localPlayers.filter(p => p.team === Team.Atlanteans && p.hero);
-    
-    // Check if both teams have the same number of players
-    if (titansPlayers.length !== atlanteansPlayers.length) {
-      alert('Both teams must have the same number of players');
-      return;
-    }
-    
-    // Check if each team has at least 2 players but no more than 5
-    if (titansPlayers.length < 2 || titansPlayers.length > 5) {
-      alert('Each team must have between 2 and 5 players');
-      return;
-    }
-    
-    // Check if all players have selected heroes
-    if (titansPlayers.length + atlanteansPlayers.length !== localPlayers.length) {
-      alert('All players must be assigned a hero');
-      return;
-    }
-    
-    // Check if all players have selected unique heroes
-    const heroIds = localPlayers.filter(p => p.hero).map(p => p.hero!.id);
-    const uniqueHeroIds = new Set(heroIds);
-    if (heroIds.length !== uniqueHeroIds.size) {
-      alert('Each player must select a unique hero - no duplicate heroes allowed');
-      return;
-    }
-    
-    // Check if all players have entered their names
-    const playersWithoutNames = localPlayers.filter(p => !p.name.trim());
-    if (playersWithoutNames.length > 0) {
-      alert('All players must enter their names');
-      return;
-    }
-    
-    // Start the game with current players
-    startGameWithPlayers(localPlayers);
-  };
-
+  
   // Select a player for their move
   const selectPlayer = (playerIndex: number) => {
     // Only allow selecting if we're not in the middle of a move and this player hasn't gone yet
@@ -977,7 +934,7 @@ const shuffleArray = <T extends unknown>(array: T[]): T[] => {
 };
 
   return (
-    <div className="App min-h-screen bg-gradient-to-b from-blue-400 to-orange-800 text-white p-6">
+    <div className="App min-h-screen bg-gradient-to-b from-blue-400 to-orange-300 text-white p-6">
       <header className="App-header mb-8">
         <h1 className="text-3xl font-bold mb-2">Guards of Atlantis II Timer</h1>
       </header>
@@ -993,7 +950,6 @@ const shuffleArray = <T extends unknown>(array: T[]): T[] => {
         />
       )}
 
-
       {!gameStarted ? (
         <div className="game-setup-container">
           {showDraftModeSelection ? (
@@ -1001,6 +957,13 @@ const shuffleArray = <T extends unknown>(array: T[]): T[] => {
               onSelectMode={handleSelectDraftMode}
               onCancel={() => setShowDraftModeSelection(false)}
               playerCount={localPlayers.length}
+              availableDraftModes={{
+                [DraftMode.AllPick]: canUseDraftMode(DraftMode.AllPick),
+                [DraftMode.Single]: canUseDraftMode(DraftMode.Single),
+                [DraftMode.Random]: canUseDraftMode(DraftMode.Random),
+                [DraftMode.PickAndBan]: canUseDraftMode(DraftMode.PickAndBan)
+              }}
+              heroCount={filteredHeroes.length}
             />
           ) : isDraftingMode ? (
             <DraftingSystem 
@@ -1013,30 +976,23 @@ const shuffleArray = <T extends unknown>(array: T[]): T[] => {
               onCancelDrafting={cancelDrafting}
             />
           ) : (
-            <>
-              <GameSetup 
-                strategyTime={strategyTime}
-                moveTime={moveTime}
-                gameLength={gameLength}
-                onStrategyTimeChange={setStrategyTime}
-                onMoveTimeChange={setMoveTime}
-                onGameLengthChange={handleGameLengthChange}
-                players={localPlayers}
-                onAddPlayer={addPlayer}
-                onStartGame={startGame}
-                onDraftHeroes={startDrafting}
-                selectedExpansions={selectedExpansions}
-                onToggleExpansion={handleToggleExpansion}
-                onPlayerNameChange={handlePlayerNameChange}
-                duplicateNames={findDuplicateNames()}
-              />
-              <HeroSelection 
-                heroes={filteredHeroes}
-                selectedHeroes={selectedHeroes}
-                players={localPlayers}
-                onHeroSelect={handleHeroSelect}
-              />
-            </>
+            <GameSetup 
+              strategyTime={strategyTime}
+              moveTime={moveTime}
+              gameLength={gameLength}
+              onStrategyTimeChange={setStrategyTime}
+              onMoveTimeChange={setMoveTime}
+              onGameLengthChange={handleGameLengthChange}
+              players={localPlayers}
+              onAddPlayer={addPlayer}
+              onDraftHeroes={startDrafting}
+              selectedExpansions={selectedExpansions}
+              onToggleExpansion={handleToggleExpansion}
+              onPlayerNameChange={handlePlayerNameChange}
+              duplicateNames={findDuplicateNames()}
+              canStartDrafting={canUseDraftMode(DraftMode.AllPick)}
+              heroCount={filteredHeroes.length}
+            />
           )}
         </div>
       ) : (

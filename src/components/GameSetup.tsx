@@ -4,6 +4,7 @@ import { Player, Team, GameLength } from '../types';
 import { getAllExpansions } from '../data/heroes';
 import TimerInput from './TimerInput';
 import PlayerNameInput from './PlayerNameInput';
+import { Info } from 'lucide-react';
 
 interface GameSetupProps {
   strategyTime: number;
@@ -14,12 +15,13 @@ interface GameSetupProps {
   onGameLengthChange: (length: GameLength) => void;
   players: Player[];
   onAddPlayer: (team: Team) => void;
-  onStartGame: () => void;
   onDraftHeroes: () => void;
   selectedExpansions: string[];
   onToggleExpansion: (expansion: string) => void;
   onPlayerNameChange: (playerId: number, name: string) => void;
-  duplicateNames: string[]; // Added this prop to show duplicate name warnings
+  duplicateNames: string[]; // Array of duplicate player names for validation
+  canStartDrafting: boolean; // Flag indicating if drafting can begin based on heroes count
+  heroCount: number; // Number of available heroes with current expansion selection
 }
 
 const GameSetup: React.FC<GameSetupProps> = ({
@@ -31,12 +33,13 @@ const GameSetup: React.FC<GameSetupProps> = ({
   onGameLengthChange,
   players,
   onAddPlayer,
-  onStartGame,
   onDraftHeroes,
   selectedExpansions,
   onToggleExpansion,
   onPlayerNameChange,
-  duplicateNames
+  duplicateNames,
+  canStartDrafting,
+  heroCount
 }) => {
   const [expandedSection, setExpandedSection] = useState<{[key: string]: boolean}>({
     'timers': true,
@@ -45,6 +48,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
     'names': true,
     'expansions': false
   });
+  const [tooltipVisible, setTooltipVisible] = useState<boolean>(false);
   const expansions = getAllExpansions();
   
   // Set default values when component mounts if they're not already set
@@ -62,14 +66,12 @@ const GameSetup: React.FC<GameSetupProps> = ({
   const atlanteanCount = players.filter(p => p.team === Team.Atlanteans).length;
   const totalPlayers = titanCount + atlanteanCount;
   
-  // Count players with heroes assigned and names
-  const playersWithHeroes = players.filter(p => p.hero).length;
+  // Count players with names
   const playersWithNames = players.filter(p => p.name.trim() !== '').length;
-  const allPlayersHaveHeroes = playersWithHeroes === totalPlayers && totalPlayers > 0;
   const allPlayersHaveNames = playersWithNames === totalPlayers && totalPlayers > 0;
   
   // Check if player names are unique
-  const hasUniquenames = duplicateNames.length === 0;
+  const hasUniqueNames = duplicateNames.length === 0;
 
   // Check if quick game is available (6 or fewer players)
   const isQuickGameAvailable = totalPlayers <= 6;
@@ -80,9 +82,9 @@ const GameSetup: React.FC<GameSetupProps> = ({
   // Check if teams have at least 2 players each
   const teamsHaveMinPlayers = titanCount >= 2 && atlanteanCount >= 2;
   
-  // Requirements for starting game and drafting
-  const canStartGame = titanCount > 0 && titanCount === atlanteanCount && allPlayersHaveHeroes && teamsHaveMinPlayers && allPlayersHaveNames && hasUniquenames;
-  const canDraft = titanCount > 0 && titanCount === atlanteanCount && teamsHaveMinPlayers && allPlayersHaveNames && hasUniquenames;
+  // Requirements for drafting
+  const isTeamsBalanced = titanCount > 0 && titanCount === atlanteanCount && teamsHaveMinPlayers;
+  const canDraft = isTeamsBalanced && allPlayersHaveNames && hasUniqueNames && canStartDrafting;
 
   return (
     <div className="bg-gray-800 rounded-lg p-6 mb-8">
@@ -266,6 +268,13 @@ const GameSetup: React.FC<GameSetupProps> = ({
                 </div>
               )}
               
+              {/* Hero count warning */}
+              {totalPlayers > 0 && !canStartDrafting && (
+                <div className="text-red-400 text-sm mt-2">
+                  Not enough heroes ({heroCount}) for {totalPlayers} players. Select more expansions.
+                </div>
+              )}
+              
               {titanCount > 0 && titanCount === atlanteanCount && allPlayersHaveNames && teamsHaveMinPlayers && duplicateNames.length === 0 && (
                 <div className="text-emerald-400 text-sm mt-2">
                   Teams are balanced with {titanCount} players each
@@ -285,19 +294,31 @@ const GameSetup: React.FC<GameSetupProps> = ({
         </h3>
         
         {expandedSection['expansions'] && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {expansions.map(expansion => (
-              <label key={expansion} className="flex items-center bg-gray-700 p-3 rounded-lg cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selectedExpansions.includes(expansion)}
-                  onChange={() => onToggleExpansion(expansion)}
-                  className="mr-2 h-5 w-5"
-                />
-                <span>{expansion}</span>
-              </label>
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {expansions.map(expansion => (
+                <label key={expansion} className="flex items-center bg-gray-700 p-3 rounded-lg cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedExpansions.includes(expansion)}
+                    onChange={() => onToggleExpansion(expansion)}
+                    className="mr-2 h-5 w-5"
+                  />
+                  <span>{expansion}</span>
+                </label>
+              ))}
+            </div>
+            <div className="mt-3 text-sm">
+              <span className="text-blue-300">Available heroes: {heroCount}</span>
+              {totalPlayers > 0 && (
+                <span className="ml-4 text-yellow-300">
+                  {canStartDrafting 
+                    ? "✓ Enough heroes for drafting" 
+                    : "✗ Not enough heroes for drafting"}
+                </span>
+              )}
+            </div>
+          </>
         )}
       </div>
       
@@ -330,31 +351,35 @@ const GameSetup: React.FC<GameSetupProps> = ({
         </div>
       )}
       
-      {/* Action Buttons */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <button
-          className={`px-6 py-2 rounded-lg font-medium text-white flex-grow ${
-            canStartGame
-              ? 'bg-emerald-600 hover:bg-emerald-500'
-              : 'bg-gray-600 cursor-not-allowed'
-          }`}
-          onClick={onStartGame}
-          disabled={!canStartGame}
-        >
-          Start Game
-        </button>
-        
-        <button
-          className={`px-6 py-2 rounded-lg font-medium text-white flex-grow ${
-            canDraft
-              ? 'bg-blue-600 hover:bg-blue-500'
-              : 'bg-gray-600 cursor-not-allowed'
-          }`}
-          onClick={onDraftHeroes}
-          disabled={!canDraft}
-        >
-          Draft Heroes
-        </button>
+      {/* Action Button - Only Draft Heroes now */}
+      <div className="flex items-center justify-center">
+        <div className="relative">
+          <button
+            className={`px-8 py-3 rounded-lg font-medium text-white ${
+              canDraft
+                ? 'bg-blue-600 hover:bg-blue-500'
+                : 'bg-gray-600 cursor-not-allowed'
+            }`}
+            onClick={onDraftHeroes}
+            disabled={!canDraft}
+          >
+            Draft Heroes
+          </button>
+          
+          <div 
+            className="ml-2 absolute top-1/2 right-0 transform translate-x-7 -translate-y-1/2 cursor-help"
+            onMouseEnter={() => setTooltipVisible(true)}
+            onMouseLeave={() => setTooltipVisible(false)}
+          >
+            <Info size={18} className="text-gray-400 hover:text-gray-200" />
+            
+            {tooltipVisible && (
+              <div className="absolute right-full mr-2 top-1/2 -translate-y-1/2 bg-gray-900 text-white p-2 rounded shadow-lg w-64 z-10">
+                Click to select heroes for each player and start the game.
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

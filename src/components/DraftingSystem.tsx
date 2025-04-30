@@ -167,6 +167,26 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
           </div>
         )}
         
+        {/* Actions for All Pick mode */}
+        {isAvailable && draftingState.mode === DraftMode.AllPick && (
+          <div className="mt-3">
+            {pendingPlayers.length > 0 && (
+              <div className="grid grid-cols-1 gap-1">
+                {pendingPlayers.map(player => (
+                  <button
+                    key={player.id}
+                    className="w-full px-3 py-2 bg-green-700 hover:bg-green-600 rounded text-sm flex items-center justify-center"
+                    onClick={() => onHeroSelect(hero, player.id)}
+                  >
+                    <span className="mr-1">Pick for</span>
+                    <span className="font-bold">{player.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        
         {/* Actions for Random Draft mode */}
         {isAvailable && draftingState.mode === DraftMode.Random && (
           <div className="mt-3">
@@ -206,6 +226,53 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
             </button>
           </div>
         )}
+      </div>
+    );
+  };
+  
+  // Render All Pick Draft UI
+  const renderAllPickUI = () => {
+    return (
+      <div>
+        <h3 className="text-xl font-bold mb-4">All Pick</h3>
+        
+        <div className="mb-6">
+          {allPlayersHaveSelectedHeroes ? (
+            <div className="p-3 rounded-lg bg-green-900/50 border-2 border-green-400">
+              <h4 className="text-lg font-semibold mb-2">
+                Start Game
+              </h4>
+              <div className="text-md mb-3">
+                All players have selected heroes. Click Start Game.
+              </div>
+            </div>
+          ) : (
+            <div className={`p-3 rounded-lg ${
+              draftingState.currentTeam === Team.Titans ? 'bg-blue-900/50 border-2 border-blue-400' : 'bg-red-900/50 border-2 border-red-400'
+            }`}>
+              <h4 className="text-lg font-semibold mb-2">
+                {getTeamName(draftingState.currentTeam)}'s Turn
+              </h4>
+              
+              {pendingCurrentTeamPlayers.length > 0 ? (
+                <div className="text-md mb-3">
+                  Select any hero for: {pendingCurrentTeamPlayers.map(player => player.name).join(', ')}
+                </div>
+              ) : (
+                <div className="text-md mb-3">
+                  All {getTeamName(draftingState.currentTeam)} players have selected heroes
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        
+        {/* Filter available heroes by search or ability */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+          {draftingState.availableHeroes.map(hero => 
+            renderHeroCard(hero, 'available')
+          )}
+        </div>
       </div>
     );
   };
@@ -728,6 +795,8 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
   // Render based on drafting mode
   const renderDraftingUI = () => {
     switch (draftingState.mode) {
+      case DraftMode.AllPick:
+        return renderAllPickUI();
       case DraftMode.Single:
         return renderSingleDraftUI();
       case DraftMode.Random:
@@ -868,7 +937,8 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
       <div className="bg-gray-800 rounded-lg p-6 mb-6">
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold">
-            {draftingState.mode === DraftMode.Single ? 'Single Draft' : 
+            {draftingState.mode === DraftMode.AllPick ? 'All Pick' :
+             draftingState.mode === DraftMode.Single ? 'Single Draft' : 
              draftingState.mode === DraftMode.Random ? 'Random Draft' : 
              'Pick and Ban Draft'}
           </h2>
