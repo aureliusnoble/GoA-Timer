@@ -1,7 +1,7 @@
 // src/components/DraftingSystem.tsx
 import React, { useState, useRef } from 'react';
 import { Hero, Player, Team, DraftMode, DraftingState } from '../types';
-import { X, User, Play } from 'lucide-react';
+import { X, User, Play, RotateCcw, RefreshCw, ArrowLeft, HelpCircle } from 'lucide-react';
 
 interface DraftingSystemProps {
   players: Player[];
@@ -11,15 +11,67 @@ interface DraftingSystemProps {
   onHeroBan: (hero: Hero) => void;
   onFinishDrafting: () => void;
   onCancelDrafting: () => void;
+  // New props for navigation
+  onUndoLastAction: () => void;
+  onResetDraft: () => void;
+  onBackToDraftSelection: () => void;
+  canUndo: boolean; // Flag to determine if undo is available
 }
+
+// Custom tooltip component for consistency
+interface TooltipProps {
+  text: string;
+  children: React.ReactNode;
+}
+
+const Tooltip: React.FC<TooltipProps> = ({ text, children }) => {
+  const [isVisible, setIsVisible] = useState(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const showTooltip = () => {
+    timeoutRef.current = setTimeout(() => {
+      setIsVisible(true);
+    }, 300); // Small delay to prevent accidental triggering
+  };
+  
+  const hideTooltip = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    setIsVisible(false);
+  };
+  
+  return (
+    <div 
+      className="relative inline-block"
+      onMouseEnter={showTooltip}
+      onMouseLeave={hideTooltip}
+      onTouchStart={showTooltip}
+      onTouchEnd={hideTooltip}
+    >
+      {children}
+      {isVisible && (
+        <div className="absolute z-50 bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-sm bg-gray-900 text-white rounded shadow-lg whitespace-nowrap">
+          {text}
+          <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const DraftingSystem: React.FC<DraftingSystemProps> = ({
   players,
+  availableHeroes,
   draftingState,
   onHeroSelect,
   onHeroBan,
   onFinishDrafting,
-  onCancelDrafting
+  onCancelDrafting,
+  onUndoLastAction,
+  onResetDraft,
+  onBackToDraftSelection,
+  canUndo
 }) => {
   const [hoveredHero, setHoveredHero] = useState<Hero | null>(null);
   
@@ -44,7 +96,6 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
   };
   
   // Get current phase label for Pick and Ban
-// Get current phase label for Pick and Ban
   const getCurrentPickBanLabel = () => {
     if (draftingState.mode !== DraftMode.PickAndBan) {
       return 'Invalid Mode'; // Should not happen if this is only called in P&B
@@ -524,6 +575,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
       </div>
     );
   };
+  
   
   // Render Random Draft UI
   const renderRandomDraftUI = () => {

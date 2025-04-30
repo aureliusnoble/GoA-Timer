@@ -284,6 +284,9 @@ function App() {
     isComplete: false
   });
   
+  // NEW: Add draft history state for undo functionality
+  const [draftHistory, setDraftHistory] = useState<DraftingState[]>([]);
+  
   // Coin flip animation state
   const [showCoinAnimation, setShowCoinAnimation] = useState<boolean>(false);
   
@@ -531,7 +534,6 @@ function App() {
     setShowCoinAnimation(true);
   };
 
-  // Rest of the code remains the same...
   // Handle draft mode selection
   const handleSelectDraftMode = (mode: DraftMode) => {
     let initialDraftingState: DraftingState;
@@ -648,12 +650,17 @@ function App() {
     }
     
     setDraftingState(initialDraftingState);
+    // Clear history when starting a new draft
+    setDraftHistory([]);
     setShowDraftModeSelection(false);
     setIsDraftingMode(true);
   };
 
   // Handle hero selection in draft mode
   const handleDraftHeroSelect = (hero: Hero, playerId: number) => {
+    // Save current state to history for undo
+    setDraftHistory(prev => [...prev, { ...draftingState }]);
+    
     const player = localPlayers.find(p => p.id === playerId);
     if (!player) return;
     
@@ -746,6 +753,9 @@ function App() {
 
   // Handle hero ban in draft mode
   const handleDraftHeroBan = (hero: Hero) => {
+    // Save current state to history for undo
+    setDraftHistory(prev => [...prev, { ...draftingState }]);
+    
     if (draftingState.mode !== DraftMode.PickAndBan) return;
     
     // Update banned heroes
@@ -785,6 +795,141 @@ function App() {
       currentStep: newStep,
       isComplete
     });
+  };
+
+  // NEW: Handle undo last draft action
+  const handleUndoLastDraftAction = () => {
+    if (draftHistory.length > 0) {
+      // Get the last state from history
+      const previousState = draftHistory[draftHistory.length - 1];
+      
+      // Remove the last state from history
+      setDraftHistory(prev => prev.slice(0, -1));
+      
+      // Restore previous state
+      setDraftingState(previousState);
+    }
+  };
+
+  // NEW: Create initial state for a draft mode
+  const createInitialStateForDraftMode = (mode: DraftMode): DraftingState => {
+    const totalPlayerCount = localPlayers.length;
+    const availableHeroesForDraft = [...filteredHeroes];
+    const firstTeam = gameState.coinSide;
+    const deepShuffledHeroes = shuffleArray([...availableHeroesForDraft]);
+    
+    switch (mode) {
+      case DraftMode.AllPick:
+        return {
+          mode,
+          currentTeam: firstTeam,
+          availableHeroes: deepShuffledHeroes,
+          assignedHeroes: [],
+          selectedHeroes: [],
+          bannedHeroes: [],
+          currentStep: 0,
+          pickBanSequence: [],
+          isComplete: false
+        };
+        
+      case DraftMode.Single:
+        const heroPool = [...deepShuffledHeroes];
+        const assignedHeroes = localPlayers.map(player => {
+          const heroOptions: Hero[] = [];
+          for (let i = 0; i < 3; i++) {
+            if (heroPool.length > 0) {
+              const randomIndex = Math.floor(Math.random() * heroPool.length);
+              heroOptions.push(heroPool[randomIndex]);
+              heroPool.splice(randomIndex, 1);
+            }
+          }
+          
+          return {
+            playerId: player.id,
+            heroOptions: heroOptions
+          };
+        });
+        
+        return {
+          mode,
+          currentTeam: firstTeam,
+          availableHeroes: [],
+          assignedHeroes,
+          selectedHeroes: [],
+          bannedHeroes: [],
+          currentStep: 0,
+          pickBanSequence: [],
+          isComplete: false
+        };
+        
+      case DraftMode.Random:
+        const randomHeroPool = deepShuffledHeroes.slice(
+          0, 
+          Math.min(totalPlayerCount + 2, deepShuffledHeroes.length)
+        );
+        
+        return {
+          mode,
+          currentTeam: firstTeam,
+          availableHeroes: randomHeroPool,
+          assignedHeroes: [],
+          selectedHeroes: [],
+          bannedHeroes: [],
+          currentStep: 0,
+          pickBanSequence: [],
+          isComplete: false
+        };
+        
+      case DraftMode.PickAndBan:
+        const pickBanSequence = generatePickBanSequence(totalPlayerCount);
+        
+        return {
+          mode,
+          currentTeam: firstTeam,
+          availableHeroes: deepShuffledHeroes,
+          assignedHeroes: [],
+          selectedHeroes: [],
+          bannedHeroes: [],
+          currentStep: 0,
+          pickBanSequence,
+          isComplete: false
+        };
+        
+      default:
+        return {
+          mode: DraftMode.None,
+          currentTeam: firstTeam,
+          availableHeroes: [],
+          assignedHeroes: [],
+          selectedHeroes: [],
+          bannedHeroes: [],
+          currentStep: 0,
+          pickBanSequence: [],
+          isComplete: false
+        };
+    }
+  };
+
+  // NEW: Handle reset draft
+  const handleResetDraft = () => {
+    // Ask for confirmation before resetting
+    if (window.confirm('Reset draft? This will clear all selections.')) {
+      // Create a fresh initial state with the same draft mode
+      const freshState = createInitialStateForDraftMode(draftingState.mode);
+      
+      // Reset drafting state and history
+      setDraftingState(freshState);
+      setDraftHistory([]);
+    }
+  };
+
+  // NEW: Handle back to draft selection
+  const handleBackToDraftSelection = () => {
+    // Return to draft mode selection without flipping the coin
+    setIsDraftingMode(false);
+    setShowDraftModeSelection(true);
+    // Clear history
+    setDraftHistory([]);
   };
 
   // Finish drafting and start the game
@@ -997,6 +1142,10 @@ function App() {
               onHeroBan={handleDraftHeroBan}
               onFinishDrafting={finishDrafting}
               onCancelDrafting={cancelDrafting}
+              onUndoLastAction={handleUndoLastDraftAction}
+              onResetDraft={handleResetDraft}
+              onBackToDraftSelection={handleBackToDraftSelection}
+              canUndo={draftHistory.length > 0}
             />
           ) : (
             <GameSetup 
