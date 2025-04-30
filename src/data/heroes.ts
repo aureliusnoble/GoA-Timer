@@ -5,95 +5,103 @@ import { Hero } from '../types';
 export const heroes: Hero[] = [
   {
     id: 1,
-    name: 'Brogan',
-    icon: '/heroes/brogan.png',
-    complexity: 2,
-    roles: ['Tank', 'Defender'],
+    name: 'Arien',
+    icon: '/heroes/arien.png',
+    complexity: 1,
+    roles: ['Tactician', 'Disabler'],
     expansion: 'Core',
-    description: 'A tank hero with high defense'
+    description: 'Arien is a master duelist who boasts the strongest attacks and disruption on the roster.'
   },
   {
     id: 2,
-    name: 'Sabina',
-    icon: '/heroes/sabina.png',
-    complexity: 3,
-    roles: ['Assassin', 'Mobility'],
+    name: 'Brogan',
+    icon: '/heroes/brogan.png',
+    complexity: 1,
+    roles: ['Durable', 'Disabler'],
     expansion: 'Core',
-    description: 'A high-mobility attacker'
+    description: 'Brogan is the tank of Guards of Atlantis, nigh-unkillable and great at applying pressure in an area.'
   },
   {
     id: 3,
-    name: 'Arien',
-    icon: '/heroes/arien.png',
-    complexity: 2,
-    roles: ['Ranged', 'Damage'],
+    name: 'Tigerclaw',
+    icon: '/heroes/tigerclaw.png',
+    complexity: 1,
+    roles: ['Melee', 'Disabler'],
     expansion: 'Core',
-    description: 'A ranged damage dealer'
+    description: 'Tigerclaw is an evasive hero capable of dodging attacks and debilitating enemy heroes.'
   },
   {
     id: 4,
-    name: 'Misa',
-    icon: '/heroes/misa.png',
-    complexity: 3,
-    roles: ['Support', 'Healer'],
-    expansion: 'Devoted',
-    description: 'A support hero with healing abilities'
+    name: 'Wasp',
+    icon: '/heroes/wasp.png',
+    complexity: 1,
+    roles: ['Disabler', 'Tactician'],
+    expansion: 'Core',
+    description: 'Wasp is a crowd control specialist, with area control abilities.'
   },
   {
     id: 5,
-    name: 'Dodger',
-    icon: '/heroes/dodger.png',
-    complexity: 4,
-    roles: ['Mobility', 'Evasion'],
-    expansion: 'Defiant',
-    description: 'An elusive hero with high initiative'
+    name: 'Sabina',
+    icon: '/heroes/sabina.png',
+    complexity: 1,
+    roles: ['Tactician', 'Pusher'],
+    expansion: 'Core',
+    description: 'Sabina is a pusher who works best surrounded by friendly minions.'
   },
   {
     id: 6,
-    name: 'Gideon',
-    icon: '/heroes/gideon.png',
-    complexity: 3,
-    roles: ['Commander', 'Control'],
+    name: 'Xargatha',
+    icon: '/heroes/xargatha.png',
+    complexity: 1,
+    roles: ['Tactician', 'Pusher'],
     expansion: 'Core',
-    description: 'A commander with area control abilities'
+    description: 'Xargartha is a powerful brawler and zoner.'
   },
   {
     id: 7,
-    name: 'Korrus',
-    icon: '/heroes/korrus.png',
-    complexity: 2,
-    roles: ['Berserker', 'Attacker'],
-    expansion: 'Wayward',
-    description: 'A berserker with powerful attacks'
-  },
-  {
-    id: 8,
-    name: 'Nyra',
-    icon: '/heroes/nyra.png',
-    complexity: 4,
-    roles: ['Spellcaster', 'Area Effect'],
-    expansion: 'Arcane',
-    description: 'A spellcaster with area of effect skills'
-  },
-  {
-    id: 9,
-    name: 'Trent',
-    icon: '/heroes/trent.png',
+    name: 'Dodger',
+    icon: '/heroes/dodger.png',
     complexity: 1,
-    roles: ['Defender', 'Disruptor'],
-    expansion: 'Renowned',
-    description: 'A defender with disruptive abilities'
-  },
-  {
-    id: 10,
-    name: 'Valeria',
-    icon: '/heroes/valeria.png',
-    complexity: 2,
-    roles: ['Fighter', 'Versatile'],
+    roles: ['Damager', 'Sniper'],
     expansion: 'Core',
-    description: 'A versatile fighter with strong single-target skills'
+    description: 'Dodger is damaging hero who becomes more powerful as her enemies become weaker.'
   },
-  // Additional heroes would be added here to reach all 40
+ {
+    id: 7,
+    name: 'Rowenna',
+    icon: '/heroes/rowenna.png',
+    complexity: 2,
+    roles: ['Melee', 'Durable'],
+    expansion: 'Arcane',
+    description: 'Rowenna is a front-line tank and battlefield support who excels at surviving in contested areas.'
+  },
+ {
+    id: 8,
+    name: 'Garrus',
+    icon: '/heroes/garrus.png',
+    complexity: 2,
+    roles: ['Disabler', 'Durable'],
+    expansion: 'Defiant',
+    description: 'Garrus dominates the battlefield as a melee brawler who thrives on intimidation and control. '
+  },
+ {
+    id: 9,
+    name: 'Bain',
+    icon: '/heroes/bain.png',
+    complexity: 2,
+    roles: ['Tactician', 'Sniper'],
+    expansion: 'Defiant',
+    description: 'Bain is a ranged initiator who specializes in marking targets, forcing discards, and setting up kills.'
+  },
+ {
+    id: 10,
+    name: 'Whisper',
+    icon: '/heroes/whisper.png',
+    complexity: 2,
+    roles: ['Damager', 'Durable'],
+    expansion: 'Devoted',
+    description: 'Whisper is an adaptive support fighter whose power scales with battlefield clearing, gaining strength as minion spawns empty.'
+  },
 ];
 
 // Helper function to get all available expansions

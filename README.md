@@ -108,7 +108,7 @@ The application uses Tailwind CSS for styling. Custom styles can be added in:
 
 - Remove hero selection on setup screen and add new draft mode: All Pick
 
-- Bugs with single draft:@ not random
-- bug: each team must have
-
-- Add Icons
+- Bugs with single draft and random draft
+- Bug with Random draft: Restarts when we finish
+- Bug with single draft: only lets 4 players select
+- make icon bigger
