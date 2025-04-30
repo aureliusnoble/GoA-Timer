@@ -1,17 +1,19 @@
 // src/components/PlayerNameInput.tsx
 import React from 'react';
 import { Player, Team } from '../types';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, X } from 'lucide-react';
 
 interface PlayerNameInputProps {
   player: Player;
   onNameChange: (name: string) => void;
+  onRemove: () => void; // New prop for removing players
   isDuplicate?: boolean;
 }
 
 const PlayerNameInput: React.FC<PlayerNameInputProps> = ({ 
   player, 
   onNameChange,
+  onRemove, // New prop
   isDuplicate = false 
 }) => {
   return (
@@ -22,13 +24,25 @@ const PlayerNameInput: React.FC<PlayerNameInputProps> = ({
           : 'bg-red-900/30 border border-red-800'
       } ${isDuplicate ? 'border-2 border-yellow-500' : ''}`}
     >
-      <div className="flex items-center mb-2">
-        <div className={`w-3 h-3 rounded-full mr-2 ${
-          player.team === Team.Titans ? 'bg-blue-500' : 'bg-red-500'
-        }`}></div>
-        <span className="text-sm font-medium">
-          Player {player.id} - {player.team === Team.Titans ? 'Titans' : 'Atlanteans'}
-        </span>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center">
+          <div className={`w-3 h-3 rounded-full mr-2 ${
+            player.team === Team.Titans ? 'bg-blue-500' : 'bg-red-500'
+          }`}></div>
+          <span className="text-sm font-medium">
+            Player {player.id} - {player.team === Team.Titans ? 'Titans' : 'Atlanteans'}
+          </span>
+        </div>
+        
+        {/* Remove player button */}
+        <button
+          onClick={onRemove}
+          className="text-gray-400 hover:text-white transition-colors p-1 rounded-full hover:bg-gray-700"
+          aria-label="Remove player"
+          title="Remove player"
+        >
+          <X size={16} />
+        </button>
       </div>
       
       <div className="relative">

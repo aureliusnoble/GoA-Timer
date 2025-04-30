@@ -15,6 +15,7 @@ interface GameSetupProps {
   onGameLengthChange: (length: GameLength) => void;
   players: Player[];
   onAddPlayer: (team: Team) => void;
+  onRemovePlayer: (playerId: number) => void; // New prop
   onDraftHeroes: () => void;
   selectedExpansions: string[];
   onToggleExpansion: (expansion: string) => void;
@@ -33,6 +34,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
   onGameLengthChange,
   players,
   onAddPlayer,
+  onRemovePlayer, // New prop
   onDraftHeroes,
   selectedExpansions,
   onToggleExpansion,
@@ -342,6 +344,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                     key={player.id}
                     player={player}
                     onNameChange={(name) => onPlayerNameChange(player.id, name)}
+                    onRemove={() => onRemovePlayer(player.id)}
                     isDuplicate={isDuplicate}
                   />
                 );
