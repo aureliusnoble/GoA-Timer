@@ -42,8 +42,8 @@ const DraftModeSelection: React.FC<DraftModeSelectionProps> = ({
 
   // Additional details or tips for each mode
   const modeDetails = {
-    [DraftMode.AllPick]: "Standard draft, good for beginners",
-    [DraftMode.Single]: "Forces players to choose from a limited selection",
+    [DraftMode.AllPick]: "Default draft",
+    [DraftMode.Single]: "Forces players to try new heroes",
     [DraftMode.Random]: "Good for balanced hero selection",
     [DraftMode.PickAndBan]: "Best for competitive play"
   };

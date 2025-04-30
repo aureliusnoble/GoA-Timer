@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useState, useEffect, useReducer, useRef } from 'react';
+import { useState, useEffect, useReducer, useRef } from 'react';
 import './App.css';
 import GameSetup from './components/GameSetup';
 import GameTimer from './components/GameTimer';
@@ -14,18 +14,20 @@ import {
   GameLength, 
   Lane, 
   LaneState, 
-  GamePhase,
   DraftMode,
   DraftingState,
   PickBanStep
 } from './types';
-import { heroes, getAllExpansions, filterHeroesByExpansions } from './data/heroes';
+import { getAllExpansions, filterHeroesByExpansions } from './data/heroes';
+
+// Improved interface for lane state return type
+interface LaneStateResult {
+  [key: string]: LaneState;
+  hasMultipleLanes: boolean;
+}
 
 // Initial state for different game configurations
-const getInitialLaneState = (gameLength: GameLength, playerCount: number): { 
-  [key: string]: LaneState, 
-  hasMultipleLanes: boolean 
-} => {
+const getInitialLaneState = (gameLength: GameLength, playerCount: number): LaneStateResult => {
   // Default single lane
   if (playerCount <= 6) {
     return {
@@ -221,33 +223,33 @@ const gameReducer = (state: GameState, action: GameAction): GameState => {
       
     case 'INCREMENT_WAVE': {
       if (action.lane === Lane.Single && !state.hasMultipleLanes) {
-        const currentWave = state.waves[Lane.Single].currentWave;
-        const totalWaves = state.waves[Lane.Single].totalWaves;
-        
-        return {
-          ...state,
-          waves: {
-            ...state.waves,
-            [Lane.Single]: {
-              ...state.waves[Lane.Single],
-              currentWave: Math.min(currentWave + 1, totalWaves)
+        const laneState = state.waves[Lane.Single];
+        if (laneState) {
+          return {
+            ...state,
+            waves: {
+              ...state.waves,
+              [Lane.Single]: {
+                ...laneState,
+                currentWave: Math.min(laneState.currentWave + 1, laneState.totalWaves)
+              }
             }
-          }
-        };
+          };
+        }
       } else if (state.hasMultipleLanes && (action.lane === Lane.Top || action.lane === Lane.Bottom)) {
-        return {
-          ...state,
-          waves: {
-            ...state.waves,
-            [action.lane]: {
-              ...state.waves[action.lane],
-              currentWave: Math.min(
-                state.waves[action.lane].currentWave + 1, 
-                state.waves[action.lane].totalWaves
-              )
+        const laneState = state.waves[action.lane];
+        if (laneState) {
+          return {
+            ...state,
+            waves: {
+              ...state.waves,
+              [action.lane]: {
+                ...laneState,
+                currentWave: Math.min(laneState.currentWave + 1, laneState.totalWaves)
+              }
             }
-          }
-        };
+          };
+        }
       }
       return state;
     }
@@ -275,7 +277,6 @@ function App() {
   
   // Players and heroes state
   const [localPlayers, setLocalPlayers] = useState<Player[]>([]);
-  const [selectedHeroes, setSelectedHeroes] = useState<Hero[]>([]);
   
   // Expansion selection state
   const [selectedExpansions, setSelectedExpansions] = useState<string[]>(getAllExpansions());
@@ -779,7 +780,6 @@ const handleSelectDraftMode = (mode: DraftMode) => {
     
     setLocalPlayers(updatedPlayers);
     players = updatedPlayers;
-    setSelectedHeroes(draftingState.selectedHeroes.map(s => s.hero));
     
     // Start the game without additional validation
     startGameWithPlayers(updatedPlayers);
@@ -879,7 +879,7 @@ const handleSelectDraftMode = (mode: DraftMode) => {
 
   // Handle strategy timer
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setTimeout>;
     
     if (strategyTimerActive && strategyTimeRemaining > 0) {
       timer = setTimeout(() => {
@@ -895,7 +895,7 @@ const handleSelectDraftMode = (mode: DraftMode) => {
 
   // Handle move timer
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setTimeout>;
     
     if (moveTimerActive && moveTimeRemaining > 0) {
       timer = setTimeout(() => {
@@ -910,28 +910,28 @@ const handleSelectDraftMode = (mode: DraftMode) => {
   }, [moveTimerActive, moveTimeRemaining]);
 
   // Utility function to shuffle an array
-const shuffleArray = <T extends unknown>(array: T[]): T[] => {
-  // Create a new copy to avoid modifying the original
-  const shuffled = [...array];
-  
-  // Fisher-Yates shuffle algorithm
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    // Use cryptographically strong random if available, fallback to Math.random
-    const j = Math.floor(Math.random() * (i + 1));
-    // Swap elements
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  
-  // Add some extra randomness for ensuring different results each time
-  if (shuffled.length > 3) {
-    const midpoint = Math.floor(shuffled.length / 2);
-    const firstHalf = shuffled.slice(0, midpoint);
-    const secondHalf = shuffled.slice(midpoint);
-    return [...secondHalf, ...firstHalf];
-  }
-  
-  return shuffled;
-};
+  const shuffleArray = <T extends unknown>(array: T[]): T[] => {
+    // Create a new copy to avoid modifying the original
+    const shuffled = [...array];
+    
+    // Fisher-Yates shuffle algorithm
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      // Use cryptographically strong random if available, fallback to Math.random
+      const j = Math.floor(Math.random() * (i + 1));
+      // Swap elements
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    
+    // Add some extra randomness for ensuring different results each time
+    if (shuffled.length > 3) {
+      const midpoint = Math.floor(shuffled.length / 2);
+      const firstHalf = shuffled.slice(0, midpoint);
+      const secondHalf = shuffled.slice(midpoint);
+      return [...secondHalf, ...firstHalf];
+    }
+    
+    return shuffled;
+  };
 
   return (
     <div className="App min-h-screen bg-gradient-to-b from-blue-400 to-orange-300 text-white p-6">

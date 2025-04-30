@@ -54,7 +54,7 @@ const CoinToss: React.FC<CoinTossProps> = ({ result, onComplete }) => {
       </div>
       
       {/* Add CSS to handle different end states based on result */}
-      <style jsx>{`
+      <style>{`
         .coin.flipping.flip-titans {
           animation: flipCoinTitans 3s ease-out forwards;
         }

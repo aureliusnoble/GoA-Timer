@@ -1,7 +1,7 @@
 // src/components/DraftingSystem.tsx
 import React, { useState, useRef } from 'react';
 import { Hero, Player, Team, DraftMode, DraftingState } from '../types';
-import { X, Check, ChevronRight, User, Play } from 'lucide-react';
+import { X, User, Play } from 'lucide-react';
 
 interface DraftingSystemProps {
   players: Player[];
@@ -15,7 +15,6 @@ interface DraftingSystemProps {
 
 const DraftingSystem: React.FC<DraftingSystemProps> = ({
   players,
-  availableHeroes,
   draftingState,
   onHeroSelect,
   onHeroBan,
@@ -975,7 +974,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
       {renderHeroTooltip()}
 
       {/* Add custom scrollbar styles */}
-      <style jsx>{`
+      <style>{`
         .custom-scrollbar::-webkit-scrollbar {
           width: 8px;
         }

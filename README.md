@@ -106,15 +106,8 @@ The application uses Tailwind CSS for styling. Custom styles can be added in:
 # To-Do
 - Copyright notices
 
-- Remove hero selection on setup screen and add new draft mode: All Pick
 
-
-- We must have at least as many heroes available as players. Game setup warning. Then for each draft mode we want to gray out under the following conditions:
-- All Pick: As long as heroes we include in filter=player count
-- Single: 3x as many heroes as players (remember all players must be shown a unique set of 3)
-- Random: Heroes + 2 of players
-- Ban and Pick: 2x as many heroes as players.
 
 -Tooltip. Once all players selected a hero make it go away
-tiebreaker: Team (should click to flip. )
+- tiebreaker: Team (should click to flip. )
 - Deploy
