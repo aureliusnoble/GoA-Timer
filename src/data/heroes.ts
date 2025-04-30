@@ -1,4 +1,4 @@
-// src/data/heroes.ts
+// src/dataheroes.ts
 import { Hero } from '../types';
 
 // Sample hero data with expanded properties
@@ -6,7 +6,7 @@ export const heroes: Hero[] = [
   {
     id: 0,
     name: 'Arien',
-    icon: '/heroes/arien.png',
+    icon: 'heroes/arien.png',
     complexity: 1,
     roles: ['Tactician', 'Disabler'],
     expansion: 'Core',
@@ -15,7 +15,7 @@ export const heroes: Hero[] = [
   {
     id: 1,
     name: 'Brogan',
-    icon: '/heroes/brogan.png',
+    icon: 'heroes/brogan.png',
     complexity: 1,
     roles: ['Durable', 'Disabler'],
     expansion: 'Core',
@@ -24,7 +24,7 @@ export const heroes: Hero[] = [
   {
     id: 2,
     name: 'Tigerclaw',
-    icon: '/heroes/tigerclaw.png',
+    icon: 'heroes/tigerclaw.png',
     complexity: 1,
     roles: ['Melee', 'Disabler'],
     expansion: 'Core',
@@ -33,7 +33,7 @@ export const heroes: Hero[] = [
   {
     id: 3,
     name: 'Wasp',
-    icon: '/heroes/wasp.png',
+    icon: 'heroes/wasp.png',
     complexity: 1,
     roles: ['Disabler', 'Tactician'],
     expansion: 'Core',
@@ -42,7 +42,7 @@ export const heroes: Hero[] = [
   {
     id: 4,
     name: 'Sabina',
-    icon: '/heroes/sabina.png',
+    icon: 'heroes/sabina.png',
     complexity: 1,
     roles: ['Tactician', 'Pusher'],
     expansion: 'Core',
@@ -51,7 +51,7 @@ export const heroes: Hero[] = [
   {
     id: 5,
     name: 'Xargatha',
-    icon: '/heroes/xargatha.png',
+    icon: 'heroes/xargatha.png',
     complexity: 1,
     roles: ['Tactician', 'Pusher'],
     expansion: 'Core',
@@ -60,7 +60,7 @@ export const heroes: Hero[] = [
   {
     id: 6,
     name: 'Dodger',
-    icon: '/heroes/dodger.png',
+    icon: 'heroes/dodger.png',
     complexity: 1,
     roles: ['Damager', 'Sniper'],
     expansion: 'Core',
@@ -69,7 +69,7 @@ export const heroes: Hero[] = [
  {
     id: 7,
     name: 'Rowenna',
-    icon: '/heroes/rowenna.png',
+    icon: 'heroes/rowenna.png',
     complexity: 2,
     roles: ['Melee', 'Durable'],
     expansion: 'Arcane',
@@ -78,7 +78,7 @@ export const heroes: Hero[] = [
  {
     id: 8,
     name: 'Garrus',
-    icon: '/heroes/garrus.png',
+    icon: 'heroes/garrus.png',
     complexity: 2,
     roles: ['Disabler', 'Durable'],
     expansion: 'Defiant',
@@ -87,7 +87,7 @@ export const heroes: Hero[] = [
  {
     id: 9,
     name: 'Bain',
-    icon: '/heroes/bain.png',
+    icon: 'heroes/bain.png',
     complexity: 2,
     roles: ['Tactician', 'Sniper'],
     expansion: 'Defiant',
@@ -96,7 +96,7 @@ export const heroes: Hero[] = [
  {
     id: 10,
     name: 'Whisper',
-    icon: '/heroes/whisper.png',
+    icon: 'heroes/whisper.png',
     complexity: 2,
     roles: ['Damager', 'Durable'],
     expansion: 'Devoted',
@@ -105,7 +105,7 @@ export const heroes: Hero[] = [
  {
     id: 11,
     name: 'Misa',
-    icon: '/heroes/misa.png',
+    icon: 'heroes/misa.png',
     complexity: 2,
     roles: ['Tactician', 'Durabke'],
     expansion: 'Devoted',
@@ -114,7 +114,7 @@ export const heroes: Hero[] = [
  {
     id: 12,
     name: 'Ursafar',
-    icon: '/heroes/ursafar.png',
+    icon: 'heroes/ursafar.png',
     complexity: 2,
     roles: ['Durable', 'Pusher'],
     expansion: 'Devoted',
@@ -123,7 +123,7 @@ export const heroes: Hero[] = [
  {
     id: 13,
     name: 'Silverarrow',
-    icon: '/heroes/silverarrow.png',
+    icon: 'heroes/silverarrow.png',
     complexity: 2,
     roles: ['Sniper', 'Damager'],
     expansion: 'Devoted',
@@ -132,7 +132,7 @@ export const heroes: Hero[] = [
  {
     id: 14,
     name: 'Min',
-    icon: '/heroes/min.png',
+    icon: 'heroes/min.png',
     complexity: 2,
     roles: ['Tokens', 'Disabler'],
     expansion: 'Renowned',
@@ -141,7 +141,7 @@ export const heroes: Hero[] = [
  {
     id: 15,
     name: 'Mrak',
-    icon: '/heroes/mrak.png',
+    icon: 'heroes/mrak.png',
     complexity: 3,
     roles: ['Melee', 'Tokens'],
     expansion: 'Arcane',
@@ -150,7 +150,7 @@ export const heroes: Hero[] = [
  {
     id: 16,
     name: 'Cutter',
-    icon: '/heroes/cutter.png',
+    icon: 'heroes/cutter.png',
     complexity: 3,
     roles: ['Tactician', 'Disabler'],
     expansion: 'Defiant',
@@ -159,7 +159,7 @@ export const heroes: Hero[] = [
  {
     id: 17,
     name: 'Trinkets',
-    icon: '/heroes/trinkets.png',
+    icon: 'heroes/trinkets.png',
     complexity: 3,
     roles: ['Sniper', 'Damager'],
     expansion: 'Defiant',
@@ -168,7 +168,7 @@ export const heroes: Hero[] = [
  {
     id: 18,
     name: 'Tali',
-    icon: '/heroes/tali.png',
+    icon: 'heroes/tali.png',
     complexity: 3,
     roles: ['Damager', 'Pusher'],
     expansion: 'Devoted',
@@ -177,7 +177,7 @@ export const heroes: Hero[] = [
  {
     id: 19,
     name: 'Swift',
-    icon: '/heroes/swift.png',
+    icon: 'heroes/swift.png',
     complexity: 3,
     roles: ['Sniper', 'Farming'],
     expansion: 'Renowned',
@@ -186,7 +186,7 @@ export const heroes: Hero[] = [
  {
     id: 20,
     name: 'Wuk',
-    icon: '/heroes/wuk.png',
+    icon: 'heroes/wuk.png',
     complexity: 3,
     roles: ['Tokens', 'Pusher'],
     expansion: 'Renowned',
@@ -195,7 +195,7 @@ export const heroes: Hero[] = [
  {
     id: 21,
     name: 'Hanu',
-    icon: '/heroes/hanu.png',
+    icon: 'heroes/hanu.png',
     complexity: 3,
     roles: ['Tactician', 'Sniper'],
     expansion: 'Renowned',
@@ -204,7 +204,7 @@ export const heroes: Hero[] = [
  {
     id: 22,
     name: 'Brynn',
-    icon: '/heroes/brynn.png',
+    icon: 'heroes/brynn.png',
     complexity: 3,
     roles: ['Tactician', 'Damager'],
     expansion: 'Wayward',
@@ -213,7 +213,7 @@ export const heroes: Hero[] = [
  {
     id: 23,
     name: 'Mortimer',
-    icon: '/heroes/mortimer.png',
+    icon: 'heroes/mortimer.png',
     complexity: 3,
     roles: ['Melee', 'Tokens'],
     expansion: 'Wayward',
@@ -222,7 +222,7 @@ export const heroes: Hero[] = [
  {
     id: 24,
     name: 'Widget and Pyro',
-    icon: '/heroes/widget.png',
+    icon: 'heroes/widget.png',
     complexity: 3,
     roles: ['Melee', 'Tokens'],
     expansion: 'Wayward',
@@ -231,7 +231,7 @@ export const heroes: Hero[] = [
  {
     id: 25,
     name: 'Snorri',
-    icon: '/heroes/snorri.png',
+    icon: 'heroes/snorri.png',
     complexity: 4,
     roles: ['Sniper', 'Farming'],
     expansion: 'Arcane',
@@ -240,7 +240,7 @@ export const heroes: Hero[] = [
  {
     id: 26,
     name: 'Razzle',
-    icon: '/heroes/razzle.png',
+    icon: 'heroes/razzle.png',
     complexity: 4,
     roles: ['Tactician', 'Melee'],
     expansion: 'Arcane',
@@ -249,7 +249,7 @@ export const heroes: Hero[] = [
  {
     id: 27,
     name: 'Gydion',
-    icon: '/heroes/gydion.png',
+    icon: 'heroes/gydion.png',
     complexity: 4,
     roles: ['Sniper', 'Tactician'],
     expansion: 'Arcane',
@@ -258,7 +258,7 @@ export const heroes: Hero[] = [
  {
     id: 28,
     name: 'Nebkher',
-    icon: '/heroes/nebkher.png',
+    icon: 'heroes/nebkher.png',
     complexity: 4,
     roles: ['Disabler', 'Tokens'],
     expansion: 'Defiant',
@@ -267,7 +267,7 @@ export const heroes: Hero[] = [
  {
     id: 29,
     name: 'Ignatia',
-    icon: '/heroes/ignatia.png',
+    icon: 'heroes/ignatia.png',
     complexity: 4,
     roles: ['Sniper', 'Damager'],
     expansion: 'Renowned',
@@ -276,7 +276,7 @@ export const heroes: Hero[] = [
  {
     id: 30,
     name: 'Takahide',
-    icon: '/heroes/takahide.png',
+    icon: 'heroes/takahide.png',
     complexity: 4,
     roles: ['Durable', 'Sniper'],
     expansion: 'Wayward',
@@ -285,7 +285,7 @@ export const heroes: Hero[] = [
  {
     id: 31,
     name: 'Emmitt',
-    icon: '/heroes/emmitt.png',
+    icon: 'heroes/emmitt.png',
     complexity: 4,
     roles: ['Melee', 'Tactician'],
     expansion: 'Wayward',

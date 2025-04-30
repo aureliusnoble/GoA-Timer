@@ -1,8 +1,7 @@
 /* src/App.css */
 .App {
   /* Load your static image from public/img/bg-timer.png */
-  background-image: url('/img/bg-timer.png'),
-                    linear-gradient(to bottom, #031930, #082344);
+
   background-size: cover, cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -72,13 +71,6 @@
 .red-team-counter {
   background: linear-gradient(to bottom right, #5e1010, #711414);
   border: 1px solid #a81e1e;
-}
-
-/* Atlantean themed elements */
-.atlantis-border {
-  border-image: url('/border-pattern.png') 8 repeat;
-  border-width: 8px;
-  border-style: solid;
 }
 
 .atlantis-title {
