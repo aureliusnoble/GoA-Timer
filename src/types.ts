@@ -16,11 +16,15 @@ export enum Lane {
   Single = 'single' // For games with only one lane
 }
 
+// Updated Hero interface with new properties
 export interface Hero {
   id: number;
   name: string;
   icon: string; // URL or path to icon image
-  description?: string;
+  complexity: number; // 1-4 rating
+  roles: string[]; // Array of hero roles
+  expansion: string; // Which expansion set the hero belongs to
+  description: string;
 }
 
 export interface Player {
@@ -28,6 +32,7 @@ export interface Player {
   team: Team;
   hero: Hero | null;
   lane?: Lane; // Assigned lane for 8-10 player games
+  name: string; // New field for player name
 }
 
 export type GamePhase = 'setup' | 'strategy' | 'move' | 'turn-end';
@@ -52,10 +57,44 @@ export interface GameState {
   };
   currentPhase: GamePhase;
   activeHeroIndex: number;
-  coinSide: Team; // Changed from 'heads' | 'tails' to Team
+  coinSide: Team;
   hasMultipleLanes: boolean;
   
-  // New fields to track player turns
+  // Fields to track player turns
   completedTurns: number[]; // Array of player indices who have completed their turn
   allPlayersMoved: boolean; // Flag to indicate when all players have completed their moves
+}
+
+// New enum for draft modes
+export enum DraftMode {
+  None = 'none',
+  Single = 'single',
+  Random = 'random',
+  PickAndBan = 'pickandban'
+}
+
+// New interface for pick and ban sequence
+export interface PickBanStep {
+  team: 'A' | 'B';
+  action: 'pick' | 'ban';
+  round: number;
+}
+
+// New interface for drafting state
+export interface DraftingState {
+  mode: DraftMode;
+  currentTeam: Team;
+  availableHeroes: Hero[];
+  assignedHeroes: {
+    playerId: number;
+    heroOptions: Hero[];
+  }[];
+  selectedHeroes: {
+    playerId: number;
+    hero: Hero;
+  }[];
+  bannedHeroes: Hero[];
+  currentStep: number;
+  pickBanSequence: PickBanStep[]; // For Pick and Ban drafting
+  isComplete: boolean;
 }

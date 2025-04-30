@@ -106,13 +106,9 @@ The application uses Tailwind CSS for styling. Custom styles can be added in:
 # To-Do
 - Copyright notices
 
+- Remove hero selection on setup screen and add new draft mode: All Pick
 
-- Add roles field
-- Remove description field
-- Add stars for complexity
+- Bugs with single draft:@ not random
+- bug: each team must have
 
-- Add draft mode:
--- Free Choice
--- Pick and Ban
-
-- Add Icon
+- Add Icons

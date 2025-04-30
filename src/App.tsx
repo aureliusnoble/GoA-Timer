@@ -4,8 +4,22 @@ import './App.css';
 import HeroSelection from './components/HeroSelection';
 import GameSetup from './components/GameSetup';
 import GameTimer from './components/GameTimer';
-import { Hero, GameState, Player, Team, GameLength, Lane, LaneState, GamePhase } from './types';
-import { heroes } from './data/heroes';
+import DraftingSystem from './components/DraftingSystem';
+import DraftModeSelection from './components/DraftModeSelection';
+import { 
+  Hero, 
+  GameState, 
+  Player, 
+  Team, 
+  GameLength, 
+  Lane, 
+  LaneState, 
+  GamePhase,
+  DraftMode,
+  DraftingState,
+  PickBanStep
+} from './types';
+import { heroes, getAllExpansions, filterHeroesByExpansions } from './data/heroes';
 
 // Initial state for different game configurations
 const getInitialLaneState = (gameLength: GameLength, playerCount: number): { 
@@ -49,11 +63,64 @@ const calculateTeamLives = (gameLength: GameLength, playerCount: number): number
   }
 };
 
+// Generate pick/ban sequence based on player count
+const generatePickBanSequence = (playerCount: number): PickBanStep[] => {
+  const sequence: PickBanStep[] = [];
+  
+  // First ban round - A then B
+  sequence.push({ team: 'A', action: 'ban', round: 1 });
+  sequence.push({ team: 'B', action: 'ban', round: 1 });
+  
+  // First pick round - A then B
+  sequence.push({ team: 'A', action: 'pick', round: 1 });
+  sequence.push({ team: 'B', action: 'pick', round: 1 });
+  
+  // Second ban round - B then A
+  sequence.push({ team: 'B', action: 'ban', round: 2 });
+  sequence.push({ team: 'A', action: 'ban', round: 2 });
+  
+  // Second pick round - B then A
+  sequence.push({ team: 'B', action: 'pick', round: 2 });
+  sequence.push({ team: 'A', action: 'pick', round: 2 });
+  
+  if (playerCount > 4) {
+    // Third ban round - A then B (6+ players)
+    sequence.push({ team: 'A', action: 'ban', round: 3 });
+    sequence.push({ team: 'B', action: 'ban', round: 3 });
+    
+    // Third pick round - B then A (6+ players)
+    sequence.push({ team: 'B', action: 'pick', round: 3 });
+    sequence.push({ team: 'A', action: 'pick', round: 3 });
+  }
+  
+  if (playerCount > 6) {
+    // Fourth ban round - B then A (8+ players)
+    sequence.push({ team: 'B', action: 'ban', round: 4 });
+    sequence.push({ team: 'A', action: 'ban', round: 4 });
+    
+    // Fourth pick round - A then B (8+ players)
+    sequence.push({ team: 'A', action: 'pick', round: 4 });
+    sequence.push({ team: 'B', action: 'pick', round: 4 });
+  }
+  
+  if (playerCount > 8) {
+    // Fifth ban round - B then A (10 players)
+    sequence.push({ team: 'B', action: 'ban', round: 5 });
+    sequence.push({ team: 'A', action: 'ban', round: 5 });
+    
+    // Fifth pick round - A then B (10 players)
+    sequence.push({ team: 'A', action: 'pick', round: 5 });
+    sequence.push({ team: 'B', action: 'pick', round: 5 });
+  }
+  
+  return sequence;
+};
+
 // Game state reducer
 type GameAction = 
   | { type: 'START_GAME', payload: GameState }
   | { type: 'START_STRATEGY' }
-  | { type: 'END_STRATEGY' } // New action type for ending strategy phase
+  | { type: 'END_STRATEGY' }
   | { type: 'SELECT_PLAYER', playerIndex: number }
   | { type: 'MARK_PLAYER_COMPLETE', playerIndex: number }
   | { type: 'START_NEXT_TURN' }
@@ -208,6 +275,27 @@ function App() {
   const [localPlayers, setLocalPlayers] = useState<Player[]>([]);
   const [selectedHeroes, setSelectedHeroes] = useState<Hero[]>([]);
   
+  // Expansion selection state
+  const [selectedExpansions, setSelectedExpansions] = useState<string[]>(getAllExpansions());
+  
+  // Drafting states
+  const [isDraftingMode, setIsDraftingMode] = useState<boolean>(false);
+  const [showDraftModeSelection, setShowDraftModeSelection] = useState<boolean>(false);
+  const [draftingState, setDraftingState] = useState<DraftingState>({
+    mode: DraftMode.None,
+    currentTeam: Team.Titans,
+    availableHeroes: [],
+    assignedHeroes: [],
+    selectedHeroes: [],
+    bannedHeroes: [],
+    currentStep: 0,
+    pickBanSequence: [],
+    isComplete: false
+  });
+  
+  // Available heroes (filtered by expansions)
+  const filteredHeroes = filterHeroesByExpansions(selectedExpansions);
+  
   // Update the shared players reference
   players = localPlayers;
   
@@ -240,7 +328,7 @@ function App() {
   const [strategyTimeRemaining, setStrategyTimeRemaining] = useState<number>(strategyTime);
   const [moveTimeRemaining, setMoveTimeRemaining] = useState<number>(moveTime);
 
-  // Handle hero selection
+  // Handle hero selection (for non-draft mode)
   const handleHeroSelect = (hero: Hero, playerIndex: number) => {
     const updatedPlayers = [...localPlayers];
     
@@ -304,7 +392,8 @@ function App() {
       id: localPlayers.length + 1,
       team,
       hero: null,
-      lane
+      lane,
+      name: '' // Initialize with empty name
     };
     
     setLocalPlayers([...localPlayers, newPlayer]);
@@ -323,6 +412,310 @@ function App() {
       return;
     }
     setGameLength(newLength);
+  };
+
+  // Handle toggling expansions
+  const handleToggleExpansion = (expansion: string) => {
+    if (selectedExpansions.includes(expansion)) {
+      // Remove the expansion if it's already selected
+      setSelectedExpansions(selectedExpansions.filter(exp => exp !== expansion));
+    } else {
+      // Add the expansion if it's not already selected
+      setSelectedExpansions([...selectedExpansions, expansion]);
+    }
+  };
+
+  // Handle player name change
+  const handlePlayerNameChange = (playerId: number, name: string) => {
+    const updatedPlayers = localPlayers.map(player => {
+      if (player.id === playerId) {
+        return { ...player, name };
+      }
+      return player;
+    });
+    
+    setLocalPlayers(updatedPlayers);
+  };
+
+  // Start the drafting process
+  const startDrafting = () => {
+    // Validate team composition
+    const titansPlayers = localPlayers.filter(p => p.team === Team.Titans);
+    const atlanteansPlayers = localPlayers.filter(p => p.team === Team.Atlanteans);
+    
+    // Check if both teams have the same number of players
+    if (titansPlayers.length !== atlanteansPlayers.length) {
+      alert('Both teams must have the same number of players');
+      return;
+    }
+    
+    // Check if each team has at least 2 players but no more than 5
+    if (titansPlayers.length < 2 || titansPlayers.length > 5) {
+      alert('Each team must have between 2 and 5 players');
+      return;
+    }
+    
+    // Check if all players have entered their names
+    const playersWithoutNames = localPlayers.filter(p => !p.name.trim());
+    if (playersWithoutNames.length > 0) {
+      alert('All players must enter their names');
+      return;
+    }
+    
+    // Show draft mode selection
+    setShowDraftModeSelection(true);
+  };
+
+  // Handle draft mode selection
+  const handleSelectDraftMode = (mode: DraftMode) => {
+    let initialDraftingState: DraftingState;
+    const totalPlayerCount = localPlayers.length;
+    const availableHeroesForDraft = [...filteredHeroes];
+    
+    // Set current team based on the tiebreaker coin
+    const firstTeam = gameState.coinSide; 
+    
+    switch (mode) {
+      case DraftMode.Single:
+        // Shuffle heroes and assign 3 to each player
+        shuffleArray(availableHeroesForDraft);
+        
+        const assignedHeroes = localPlayers.map(player => {
+          // Get 3 heroes for this player
+          const heroOptions = availableHeroesForDraft.splice(0, 3);
+          return {
+            playerId: player.id,
+            heroOptions
+          };
+        });
+        
+        initialDraftingState = {
+          mode,
+          currentTeam: firstTeam,
+          availableHeroes: [],
+          assignedHeroes,
+          selectedHeroes: [],
+          bannedHeroes: [],
+          currentStep: 0,
+          pickBanSequence: [],
+          isComplete: false
+        };
+        break;
+        
+      case DraftMode.Random:
+        // Shuffle heroes and select N+2 for the pool
+        shuffleArray(availableHeroesForDraft);
+        const randomPoolSize = Math.min(totalPlayerCount + 2, availableHeroesForDraft.length);
+        const randomHeroPool = availableHeroesForDraft.slice(0, randomPoolSize);
+        
+        initialDraftingState = {
+          mode,
+          currentTeam: firstTeam,
+          availableHeroes: randomHeroPool,
+          assignedHeroes: [],
+          selectedHeroes: [],
+          bannedHeroes: [],
+          currentStep: 0,
+          pickBanSequence: [],
+          isComplete: false
+        };
+        break;
+        
+      case DraftMode.PickAndBan:
+        // Generate pick and ban sequence based on player count
+        const pickBanSequence = generatePickBanSequence(totalPlayerCount);
+        
+        initialDraftingState = {
+          mode,
+          currentTeam: firstTeam,
+          availableHeroes: availableHeroesForDraft,
+          assignedHeroes: [],
+          selectedHeroes: [],
+          bannedHeroes: [],
+          currentStep: 0,
+          pickBanSequence,
+          isComplete: false
+        };
+        break;
+        
+      default:
+        // This shouldn't happen
+        initialDraftingState = {
+          mode: DraftMode.None,
+          currentTeam: firstTeam,
+          availableHeroes: [],
+          assignedHeroes: [],
+          selectedHeroes: [],
+          bannedHeroes: [],
+          currentStep: 0,
+          pickBanSequence: [],
+          isComplete: false
+        };
+    }
+    
+    setDraftingState(initialDraftingState);
+    setShowDraftModeSelection(false);
+    setIsDraftingMode(true);
+  };
+
+  // Handle hero selection in draft mode
+  const handleDraftHeroSelect = (hero: Hero, playerId: number) => {
+    const player = localPlayers.find(p => p.id === playerId);
+    if (!player) return;
+    
+    // Update selected heroes
+    const newSelectedHeroes = [...draftingState.selectedHeroes, { playerId, hero }];
+    
+    // Update available heroes (remove selected hero)
+    const newAvailableHeroes = draftingState.availableHeroes.filter(h => h.id !== hero.id);
+    
+    // Update assigned heroes (remove this assignment if in Single mode)
+    const newAssignedHeroes = draftingState.mode === DraftMode.Single 
+      ? draftingState.assignedHeroes.map(assignment => {
+          if (assignment.playerId === playerId) {
+            return {
+              ...assignment,
+              heroOptions: [] // Clear options after selection
+            };
+          }
+          return assignment;
+        })
+      : draftingState.assignedHeroes;
+    
+    // Determine next team
+    let newCurrentTeam = draftingState.currentTeam;
+    let newStep = draftingState.currentStep;
+    let isComplete = draftingState.isComplete;
+    
+    // Check if we need to switch teams
+    const titansPlayers = localPlayers.filter(p => p.team === Team.Titans);
+    const atlanteansPlayers = localPlayers.filter(p => p.team === Team.Atlanteans);
+    
+    const titansPicked = newSelectedHeroes.filter(s => 
+      localPlayers.find(p => p.id === s.playerId)?.team === Team.Titans
+    ).length;
+    
+    const atlanteansPicked = newSelectedHeroes.filter(s => 
+      localPlayers.find(p => p.id === s.playerId)?.team === Team.Atlanteans
+    ).length;
+    
+    // If this team has picked all their heroes, switch to the other team
+    if (draftingState.currentTeam === Team.Titans && titansPicked >= titansPlayers.length) {
+      newCurrentTeam = Team.Atlanteans;
+    } else if (draftingState.currentTeam === Team.Atlanteans && atlanteansPicked >= atlanteansPlayers.length) {
+      newCurrentTeam = Team.Titans;
+    } else if (draftingState.mode === DraftMode.Single) {
+      // For Single draft, always switch teams after one player makes a selection
+      newCurrentTeam = draftingState.currentTeam === Team.Titans ? Team.Atlanteans : Team.Titans;
+    } else if (draftingState.mode === DraftMode.PickAndBan) {
+      // For pick and ban, move to next step
+      newStep = draftingState.currentStep + 1;
+      
+      // Check if we've completed all steps
+      if (newStep >= draftingState.pickBanSequence.length) {
+        isComplete = true;
+      } else {
+        // Determine next team based on the sequence
+        const nextTeamChar = draftingState.pickBanSequence[newStep].team;
+        const teamAIsFirst = gameState.coinSide === Team.Titans;
+        
+        if (nextTeamChar === 'A') {
+          newCurrentTeam = teamAIsFirst ? Team.Titans : Team.Atlanteans;
+        } else {
+          newCurrentTeam = teamAIsFirst ? Team.Atlanteans : Team.Titans;
+        }
+      }
+    } else {
+      // For other modes, just alternate teams
+      newCurrentTeam = draftingState.currentTeam === Team.Titans ? Team.Atlanteans : Team.Titans;
+    }
+    
+    // Check if drafting is complete
+    if (titansPicked >= titansPlayers.length && atlanteansPicked >= atlanteansPlayers.length) {
+      isComplete = true;
+    }
+    
+    // Update drafting state
+    setDraftingState({
+      ...draftingState,
+      currentTeam: newCurrentTeam,
+      availableHeroes: newAvailableHeroes,
+      assignedHeroes: newAssignedHeroes,
+      selectedHeroes: newSelectedHeroes,
+      currentStep: newStep,
+      isComplete
+    });
+  };
+
+  // Handle hero ban in draft mode
+  const handleDraftHeroBan = (hero: Hero) => {
+    if (draftingState.mode !== DraftMode.PickAndBan) return;
+    
+    // Update banned heroes
+    const newBannedHeroes = [...draftingState.bannedHeroes, hero];
+    
+    // Update available heroes
+    const newAvailableHeroes = draftingState.availableHeroes.filter(h => h.id !== hero.id);
+    
+    // Move to next step in the sequence
+    const newStep = draftingState.currentStep + 1;
+    
+    // Determine next team
+    let newCurrentTeam = draftingState.currentTeam;
+    let isComplete = draftingState.isComplete;
+    
+    // Check if we've completed all steps
+    if (newStep >= draftingState.pickBanSequence.length) {
+      isComplete = true;
+    } else {
+      // Determine next team based on the sequence
+      const nextTeamChar = draftingState.pickBanSequence[newStep].team;
+      const teamAIsFirst = gameState.coinSide === Team.Titans;
+      
+      if (nextTeamChar === 'A') {
+        newCurrentTeam = teamAIsFirst ? Team.Titans : Team.Atlanteans;
+      } else {
+        newCurrentTeam = teamAIsFirst ? Team.Atlanteans : Team.Titans;
+      }
+    }
+    
+    // Update drafting state
+    setDraftingState({
+      ...draftingState,
+      currentTeam: newCurrentTeam,
+      availableHeroes: newAvailableHeroes,
+      bannedHeroes: newBannedHeroes,
+      currentStep: newStep,
+      isComplete
+    });
+  };
+
+  // Finish drafting and start the game
+  const finishDrafting = () => {
+    // Apply selected heroes to players
+    const updatedPlayers = localPlayers.map(player => {
+      const selection = draftingState.selectedHeroes.find(s => s.playerId === player.id);
+      if (selection) {
+        return {
+          ...player,
+          hero: selection.hero
+        };
+      }
+      return player;
+    });
+    
+    setLocalPlayers(updatedPlayers);
+    players = updatedPlayers;
+    setSelectedHeroes(draftingState.selectedHeroes.map(s => s.hero));
+    
+    // Start the game
+    startGame();
+  };
+
+  // Cancel drafting and return to setup
+  const cancelDrafting = () => {
+    setIsDraftingMode(false);
+    setShowDraftModeSelection(false);
   };
 
   // Start the game
@@ -357,6 +750,13 @@ function App() {
       return;
     }
     
+    // Check if all players have entered their names
+    const playersWithoutNames = localPlayers.filter(p => !p.name.trim());
+    if (playersWithoutNames.length > 0) {
+      alert('All players must enter their names');
+      return;
+    }
+    
     // Calculate total player count
     const playerCount = titansPlayers.length + atlanteansPlayers.length;
     
@@ -381,7 +781,7 @@ function App() {
       },
       currentPhase: 'strategy',
       activeHeroIndex: -1,
-      coinSide: 'Titans',
+      coinSide: gameState.coinSide,
       hasMultipleLanes: laneState.hasMultipleLanes,
       completedTurns: [], // Initialize empty array for completed turn tracking
       allPlayersMoved: false // Initialize to false
@@ -392,6 +792,7 @@ function App() {
     setGameStarted(true);
     setStrategyTimerActive(true);
     setStrategyTimeRemaining(strategyTime);
+    setIsDraftingMode(false);
   };
 
   // Select a player for their move
@@ -422,7 +823,7 @@ function App() {
   // End the strategy phase
   const endStrategyPhase = () => {
     setStrategyTimerActive(false);
-    dispatch({ type: 'END_STRATEGY' }); // Fixed: Use the correct action type
+    dispatch({ type: 'END_STRATEGY' });
   };
 
   // Adjust team life counter
@@ -472,31 +873,65 @@ function App() {
     return () => clearTimeout(timer);
   }, [moveTimerActive, moveTimeRemaining]);
 
+  // Utility function to shuffle an array
+  const shuffleArray = <T extends unknown>(array: T[]): T[] => {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  };
+
   return (
-    <div className="App min-h-screen bg-gradient-to-b from-gray-300 to-blue-900 text-white p-6">
+    <div className="App min-h-screen bg-gradient-to-b from-gray-400 to-gray-600 text-white p-6">
       <header className="App-header mb-8">
         <h1 className="text-3xl font-bold mb-2">Guards of Atlantis II Timer</h1>
       </header>
 
       {!gameStarted ? (
         <div className="game-setup-container">
-          <GameSetup 
-            strategyTime={strategyTime}
-            moveTime={moveTime}
-            gameLength={gameLength}
-            onStrategyTimeChange={setStrategyTime}
-            onMoveTimeChange={setMoveTime}
-            onGameLengthChange={handleGameLengthChange}
-            players={localPlayers}
-            onAddPlayer={addPlayer}
-            onStartGame={startGame}
-          />
-          <HeroSelection 
-            heroes={heroes}
-            selectedHeroes={selectedHeroes}
-            players={localPlayers}
-            onHeroSelect={handleHeroSelect}
-          />
+          {showDraftModeSelection ? (
+            <DraftModeSelection 
+              onSelectMode={handleSelectDraftMode}
+              onCancel={() => setShowDraftModeSelection(false)}
+              playerCount={localPlayers.length}
+            />
+          ) : isDraftingMode ? (
+            <DraftingSystem 
+              players={localPlayers}
+              availableHeroes={filteredHeroes}
+              draftingState={draftingState}
+              onHeroSelect={handleDraftHeroSelect}
+              onHeroBan={handleDraftHeroBan}
+              onFinishDrafting={finishDrafting}
+              onCancelDrafting={cancelDrafting}
+            />
+          ) : (
+            <>
+              <GameSetup 
+                strategyTime={strategyTime}
+                moveTime={moveTime}
+                gameLength={gameLength}
+                onStrategyTimeChange={setStrategyTime}
+                onMoveTimeChange={setMoveTime}
+                onGameLengthChange={handleGameLengthChange}
+                players={localPlayers}
+                onAddPlayer={addPlayer}
+                onStartGame={startGame}
+                onDraftHeroes={startDrafting}
+                selectedExpansions={selectedExpansions}
+                onToggleExpansion={handleToggleExpansion}
+                onPlayerNameChange={handlePlayerNameChange}
+              />
+              <HeroSelection 
+                heroes={filteredHeroes}
+                selectedHeroes={selectedHeroes}
+                players={localPlayers}
+                onHeroSelect={handleHeroSelect}
+              />
+            </>
+          )}
         </div>
       ) : (
         <GameTimer 
