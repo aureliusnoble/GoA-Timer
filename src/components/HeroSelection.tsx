@@ -27,7 +27,7 @@ const HeroSelection: React.FC<HeroSelectionProps> = ({
       {players.length > 0 ? (
         <div className="mb-6">
           <h3 className="text-xl mb-2">Player Hero Assignments</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             {players.map((player, index) => (
               <div 
                 key={player.id} 
@@ -40,7 +40,7 @@ const HeroSelection: React.FC<HeroSelectionProps> = ({
                 </h4>
                 {player.hero ? (
                   <div className="flex items-center">
-                    <div className="w-30 h-30 bg-gray-300 rounded-full overflow-hidden mr-3">
+                    <div className="w-20 h-20 bg-gray-300 rounded-full overflow-hidden mr-3">
                       <img 
                         src={player.hero.icon} 
                         alt={player.hero.name} 
