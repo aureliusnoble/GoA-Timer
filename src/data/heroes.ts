@@ -107,7 +107,7 @@ export const heroes: Hero[] = [
     name: 'Misa',
     icon: 'heroes/misa.png',
     complexity: 2,
-    roles: ['Tactician', 'Durabke'],
+    roles: ['Tactician', 'Durable'],
     expansion: 'Devoted',
     description: 'Misa is an elite mobility assassin and disruptor who controls engagements through superior positioning and unpredictable movement.'
   },
