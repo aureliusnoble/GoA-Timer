@@ -115,7 +115,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
           <div className="mt-2 mb-2">
             <span className="px-3 py-1 rounded-full bg-gray-700 text-sm">
               {gameState.currentPhase === 'strategy' && 'Strategy Phase'}
-              {gameState.currentPhase === 'move' && 'Move Phase'}
+              {gameState.currentPhase === 'move' && 'Action Phase'}
               {gameState.currentPhase === 'turn-end' && 'Turn Complete'}
             </span>
           </div>
@@ -238,7 +238,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
           </div>
         ) : gameState.currentPhase === 'move' ? (
           <div className="text-center">
-            <h2 className="text-2xl font-bold mb-4">Move Phase</h2>
+            <h2 className="text-2xl font-bold mb-4">Action Phase</h2>
             
             {activePlayer && activePlayer.hero ? (
               <div className="mb-4">

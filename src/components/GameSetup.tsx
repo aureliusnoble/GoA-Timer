@@ -116,7 +116,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
               </div>
               
               <div className="mb-4">
-                <label className="block mb-3">Move Timer</label>
+                <label className="block mb-3">Action Timer</label>
                 <TimerInput 
                   value={moveTime} 
                   onChange={onMoveTimeChange}

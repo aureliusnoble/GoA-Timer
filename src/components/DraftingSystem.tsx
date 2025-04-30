@@ -124,6 +124,18 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
     return `${teamLabel} ${actionLabel} - Round ${step.round}`;
   };
   
+  // NEW: Helper function to sort heroes by complexity and then alphabetically
+  const sortHeroes = (heroes: Hero[]): Hero[] => {
+    return [...heroes].sort((a, b) => {
+      // First sort by complexity (low to high)
+      if (a.complexity !== b.complexity) {
+        return a.complexity - b.complexity;
+      }
+      // If complexity is the same, sort alphabetically by name
+      return a.name.localeCompare(b.name);
+    });
+  };
+  
   // Render hero card with appropriate actions
   const renderHeroCard = (hero: Hero, context: 'available' | 'assigned' | 'selected' | 'banned') => {
     const isAvailable = context === 'available';
@@ -288,6 +300,9 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
   
   // Render All Pick Draft UI
   const renderAllPickUI = () => {
+    // Sort heroes by complexity and then alphabetically
+    const sortedHeroes = sortHeroes(draftingState.availableHeroes);
+    
     return (
       <div>
         <h3 className="text-xl font-bold mb-4">All Pick</h3>
@@ -325,7 +340,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
         
         {/* Filter available heroes by search or ability */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {draftingState.availableHeroes.map(hero => 
+          {sortedHeroes.map(hero => 
             renderHeroCard(hero, 'available')
           )}
         </div>
@@ -395,6 +410,9 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                 // Check if player has already selected
                 const hasSelected = draftingState.selectedHeroes.some(s => s.playerId === player.id);
                 
+                // Sort this player's hero options
+                const sortedHeroOptions = sortHeroes(assignment.heroOptions);
+                
                 return (
                   <div key={player.id} className={`bg-gray-800 p-4 rounded-lg ${hasSelected ? 'opacity-60' : ''}`}>
                     <h5 className="text-lg font-medium mb-3 flex items-center">
@@ -407,7 +425,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                     </h5>
                     
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      {assignment.heroOptions.map(hero => (
+                      {sortedHeroOptions.map(hero => (
                         <div
                           key={hero.id}
                           className={`relative p-4 rounded-lg ${
@@ -496,6 +514,9 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                 // Check if player has already selected
                 const hasSelected = draftingState.selectedHeroes.some(s => s.playerId === player.id);
                 
+                // Sort this player's hero options
+                const sortedHeroOptions = sortHeroes(assignment.heroOptions);
+                
                 return (
                   <div key={player.id} className={`bg-gray-800 p-4 rounded-lg ${hasSelected ? 'opacity-60' : ''}`}>
                     <h5 className="text-lg font-medium mb-3 flex items-center">
@@ -508,7 +529,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                     </h5>
                     
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      {assignment.heroOptions.map(hero => (
+                      {sortedHeroOptions.map(hero => (
                         <div
                           key={hero.id}
                           className={`relative p-4 rounded-lg ${
@@ -578,6 +599,9 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
   
   // Render Random Draft UI
   const renderRandomDraftUI = () => {
+    // Sort heroes by complexity and then alphabetically
+    const sortedHeroes = sortHeroes(draftingState.availableHeroes);
+    
     return (
       <div>
         <h3 className="text-xl font-bold mb-4">Random Draft</h3>
@@ -614,7 +638,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
         </div>
         
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-          {draftingState.availableHeroes.map(hero => (
+          {sortedHeroes.map(hero => (
             <div 
               key={hero.id} 
               className={`relative p-4 rounded-lg transition-all ${
@@ -681,6 +705,9 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
   const renderPickAndBanUI = () => {
     if (draftingState.mode !== DraftMode.PickAndBan) return null;
     
+    // Sort heroes by complexity and then alphabetically
+    const sortedHeroes = sortHeroes(draftingState.availableHeroes);
+    
     // Determine which action we're doing in the current step
     const currentStep = draftingState.currentStep < draftingState.pickBanSequence.length 
       ? draftingState.pickBanSequence[draftingState.currentStep] 
@@ -733,7 +760,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
           <div className="mb-6">
             <h4 className="text-lg font-medium mb-3">Banned Heroes</h4>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-              {draftingState.bannedHeroes.map(hero => (
+              {sortHeroes(draftingState.bannedHeroes).map(hero => (
                 <div 
                   key={hero.id} 
                   className="relative p-3 rounded-lg bg-gray-800 opacity-50"
@@ -772,7 +799,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
         
         {/* Available heroes grid with team-colored cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-          {draftingState.availableHeroes.map(hero => (
+          {sortedHeroes.map(hero => (
             <div 
               key={hero.id} 
               className={`relative p-4 rounded-lg transition-all ${

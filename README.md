@@ -7,7 +7,7 @@ A custom timer application for the board game "Guards of Atlantis II", designed 
 - **Hero Selection**: Choose different heroes for each player and receive information about the heroes. 
 - **Drafting**: Choose a drafting method.
 - **Strategy Timer**: Set a countdown for the team discussion phase
-- **Move Timer**: Individual timers for each player's turn
+- **Action Timer**: Individual timers for each player's turn
 - **Game State Tracking**:
   - Wave counter
   - Team life counters
