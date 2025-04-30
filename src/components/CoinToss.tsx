@@ -29,7 +29,7 @@ const CoinToss: React.FC<CoinTossProps> = ({ result, onComplete }) => {
         <h2 className="text-3xl font-bold mb-8 text-white">Randomizing Tiebreaker</h2>
         
         <div className="coin-flip-container">
-          <div className={`coin ${isFlipping ? 'flipping' : ''}`}>
+          <div className={`coin ${isFlipping ? 'flipping' : ''} ${result === Team.Titans ? 'flip-titans' : 'flip-atlanteans'}`}>
             <div className="coin-face heads">
               <div className="coin-emblem">Titans</div>
               <div className="coin-shine"></div>
@@ -52,6 +52,35 @@ const CoinToss: React.FC<CoinTossProps> = ({ result, onComplete }) => {
           Continue to Draft
         </button>
       </div>
+      
+      {/* Add CSS to handle different end states based on result */}
+      <style jsx>{`
+        .coin.flipping.flip-titans {
+          animation: flipCoinTitans 3s ease-out forwards;
+        }
+        
+        .coin.flipping.flip-atlanteans {
+          animation: flipCoinAtlanteans 3s ease-out forwards;
+        }
+        
+        @keyframes flipCoinTitans {
+          0% { transform: rotateY(0) rotateX(0); }
+          20% { transform: rotateY(180deg) rotateX(10deg); }
+          40% { transform: rotateY(360deg) rotateX(-10deg); }
+          60% { transform: rotateY(540deg) rotateX(10deg); }
+          80% { transform: rotateY(720deg) rotateX(-10deg); }
+          100% { transform: rotateY(0deg) rotateX(0); } /* End on Titans side (heads) */
+        }
+        
+        @keyframes flipCoinAtlanteans {
+          0% { transform: rotateY(0) rotateX(0); }
+          20% { transform: rotateY(180deg) rotateX(10deg); }
+          40% { transform: rotateY(360deg) rotateX(-10deg); }
+          60% { transform: rotateY(540deg) rotateX(10deg); }
+          80% { transform: rotateY(720deg) rotateX(-10deg); }
+          100% { transform: rotateY(180deg) rotateX(0); } /* End on Atlanteans side (tails) */
+        }
+      `}</style>
     </div>
   );
 };

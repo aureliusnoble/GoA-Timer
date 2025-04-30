@@ -21,7 +21,7 @@
   left: 10%;
   right: 10%;
   height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(0, 195, 175, 0.5), transparent);
+  background: linear-gradient(90deg, transparent, rgba(0, 47, 255, 0.534), transparent);
 }
 
 /* Hero icon styles */
@@ -38,7 +38,7 @@
 
 /* Timer container with glow effect */
 .timer-container {
-  box-shadow: 0 0 20px rgba(0, 195, 175, 0.3);
+  box-shadow: 0 0 20px rgba(67, 156, 147, 0.3);
   position: relative;
   overflow: hidden;
 }

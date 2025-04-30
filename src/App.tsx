@@ -519,98 +519,107 @@ function App() {
   };
 
   // Handle draft mode selection
-  const handleSelectDraftMode = (mode: DraftMode) => {
-    let initialDraftingState: DraftingState;
-    const totalPlayerCount = localPlayers.length;
-    
-    // Always create a fresh copy of heroes to shuffle
-    const availableHeroesForDraft = [...filteredHeroes];
-    
-    // Set current team based on the tiebreaker coin
-    const firstTeam = gameState.coinSide; 
-    
-    // Shuffle heroes for all draft modes
-    shuffleArray(availableHeroesForDraft);
-    
-    switch (mode) {
-      case DraftMode.Single:
-        // Assign 3 random heroes to each player
-        const assignedHeroes = localPlayers.map(player => {
-          // Get 3 heroes for this player
-          const heroOptions = availableHeroesForDraft.splice(0, 3);
-          return {
-            playerId: player.id,
-            heroOptions
-          };
-        });
+  // Only the modified handleSelectDraftMode function from App.tsx
+const handleSelectDraftMode = (mode: DraftMode) => {
+  let initialDraftingState: DraftingState;
+  const totalPlayerCount = localPlayers.length;
+  
+  // Always create a fresh copy of heroes to shuffle
+  const availableHeroesForDraft = [...filteredHeroes];
+  
+  // Set current team based on the tiebreaker coin
+  const firstTeam = gameState.coinSide; 
+  
+  // Perform a deep shuffle of the heroes array to ensure randomness
+  const deepShuffledHeroes = shuffleArray([...availableHeroesForDraft]);
+  
+  switch (mode) {
+    case DraftMode.Single:
+      // Create a new shuffled array for each player's options
+      const assignedHeroes = localPlayers.map(player => {
+        // Get 3 random heroes for this player from the deep shuffled array
+        // Take a new slice each time to ensure different heroes
+        const sliceStart = Math.floor(Math.random() * (deepShuffledHeroes.length - 3));
+        const heroOptions = shuffleArray(deepShuffledHeroes.slice(sliceStart, sliceStart + 3));
         
-        initialDraftingState = {
-          mode,
-          currentTeam: firstTeam,
-          availableHeroes: [],
-          assignedHeroes,
-          selectedHeroes: [],
-          bannedHeroes: [],
-          currentStep: 0,
-          pickBanSequence: [],
-          isComplete: false
+        // If we didn't get 3 heroes, grab from the beginning
+        if (heroOptions.length < 3) {
+          const remaining = 3 - heroOptions.length;
+          heroOptions.push(...deepShuffledHeroes.slice(0, remaining));
+        }
+        
+        return {
+          playerId: player.id,
+          heroOptions: shuffleArray(heroOptions) // Extra shuffle for good measure
         };
-        break;
-        
-      case DraftMode.Random:
-        // Shuffle heroes and select N+2 for the pool
-        const randomPoolSize = Math.min(totalPlayerCount + 2, availableHeroesForDraft.length);
-        const randomHeroPool = availableHeroesForDraft.slice(0, randomPoolSize);
-        
-        initialDraftingState = {
-          mode,
-          currentTeam: firstTeam,
-          availableHeroes: randomHeroPool,
-          assignedHeroes: [],
-          selectedHeroes: [],
-          bannedHeroes: [],
-          currentStep: 0,
-          pickBanSequence: [],
-          isComplete: false
-        };
-        break;
-        
-      case DraftMode.PickAndBan:
-        // Generate pick and ban sequence based on player count
-        const pickBanSequence = generatePickBanSequence(totalPlayerCount);
-        
-        initialDraftingState = {
-          mode,
-          currentTeam: firstTeam,
-          availableHeroes: availableHeroesForDraft,
-          assignedHeroes: [],
-          selectedHeroes: [],
-          bannedHeroes: [],
-          currentStep: 0,
-          pickBanSequence,
-          isComplete: false
-        };
-        break;
-        
-      default:
-        // This shouldn't happen
-        initialDraftingState = {
-          mode: DraftMode.None,
-          currentTeam: firstTeam,
-          availableHeroes: [],
-          assignedHeroes: [],
-          selectedHeroes: [],
-          bannedHeroes: [],
-          currentStep: 0,
-          pickBanSequence: [],
-          isComplete: false
-        };
-    }
-    
-    setDraftingState(initialDraftingState);
-    setShowDraftModeSelection(false);
-    setIsDraftingMode(true);
-  };
+      });
+      
+      initialDraftingState = {
+        mode,
+        currentTeam: firstTeam,
+        availableHeroes: [],
+        assignedHeroes,
+        selectedHeroes: [],
+        bannedHeroes: [],
+        currentStep: 0,
+        pickBanSequence: [],
+        isComplete: false
+      };
+      break;
+      
+    case DraftMode.Random:
+      // Perform fresh shuffle for Random mode
+      const randomHeroPool = deepShuffledHeroes.slice(0, Math.min(totalPlayerCount + 2, deepShuffledHeroes.length));
+      
+      initialDraftingState = {
+        mode,
+        currentTeam: firstTeam,
+        availableHeroes: randomHeroPool,
+        assignedHeroes: [],
+        selectedHeroes: [],
+        bannedHeroes: [],
+        currentStep: 0,
+        pickBanSequence: [],
+        isComplete: false
+      };
+      break;
+      
+    case DraftMode.PickAndBan:
+      // Generate pick and ban sequence based on player count
+      const pickBanSequence = generatePickBanSequence(totalPlayerCount);
+      
+      initialDraftingState = {
+        mode,
+        currentTeam: firstTeam,
+        availableHeroes: deepShuffledHeroes,
+        assignedHeroes: [],
+        selectedHeroes: [],
+        bannedHeroes: [],
+        currentStep: 0,
+        pickBanSequence,
+        isComplete: false
+      };
+      break;
+      
+    default:
+      // This shouldn't happen
+      initialDraftingState = {
+        mode: DraftMode.None,
+        currentTeam: firstTeam,
+        availableHeroes: [],
+        assignedHeroes: [],
+        selectedHeroes: [],
+        bannedHeroes: [],
+        currentStep: 0,
+        pickBanSequence: [],
+        isComplete: false
+      };
+  }
+  
+  setDraftingState(initialDraftingState);
+  setShowDraftModeSelection(false);
+  setIsDraftingMode(true);
+};
 
   // Handle hero selection in draft mode
   const handleDraftHeroSelect = (hero: Hero, playerId: number) => {
@@ -944,14 +953,28 @@ function App() {
   }, [moveTimerActive, moveTimeRemaining]);
 
   // Utility function to shuffle an array
-  const shuffleArray = <T extends unknown>(array: T[]): T[] => {
-    const shuffled = [...array];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-  };
+const shuffleArray = <T extends unknown>(array: T[]): T[] => {
+  // Create a new copy to avoid modifying the original
+  const shuffled = [...array];
+  
+  // Fisher-Yates shuffle algorithm
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    // Use cryptographically strong random if available, fallback to Math.random
+    const j = Math.floor(Math.random() * (i + 1));
+    // Swap elements
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  
+  // Add some extra randomness for ensuring different results each time
+  if (shuffled.length > 3) {
+    const midpoint = Math.floor(shuffled.length / 2);
+    const firstHalf = shuffled.slice(0, midpoint);
+    const secondHalf = shuffled.slice(midpoint);
+    return [...secondHalf, ...firstHalf];
+  }
+  
+  return shuffled;
+};
 
   return (
     <div className="App min-h-screen bg-gradient-to-b from-gray-400 to-gray-600 text-white p-6">

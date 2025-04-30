@@ -108,7 +108,6 @@ The application uses Tailwind CSS for styling. Custom styles can be added in:
 
 - Remove hero selection on setup screen and add new draft mode: All Pick
 
-- Bugs with single draft and random draft
-- Bug with Random draft: Restarts when we finish
-- Bug with single draft: only lets 4 players select
-- make icon bigger
+- with Random and Pick and Ban we should choose which player on that team we are assigning to (similar to how we do in current Game Setup page)
+- Once all players have selected a hero instead of display {team}'s Turn\nAll {team} have selected heroes. Instead display "Start Game\nAll players have selected heroes. Click Start Game."
+- hero tooltip bigger (everything, the icon, the text, etc.)

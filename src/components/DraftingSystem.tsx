@@ -50,7 +50,18 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
     }
     
     const step = draftingState.pickBanSequence[draftingState.currentStep];
-    const teamLabel = step.team === 'A' ? getTeamName(draftingState.currentTeam) : getTeamName(draftingState.currentTeam === Team.Titans ? Team.Atlanteans : Team.Titans);
+    
+    // Determine which team is active based on current step
+    let activeTeam;
+    if (step.team === 'A') {
+      // Team A is the first team (from coin toss)
+      activeTeam = draftingState.currentTeam;
+    } else {
+      // Team B is the other team
+      activeTeam = draftingState.currentTeam === Team.Titans ? Team.Atlanteans : Team.Titans;
+    }
+    
+    const teamLabel = getTeamName(activeTeam);
     const actionLabel = step.action === 'ban' ? 'Ban' : 'Pick';
     
     return `${teamLabel} ${actionLabel} - Round ${step.round}`;
@@ -66,7 +77,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
     return (
       <div 
         key={hero.id}
-        className={`relative p-3 rounded-lg transition-all ${
+        className={`relative p-4 rounded-lg transition-all ${
           isAvailable ? 'bg-gray-800 hover:bg-gray-700' : 
           isAssigned ? 'bg-amber-900/30 hover:bg-amber-800/40' :
           isSelected ? 'bg-green-900/30' :
@@ -75,53 +86,54 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
         onMouseEnter={() => setHoveredHero(hero)}
         onMouseLeave={() => setHoveredHero(null)}
       >
-        <div className="text-center mb-2">
-          <div className="w-16 h-16 bg-gray-300 rounded-full mx-auto overflow-hidden">
+        <div className="text-center mb-3">
+          <div className="w-24 h-24 bg-gray-300 rounded-full mx-auto overflow-hidden">
             <img 
               src={hero.icon} 
               alt={hero.name} 
               className="w-full h-full object-cover"
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
-                target.src = 'https://via.placeholder.com/64?text=Hero';
+                target.src = 'https://via.placeholder.com/96?text=Hero';
               }}
             />
           </div>
-          <div className="mt-1 font-medium">{hero.name}</div>
+          <div className="mt-2 font-medium text-lg">{hero.name}</div>
         </div>
         
         {/* Complexity stars */}
-        <div className="flex justify-center mb-1">
+        <div className="flex justify-center mb-2">
           {[...Array(hero.complexity)].map((_, i) => (
-            <span key={i} className="text-yellow-400">★</span>
+            <span key={i} className="text-yellow-400 text-lg">★</span>
           ))}
           {[...Array(4 - hero.complexity)].map((_, i) => (
-            <span key={i + hero.complexity} className="text-gray-600">★</span>
+            <span key={i + hero.complexity} className="text-gray-600 text-lg">★</span>
           ))}
         </div>
         
         {/* Roles */}
-        <div className="text-xs text-center text-gray-300 mb-2">
+        <div className="text-sm text-center text-gray-300 mb-3">
           {hero.roles.join(', ')}
         </div>
         
         {/* Actions for Pick and Ban mode */}
         {isAvailable && draftingState.mode === DraftMode.PickAndBan && (
-          <div className="mt-2 grid grid-cols-2 gap-1">
+          <div className="mt-3 grid grid-cols-1 gap-2">
             {draftingState.pickBanSequence[draftingState.currentStep]?.action === 'ban' && (
               <button
-                className="px-2 py-1 bg-red-700 hover:bg-red-600 rounded text-xs flex items-center justify-center"
+                className="w-full px-3 py-2 bg-red-700 hover:bg-red-600 rounded text-sm flex items-center justify-center"
                 onClick={() => onHeroBan(hero)}
               >
-                <X size={12} className="mr-1" /> Ban
+                Ban Hero
               </button>
             )}
             {draftingState.pickBanSequence[draftingState.currentStep]?.action === 'pick' && pendingPlayers.length > 0 && (
               <button
-                className="px-2 py-1 bg-green-700 hover:bg-green-600 rounded text-xs flex items-center justify-center"
+                className="w-full px-3 py-2 bg-green-700 hover:bg-green-600 rounded text-sm flex items-center justify-center"
                 onClick={() => onHeroSelect(hero, pendingPlayers[0].id)}
               >
-                <Check size={12} className="mr-1" /> Pick
+                <span className="mr-1">Pick for</span>
+                <span className="font-bold">{pendingPlayers[0].name}</span>
               </button>
             )}
           </div>
@@ -129,13 +141,14 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
         
         {/* Actions for Random Draft mode */}
         {isAvailable && draftingState.mode === DraftMode.Random && (
-          <div className="mt-2">
+          <div className="mt-3">
             {pendingPlayers.length > 0 && (
               <button
-                className="w-full px-2 py-1 bg-green-700 hover:bg-green-600 rounded text-xs flex items-center justify-center"
+                className="w-full px-3 py-2 bg-green-700 hover:bg-green-600 rounded text-sm flex items-center justify-center"
                 onClick={() => onHeroSelect(hero, pendingPlayers[0].id)}
               >
-                <Check size={12} className="mr-1" /> Pick
+                <span className="mr-1">Pick for</span>
+                <span className="font-bold">{pendingPlayers[0].name}</span>
               </button>
             )}
           </div>
@@ -143,9 +156,9 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
         
         {/* Actions for Single Draft mode */}
         {isAssigned && (
-          <div className="mt-2">
+          <div className="mt-3">
             <button
-              className="w-full px-2 py-1 bg-green-700 hover:bg-green-600 rounded text-xs flex items-center justify-center"
+              className="w-full px-3 py-2 bg-green-700 hover:bg-green-600 rounded text-sm flex items-center justify-center"
               onClick={() => {
                 const playerId = draftingState.assignedHeroes.find(assigned => 
                   assigned.heroOptions.some(h => h.id === hero.id)
@@ -156,10 +169,482 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                 }
               }}
             >
-              <Check size={12} className="mr-1" /> Select
+              Select Hero
             </button>
           </div>
         )}
+      </div>
+    );
+  };
+  
+  // Render Single Draft UI
+  const renderSingleDraftUI = () => {
+    return (
+      <div>
+        <h3 className="text-xl font-bold mb-4">Single Draft</h3>
+        
+        <div className="mb-6">
+          <div className={`p-3 rounded-lg ${
+            draftingState.currentTeam === Team.Titans ? 'bg-blue-900/50 border-2 border-blue-400' : 'bg-red-900/50 border-2 border-red-400'
+          }`}>
+            <h4 className="text-lg font-semibold mb-2">
+              {getTeamName(draftingState.currentTeam)}'s Turn
+            </h4>
+            
+            {pendingPlayers.length > 0 ? (
+              <div className="text-md mb-3">
+                Any {getTeamName(draftingState.currentTeam)} player can select a hero from their options
+              </div>
+            ) : (
+              <div className="text-md mb-3">
+                All {getTeamName(draftingState.currentTeam)} players have selected heroes
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* Titans Section */}
+        <div className="mb-6">
+          <h4 className="text-lg font-medium mb-3 bg-blue-900/50 p-2 rounded flex items-center">
+            <div className="bg-blue-700 rounded-full p-1 mr-2">
+              <User size={16} />
+            </div>
+            Titans Team
+          </h4>
+          
+          <div 
+            ref={titansDraftRef}
+            className="max-h-96 overflow-y-auto pr-2 space-y-4 custom-scrollbar"
+          >
+            {draftingState.assignedHeroes
+              .filter(assignment => {
+                const player = players.find(p => p.id === assignment.playerId);
+                return player && player.team === Team.Titans;
+              })
+              .map(assignment => {
+                const player = players.find(p => p.id === assignment.playerId);
+                if (!player) return null;
+                
+                // Check if player has already selected
+                const hasSelected = draftingState.selectedHeroes.some(s => s.playerId === player.id);
+                
+                return (
+                  <div key={player.id} className={`bg-gray-800 p-4 rounded-lg ${hasSelected ? 'opacity-60' : ''}`}>
+                    <h5 className="text-lg font-medium mb-3 flex items-center">
+                      {player.name}
+                      {hasSelected && (
+                        <span className="ml-2 bg-green-600 text-white text-xs px-2 py-1 rounded">
+                          Selected
+                        </span>
+                      )}
+                    </h5>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {assignment.heroOptions.map(hero => (
+                        <div
+                          key={hero.id}
+                          className={`relative p-4 rounded-lg ${
+                            draftingState.currentTeam === Team.Titans && !hasSelected 
+                              ? 'bg-blue-900/30 hover:bg-blue-800/40 cursor-pointer' 
+                              : 'bg-gray-800'
+                          }`}
+                          onClick={() => {
+                            if (draftingState.currentTeam === Team.Titans && !hasSelected) {
+                              onHeroSelect(hero, player.id);
+                            }
+                          }}
+                          onMouseEnter={() => setHoveredHero(hero)}
+                          onMouseLeave={() => setHoveredHero(null)}
+                        >
+                          <div className="text-center mb-3">
+                            <div className="w-24 h-24 bg-gray-300 rounded-full mx-auto overflow-hidden">
+                              <img 
+                                src={hero.icon} 
+                                alt={hero.name} 
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  target.src = 'https://via.placeholder.com/96?text=Hero';
+                                }}
+                              />
+                            </div>
+                            <div className="mt-2 font-medium text-lg">{hero.name}</div>
+                          </div>
+                          
+                          {/* Complexity stars */}
+                          <div className="flex justify-center mb-2">
+                            {[...Array(hero.complexity)].map((_, i) => (
+                              <span key={i} className="text-yellow-400 text-lg">★</span>
+                            ))}
+                            {[...Array(4 - hero.complexity)].map((_, i) => (
+                              <span key={i + hero.complexity} className="text-gray-600 text-lg">★</span>
+                            ))}
+                          </div>
+                          
+                          {/* Roles */}
+                          <div className="text-sm text-center text-gray-300 mb-2">
+                            {hero.roles.join(', ')}
+                          </div>
+                          
+                          {/* Select button when it's this team's turn */}
+                          {draftingState.currentTeam === Team.Titans && !hasSelected && (
+                            <button
+                              className="w-full mt-2 px-3 py-2 bg-blue-700 hover:bg-blue-600 rounded text-sm"
+                            >
+                              Select This Hero
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+        
+        {/* Atlanteans Section */}
+        <div>
+          <h4 className="text-lg font-medium mb-3 bg-red-900/50 p-2 rounded flex items-center">
+            <div className="bg-red-700 rounded-full p-1 mr-2">
+              <User size={16} />
+            </div>
+            Atlanteans Team
+          </h4>
+          
+          <div 
+            ref={atlanteansDraftRef}
+            className="max-h-96 overflow-y-auto pr-2 space-y-4 custom-scrollbar"
+          >
+            {draftingState.assignedHeroes
+              .filter(assignment => {
+                const player = players.find(p => p.id === assignment.playerId);
+                return player && player.team === Team.Atlanteans;
+              })
+              .map(assignment => {
+                const player = players.find(p => p.id === assignment.playerId);
+                if (!player) return null;
+                
+                // Check if player has already selected
+                const hasSelected = draftingState.selectedHeroes.some(s => s.playerId === player.id);
+                
+                return (
+                  <div key={player.id} className={`bg-gray-800 p-4 rounded-lg ${hasSelected ? 'opacity-60' : ''}`}>
+                    <h5 className="text-lg font-medium mb-3 flex items-center">
+                      {player.name}
+                      {hasSelected && (
+                        <span className="ml-2 bg-green-600 text-white text-xs px-2 py-1 rounded">
+                          Selected
+                        </span>
+                      )}
+                    </h5>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {assignment.heroOptions.map(hero => (
+                        <div
+                          key={hero.id}
+                          className={`relative p-4 rounded-lg ${
+                            draftingState.currentTeam === Team.Atlanteans && !hasSelected 
+                              ? 'bg-red-900/30 hover:bg-red-800/40 cursor-pointer' 
+                              : 'bg-gray-800'
+                          }`}
+                          onClick={() => {
+                            if (draftingState.currentTeam === Team.Atlanteans && !hasSelected) {
+                              onHeroSelect(hero, player.id);
+                            }
+                          }}
+                          onMouseEnter={() => setHoveredHero(hero)}
+                          onMouseLeave={() => setHoveredHero(null)}
+                        >
+                          <div className="text-center mb-3">
+                            <div className="w-24 h-24 bg-gray-300 rounded-full mx-auto overflow-hidden">
+                              <img 
+                                src={hero.icon} 
+                                alt={hero.name} 
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  target.src = 'https://via.placeholder.com/96?text=Hero';
+                                }}
+                              />
+                            </div>
+                            <div className="mt-2 font-medium text-lg">{hero.name}</div>
+                          </div>
+                          
+                          {/* Complexity stars */}
+                          <div className="flex justify-center mb-2">
+                            {[...Array(hero.complexity)].map((_, i) => (
+                              <span key={i} className="text-yellow-400 text-lg">★</span>
+                            ))}
+                            {[...Array(4 - hero.complexity)].map((_, i) => (
+                              <span key={i + hero.complexity} className="text-gray-600 text-lg">★</span>
+                            ))}
+                          </div>
+                          
+                          {/* Roles */}
+                          <div className="text-sm text-center text-gray-300 mb-2">
+                            {hero.roles.join(', ')}
+                          </div>
+                          
+                          {/* Select button when it's this team's turn */}
+                          {draftingState.currentTeam === Team.Atlanteans && !hasSelected && (
+                            <button
+                              className="w-full mt-2 px-3 py-2 bg-red-700 hover:bg-red-600 rounded text-sm"
+                            >
+                              Select This Hero
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      </div>
+    );
+  };
+  
+  // Render Random Draft UI
+  const renderRandomDraftUI = () => {
+    return (
+      <div>
+        <h3 className="text-xl font-bold mb-4">Random Draft</h3>
+        
+        <div className="mb-6">
+          <div className={`p-3 rounded-lg ${
+            draftingState.currentTeam === Team.Titans ? 'bg-blue-900/50 border-2 border-blue-400' : 'bg-red-900/50 border-2 border-red-400'
+          }`}>
+            <h4 className="text-lg font-semibold mb-2">
+              {getTeamName(draftingState.currentTeam)}'s Turn
+            </h4>
+            
+            {pendingPlayers.length > 0 ? (
+              <div className="text-md mb-3">
+                {pendingPlayers.map(player => player.name).join(', ')} need to select a hero
+              </div>
+            ) : (
+              <div className="text-md mb-3">
+                All {getTeamName(draftingState.currentTeam)} players have selected heroes
+              </div>
+            )}
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+          {draftingState.availableHeroes.map(hero => (
+            <div 
+              key={hero.id} 
+              className={`relative p-4 rounded-lg transition-all cursor-pointer ${
+                draftingState.currentTeam === Team.Titans 
+                  ? 'bg-blue-900/30 hover:bg-blue-800/40' 
+                  : 'bg-red-900/30 hover:bg-red-800/40'
+              }`}
+              onClick={() => {
+                if (pendingPlayers.length > 0) {
+                  onHeroSelect(hero, pendingPlayers[0].id);
+                }
+              }}
+              onMouseEnter={() => setHoveredHero(hero)}
+              onMouseLeave={() => setHoveredHero(null)}
+            >
+              <div className="text-center mb-3">
+                <div className="w-24 h-24 bg-gray-300 rounded-full mx-auto overflow-hidden">
+                  <img 
+                    src={hero.icon} 
+                    alt={hero.name} 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.src = 'https://via.placeholder.com/96?text=Hero';
+                    }}
+                  />
+                </div>
+                <div className="mt-2 font-medium text-lg">{hero.name}</div>
+              </div>
+              
+              {/* Complexity stars */}
+              <div className="flex justify-center mb-2">
+                {[...Array(hero.complexity)].map((_, i) => (
+                  <span key={i} className="text-yellow-400 text-lg">★</span>
+                ))}
+                {[...Array(4 - hero.complexity)].map((_, i) => (
+                  <span key={i + hero.complexity} className="text-gray-600 text-lg">★</span>
+                ))}
+              </div>
+              
+              {/* Roles */}
+              <div className="text-sm text-center text-gray-300 mb-3">
+                {hero.roles.join(', ')}
+              </div>
+              
+              {pendingPlayers.length > 0 && (
+                <div className="mt-2">
+                  <button
+                    className="w-full px-3 py-2 rounded text-sm bg-green-600 hover:bg-green-500 flex items-center justify-center"
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent double triggering
+                      onHeroSelect(hero, pendingPlayers[0].id);
+                    }}
+                  >
+                    <span className="mr-1">Pick for</span>
+                    <span className="font-bold">{pendingPlayers[0].name}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+  
+  // Render Pick and Ban UI
+  const renderPickAndBanUI = () => {
+    if (draftingState.mode !== DraftMode.PickAndBan) return null;
+    
+    // Determine which action we're doing in the current step
+    const currentStep = draftingState.currentStep < draftingState.pickBanSequence.length 
+      ? draftingState.pickBanSequence[draftingState.currentStep] 
+      : null;
+      
+    if (!currentStep) return <div>Draft complete</div>;
+    
+    const isPickingPhase = currentStep.action === 'pick';
+    const isBanningPhase = currentStep.action === 'ban';
+    
+    return (
+      <div>
+        <h3 className="text-xl font-bold mb-4">Pick and Ban</h3>
+        
+        <div className="mb-6">
+          <div className={`p-4 rounded-lg ${
+            draftingState.currentTeam === Team.Titans 
+              ? 'bg-blue-900/50 border-2 border-blue-400' 
+              : 'bg-red-900/50 border-2 border-red-400'
+          }`}>
+            <h4 className="text-xl font-semibold mb-2">
+              {getCurrentPickBanLabel()}
+            </h4>
+            
+            <div className="text-md mb-3">
+              {isBanningPhase && 'Select a hero to ban from the pool'}
+              {isPickingPhase && pendingPlayers.length > 0 && 
+                `${pendingPlayers.map(player => player.name).join(', ')} need to pick a hero`
+              }
+              {isPickingPhase && pendingPlayers.length === 0 && 
+                'All players on this team have selected heroes'
+              }
+            </div>
+          </div>
+        </div>
+        
+        {/* Banned heroes section */}
+        {draftingState.bannedHeroes.length > 0 && (
+          <div className="mb-6">
+            <h4 className="text-lg font-medium mb-3">Banned Heroes</h4>
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+              {draftingState.bannedHeroes.map(hero => (
+                <div 
+                  key={hero.id} 
+                  className="relative p-3 rounded-lg bg-gray-800 opacity-50"
+                >
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-full h-0.5 bg-red-500 transform rotate-45"></div>
+                    <div className="w-full h-0.5 bg-red-500 transform -rotate-45"></div>
+                  </div>
+                  <div className="text-center mb-2">
+                    <div className="w-20 h-20 bg-gray-300 rounded-full mx-auto overflow-hidden">
+                      <img 
+                        src={hero.icon} 
+                        alt={hero.name} 
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = 'https://via.placeholder.com/80?text=Hero';
+                        }}
+                      />
+                    </div>
+                    <div className="mt-2 font-medium">{hero.name}</div>
+                  </div>
+                  
+                  <div className="text-xs text-center text-gray-400">
+                    {hero.roles.join(', ')}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {/* Available heroes grid with team-colored cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+          {draftingState.availableHeroes.map(hero => (
+            <div 
+              key={hero.id} 
+              className={`relative p-4 rounded-lg transition-all ${
+                draftingState.currentTeam === Team.Titans
+                  ? 'bg-blue-900/30 hover:bg-blue-800/40'
+                  : 'bg-red-900/30 hover:bg-red-800/40'
+              } cursor-pointer`}
+              onMouseEnter={() => setHoveredHero(hero)}
+              onMouseLeave={() => setHoveredHero(null)}
+            >
+              <div className="text-center mb-3">
+                <div className="w-24 h-24 bg-gray-300 rounded-full mx-auto overflow-hidden">
+                  <img 
+                    src={hero.icon} 
+                    alt={hero.name} 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.src = 'https://via.placeholder.com/96?text=Hero';
+                    }}
+                  />
+                </div>
+                <div className="mt-2 font-medium text-lg">{hero.name}</div>
+              </div>
+              
+              {/* Complexity stars */}
+              <div className="flex justify-center mb-2">
+                {[...Array(hero.complexity)].map((_, i) => (
+                  <span key={i} className="text-yellow-400 text-lg">★</span>
+                ))}
+                {[...Array(4 - hero.complexity)].map((_, i) => (
+                  <span key={i + hero.complexity} className="text-gray-600 text-lg">★</span>
+                ))}
+              </div>
+              
+              {/* Roles */}
+              <div className="text-sm text-center text-gray-300 mb-3">
+                {hero.roles.join(', ')}
+              </div>
+              
+              {/* Action buttons */}
+              <div className="mt-3 grid grid-cols-1 gap-2">
+                {isBanningPhase && (
+                  <button
+                    className="w-full px-3 py-2 bg-red-600 hover:bg-red-500 rounded text-sm flex items-center justify-center"
+                    onClick={() => onHeroBan(hero)}
+                  >
+                    Ban Hero
+                  </button>
+                )}
+                
+                {isPickingPhase && pendingPlayers.length > 0 && (
+                  <button
+                    className="w-full px-3 py-2 bg-green-600 hover:bg-green-500 rounded text-sm flex items-center justify-center"
+                    onClick={() => onHeroSelect(hero, pendingPlayers[0].id)}
+                  >
+                    <span className="mr-1">Pick for</span>
+                    <span className="font-bold">{pendingPlayers[0].name}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   };
@@ -168,292 +653,11 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
   const renderDraftingUI = () => {
     switch (draftingState.mode) {
       case DraftMode.Single:
-        return (
-          <div>
-            <h3 className="text-xl font-bold mb-4">Single Draft</h3>
-            
-            <div className="mb-6">
-              <div className={`p-3 rounded-lg ${
-                draftingState.currentTeam === Team.Titans ? 'bg-blue-900/50' : 'bg-red-900/50'
-              }`}>
-                <h4 className="text-lg font-semibold mb-2">
-                  {getTeamName(draftingState.currentTeam)}'s Turn
-                </h4>
-                
-                {pendingPlayers.length > 0 ? (
-                  <div className="text-md mb-3">
-                    Any {getTeamName(draftingState.currentTeam)} player can select a hero from their options
-                  </div>
-                ) : (
-                  <div className="text-md mb-3">
-                    All {getTeamName(draftingState.currentTeam)} players have selected heroes
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* Titans Section - Now with scrollable container */}
-            <div className="mb-6">
-              <h4 className="text-lg font-medium mb-3 bg-blue-900/50 p-2 rounded flex items-center">
-                <div className="bg-blue-700 rounded-full p-1 mr-2">
-                  <User size={16} />
-                </div>
-                Titans Team
-              </h4>
-              
-              <div 
-                ref={titansDraftRef}
-                className="max-h-96 overflow-y-auto pr-2 space-y-4 custom-scrollbar"
-              >
-                {draftingState.assignedHeroes
-                  .filter(assignment => {
-                    const player = players.find(p => p.id === assignment.playerId);
-                    return player && player.team === Team.Titans;
-                  })
-                  .map(assignment => {
-                    const player = players.find(p => p.id === assignment.playerId);
-                    if (!player) return null;
-                    
-                    // Check if player has already selected
-                    const hasSelected = draftingState.selectedHeroes.some(s => s.playerId === player.id);
-                    
-                    return (
-                      <div key={player.id} className={`bg-gray-800 p-4 rounded-lg ${hasSelected ? 'opacity-60' : ''}`}>
-                        <h5 className="text-lg font-medium mb-3 flex items-center">
-                          {player.name}
-                          {hasSelected && (
-                            <span className="ml-2 bg-green-600 text-white text-xs px-2 py-1 rounded">
-                              Selected
-                            </span>
-                          )}
-                        </h5>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          {assignment.heroOptions.map(hero => (
-                            <div
-                              key={hero.id}
-                              className={`relative p-3 rounded-lg ${
-                                draftingState.currentTeam === Team.Titans && !hasSelected 
-                                  ? 'bg-blue-900/30 hover:bg-blue-800/40 cursor-pointer' 
-                                  : 'bg-gray-800'
-                              }`}
-                              onClick={() => {
-                                if (draftingState.currentTeam === Team.Titans && !hasSelected) {
-                                  onHeroSelect(hero, player.id);
-                                }
-                              }}
-                              onMouseEnter={() => setHoveredHero(hero)}
-                              onMouseLeave={() => setHoveredHero(null)}
-                            >
-                              <div className="text-center mb-2">
-                                <div className="w-16 h-16 bg-gray-300 rounded-full mx-auto overflow-hidden">
-                                  <img 
-                                    src={hero.icon} 
-                                    alt={hero.name} 
-                                    className="w-full h-full object-cover"
-                                    onError={(e) => {
-                                      const target = e.target as HTMLImageElement;
-                                      target.src = 'https://via.placeholder.com/64?text=Hero';
-                                    }}
-                                  />
-                                </div>
-                                <div className="mt-1 font-medium">{hero.name}</div>
-                              </div>
-                              
-                              {/* Complexity stars */}
-                              <div className="flex justify-center mb-1">
-                                {[...Array(hero.complexity)].map((_, i) => (
-                                  <span key={i} className="text-yellow-400">★</span>
-                                ))}
-                                {[...Array(4 - hero.complexity)].map((_, i) => (
-                                  <span key={i + hero.complexity} className="text-gray-600">★</span>
-                                ))}
-                              </div>
-                              
-                              {/* Roles */}
-                              <div className="text-xs text-center text-gray-300 mb-2">
-                                {hero.roles.join(', ')}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-            
-            {/* Atlanteans Section - Now with scrollable container */}
-            <div>
-              <h4 className="text-lg font-medium mb-3 bg-red-900/50 p-2 rounded flex items-center">
-                <div className="bg-red-700 rounded-full p-1 mr-2">
-                  <User size={16} />
-                </div>
-                Atlanteans Team
-              </h4>
-              
-              <div 
-                ref={atlanteansDraftRef}
-                className="max-h-96 overflow-y-auto pr-2 space-y-4 custom-scrollbar"
-              >
-                {draftingState.assignedHeroes
-                  .filter(assignment => {
-                    const player = players.find(p => p.id === assignment.playerId);
-                    return player && player.team === Team.Atlanteans;
-                  })
-                  .map(assignment => {
-                    const player = players.find(p => p.id === assignment.playerId);
-                    if (!player) return null;
-                    
-                    // Check if player has already selected
-                    const hasSelected = draftingState.selectedHeroes.some(s => s.playerId === player.id);
-                    
-                    return (
-                      <div key={player.id} className={`bg-gray-800 p-4 rounded-lg ${hasSelected ? 'opacity-60' : ''}`}>
-                        <h5 className="text-lg font-medium mb-3 flex items-center">
-                          {player.name}
-                          {hasSelected && (
-                            <span className="ml-2 bg-green-600 text-white text-xs px-2 py-1 rounded">
-                              Selected
-                            </span>
-                          )}
-                        </h5>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          {assignment.heroOptions.map(hero => (
-                            <div
-                              key={hero.id}
-                              className={`relative p-3 rounded-lg ${
-                                draftingState.currentTeam === Team.Atlanteans && !hasSelected 
-                                  ? 'bg-red-900/30 hover:bg-red-800/40 cursor-pointer' 
-                                  : 'bg-gray-800'
-                              }`}
-                              onClick={() => {
-                                if (draftingState.currentTeam === Team.Atlanteans && !hasSelected) {
-                                  onHeroSelect(hero, player.id);
-                                }
-                              }}
-                              onMouseEnter={() => setHoveredHero(hero)}
-                              onMouseLeave={() => setHoveredHero(null)}
-                            >
-                              <div className="text-center mb-2">
-                                <div className="w-16 h-16 bg-gray-300 rounded-full mx-auto overflow-hidden">
-                                  <img 
-                                    src={hero.icon} 
-                                    alt={hero.name} 
-                                    className="w-full h-full object-cover"
-                                    onError={(e) => {
-                                      const target = e.target as HTMLImageElement;
-                                      target.src = 'https://via.placeholder.com/64?text=Hero';
-                                    }}
-                                  />
-                                </div>
-                                <div className="mt-1 font-medium">{hero.name}</div>
-                              </div>
-                              
-                              {/* Complexity stars */}
-                              <div className="flex justify-center mb-1">
-                                {[...Array(hero.complexity)].map((_, i) => (
-                                  <span key={i} className="text-yellow-400">★</span>
-                                ))}
-                                {[...Array(4 - hero.complexity)].map((_, i) => (
-                                  <span key={i + hero.complexity} className="text-gray-600">★</span>
-                                ))}
-                              </div>
-                              
-                              {/* Roles */}
-                              <div className="text-xs text-center text-gray-300 mb-2">
-                                {hero.roles.join(', ')}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-          </div>
-        );
-        
+        return renderSingleDraftUI();
       case DraftMode.Random:
-        return (
-          <div>
-            <h3 className="text-xl font-bold mb-4">Random Draft</h3>
-            
-            <div className="mb-6">
-              <div className={`p-3 rounded-lg ${
-                draftingState.currentTeam === Team.Titans ? 'bg-blue-900/50' : 'bg-red-900/50'
-              }`}>
-                <h4 className="text-lg font-semibold mb-2">
-                  {getTeamName(draftingState.currentTeam)}'s Turn
-                </h4>
-                
-                {pendingPlayers.length > 0 ? (
-                  <div className="text-md mb-3">
-                    {pendingPlayers.map(player => player.name).join(', ')} need to select a hero
-                  </div>
-                ) : (
-                  <div className="text-md mb-3">
-                    All {getTeamName(draftingState.currentTeam)} players have selected heroes
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-              {draftingState.availableHeroes.map(hero => renderHeroCard(hero, 'available'))}
-            </div>
-          </div>
-        );
-        
+        return renderRandomDraftUI();
       case DraftMode.PickAndBan:
-        return (
-          <div>
-            <h3 className="text-xl font-bold mb-4">Pick and Ban</h3>
-            
-            <div className="mb-6">
-              <div className={`p-3 rounded-lg ${
-                draftingState.currentTeam === Team.Titans ? 'bg-blue-900/50' : 'bg-red-900/50'
-              }`}>
-                <h4 className="text-lg font-semibold mb-2">
-                  {getCurrentPickBanLabel()}
-                </h4>
-                
-                {draftingState.currentStep < draftingState.pickBanSequence.length && (
-                  <div className="text-md mb-3">
-                    {draftingState.pickBanSequence[draftingState.currentStep].action === 'ban' 
-                      ? 'Select a hero to ban' 
-                      : pendingPlayers.length > 0 
-                        ? `${pendingPlayers.map(player => player.name).join(', ')} need to pick a hero`
-                        : 'All players on this team have selected heroes'
-                    }
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* Banned heroes section */}
-            {draftingState.bannedHeroes.length > 0 && (
-              <div className="mb-6">
-                <h4 className="text-lg font-medium mb-3">Banned Heroes</h4>
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
-                  {draftingState.bannedHeroes.map(hero => renderHeroCard(hero, 'banned'))}
-                </div>
-              </div>
-            )}
-            
-            {/* Available heroes for picking/banning */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-              {draftingState.availableHeroes.map(hero => {
-                // Ensure we only show pick or ban buttons based on current action
-                const currentAction = draftingState.pickBanSequence[draftingState.currentStep]?.action;
-                return renderHeroCard(hero, 'available');
-              })}
-            </div>
-          </div>
-        );
-        
+        return renderPickAndBanUI();
       default:
         return <div>Invalid drafting mode</div>;
     }
