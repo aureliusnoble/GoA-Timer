@@ -53,7 +53,7 @@ const HeroSelection: React.FC<HeroSelectionProps> = ({
                   <div className="flex items-center">
                     <div className="w-20 h-20 bg-gray-300 rounded-full overflow-hidden mr-3">
                       <img 
-                        src={player.hero.icon} 
+                        src={`<span class="math-inline">\{import\.meta\.env\.BASE\_URL\}heroes/</span>{player.hero.icon}`}
                         alt={player.hero.name} 
                         className="w-full h-full object-cover"
                         onError={(e) => {
@@ -95,7 +95,7 @@ const HeroSelection: React.FC<HeroSelectionProps> = ({
             <div className="text-center mb-4">
               <div className="w-20 h-20 bg-gray-300 rounded-full mx-auto overflow-hidden">
                 <img 
-                  src={hero.icon} 
+                  src={`<span class="math-inline">\{import\.meta\.env\.BASE\_URL\}heroes/</span>{player.hero.icon}`}
                   alt={hero.name} 
                   className="w-full h-full object-cover"
                   onError={(e) => {
