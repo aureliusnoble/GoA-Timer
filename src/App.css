@@ -1,0 +1,85 @@
+/* src/App.css */
+.App {
+  min-height: 100vh;
+  background-image: url('/bg-pattern.png'), linear-gradient(to bottom, #051930, #082344);
+  background-size: 200px, cover;
+  background-blend-mode: overlay;
+}
+
+.App-header {
+  text-align: center;
+  padding: 1rem 0;
+  position: relative;
+}
+
+.App-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 10%;
+  right: 10%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0, 195, 175, 0.5), transparent);
+}
+
+/* Hero icon styles */
+.hero-icon {
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.2s ease;
+}
+
+.hero-icon:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+/* Timer container with glow effect */
+.timer-container {
+  box-shadow: 0 0 20px rgba(0, 195, 175, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.timer-container::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(0, 195, 175, 0.1) 0%, transparent 60%);
+  animation: rotate 10s linear infinite;
+}
+
+@keyframes rotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Team life counter themed styles */
+.blue-team-counter {
+  background: linear-gradient(to bottom right, #0a2e52, #0c3565);
+  border: 1px solid #1e5aa8;
+}
+
+.red-team-counter {
+  background: linear-gradient(to bottom right, #5e1010, #711414);
+  border: 1px solid #a81e1e;
+}
+
+/* Atlantean themed elements */
+.atlantis-border {
+  border-image: url('/border-pattern.png') 8 repeat;
+  border-width: 8px;
+  border-style: solid;
+}
+
+.atlantis-title {
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  letter-spacing: 1px;
+}
