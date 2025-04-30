@@ -168,7 +168,8 @@ const GameTimer: React.FC<GameTimerProps> = ({
           )}
           
           <div className="mt-3">
-            <button 
+            <button
+             
               className={`flex items-center justify-center px-4 py-2 rounded-lg text-white ${
                 gameState.coinSide === Team.Titans 
                   ? 'bg-blue-700 hover:bg-blue-600' 

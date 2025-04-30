@@ -105,20 +105,20 @@ export const heroes: Hero[] = [
  {
     id: 11,
     name: 'Misa',
-    icon: '/heroes/Misa.png',
+    icon: '/heroes/misa.png',
     complexity: 2,
     roles: ['Tactician', 'Durabke'],
     expansion: 'Devoted',
-    description: ''
+    description: 'Misa is an elite mobility assassin and disruptor who controls engagements through superior positioning and unpredictable movement.'
   },
  {
     id: 12,
     name: 'Ursafar',
-    icon: '/heroes/Ursafar.png',
+    icon: '/heroes/ursafar.png',
     complexity: 2,
     roles: ['Durable', 'Pusher'],
     expansion: 'Devoted',
-    description: ''
+    description: 'Ursafar is a momentum-based melee brawler who transforms from adequate to overwhelming once his "enraged" state activates.'
   },
  {
     id: 13,
@@ -127,7 +127,7 @@ export const heroes: Hero[] = [
     complexity: 2,
     roles: ['Sniper', 'Damager'],
     expansion: 'Devoted',
-    description: ''
+    description: 'Silverarrow is a long-range zone controller and initiator who dominates through superior positioning and distance management.'
   },
  {
     id: 14,
@@ -136,7 +136,7 @@ export const heroes: Hero[] = [
     complexity: 2,
     roles: ['Tokens', 'Disabler'],
     expansion: 'Renowned',
-    description: ''
+    description: "Min strikes with lightning speed as one of the game's fastest initiators, wielding ancient dragon-inspired martial arts"
   },
  {
     id: 15,
@@ -145,7 +145,7 @@ export const heroes: Hero[] = [
     complexity: 3,
     roles: ['Melee', 'Tokens'],
     expansion: 'Arcane',
-    description: ''
+    description: 'Mrak is a heavyweight disrupter, commanding powers of rock and stone. Slow and immobile, he is at his best when the action comes to him.'
   },
  {
     id: 16,
@@ -154,16 +154,16 @@ export const heroes: Hero[] = [
     complexity: 3,
     roles: ['Tactician', 'Disabler'],
     expansion: 'Defiant',
-    description: ''
+    description: 'Cutter dances across the battlefield, striking precisely when opportunity presents itself. Her grappling hook allows last-second positioning, while her fork-creating attacks force impossible decisions upon enemies.'
   },
  {
     id: 17,
     name: 'Trinkets',
-    icon: '/heroes/trinkers.png',
+    icon: '/heroes/trinkets.png',
     complexity: 3,
     roles: ['Sniper', 'Damager'],
     expansion: 'Defiant',
-    description: ''
+    description: 'Trinkets is a light-weight (literally, probably), fast, highly-mobile, ranged killer who presents an enormous danger zone in the Venn Diagram between himself and his Turret.'
   },
  {
     id: 18,
@@ -172,7 +172,7 @@ export const heroes: Hero[] = [
     complexity: 3,
     roles: ['Damager', 'Pusher'],
     expansion: 'Devoted',
-    description: ''
+    description: "Tali commands the spirit world as a premier support hero, manipulating the battlefield with ice tokens and healing totems while wielding unparalleled discard potential."
   },
  {
     id: 19,
@@ -181,7 +181,7 @@ export const heroes: Hero[] = [
     complexity: 3,
     roles: ['Sniper', 'Farming'],
     expansion: 'Renowned',
-    description: ''
+    description: 'Swift dominates from the shadows with the extremely long attack range, forcing enemies to respect vast areas of the battlefield or face deadly consequences.'
   },
  {
     id: 20,
@@ -190,8 +190,107 @@ export const heroes: Hero[] = [
     complexity: 3,
     roles: ['Tokens', 'Pusher'],
     expansion: 'Renowned',
-    description: ''
-  }
+    description: "With Wuk at the table, nobody needs to be reminded about the thousand pound gorilla in the room. Everyone's watching to see where Wuk puts down his trees and defines his turf."
+  },
+ {
+    id: 21,
+    name: 'Hanu',
+    icon: '/heroes/hanu.png',
+    complexity: 3,
+    roles: ['Tactician', 'Sniper'],
+    expansion: 'Renowned',
+    description: 'Hanu the Trickster is the pinnacle support hero. His repertoire of cards allow for copious amounts of shenanigans, bamboozling, knavery, and outright mischief.'
+  },
+ {
+    id: 22,
+    name: 'Brynn',
+    icon: '/heroes/brynn.png',
+    complexity: 3,
+    roles: ['Tactician', 'Damager'],
+    expansion: 'Wayward',
+    description: 'Brynn is a tactical battlefield manipulator who creates and exploits positioning traps, gaining powerful bonuses when enemies are surrounded by three or more obstacles.'
+  },
+ {
+    id: 23,
+    name: 'Mortimer',
+    icon: '/heroes/mortimer.png',
+    complexity: 3,
+    roles: ['Melee', 'Tokens'],
+    expansion: 'Wayward',
+    description: 'Mortimer is a battlefield controller who compensates for his limited mobility by commanding persistent zombie tokens that remain on the board between rounds.'
+  },
+ {
+    id: 24,
+    name: 'Widget and Pyro',
+    icon: '/heroes/widget.png',
+    complexity: 3,
+    roles: ['Melee', 'Tokens'],
+    expansion: 'Wayward',
+    description: 'Widget is a kobold tactician who operates as a dual-unit fighter alongside her emotional support dragon, Pyro, allowing her to control two points on the battlefield simultaneously.'
+  },
+ {
+    id: 25,
+    name: 'Snorri',
+    icon: '/heroes/snorri.png',
+    complexity: 4,
+    roles: ['Sniper', 'Farming'],
+    expansion: 'Arcane',
+    description: 'Snorri is a traditional dwarf who wields the power of four distinct runes to transform how each of his cards functions.'
+  },
+ {
+    id: 26,
+    name: 'Razzle',
+    icon: '/heroes/razzle.png',
+    complexity: 4,
+    roles: ['Tactician', 'Melee'],
+    expansion: 'Arcane',
+    description: 'Razzle is a fractured fey who multiplies across the battlefield, controlling up to four separate copies of herself simultaneously.'
+  },
+ {
+    id: 27,
+    name: 'Gydion',
+    icon: '/heroes/gydion.png',
+    complexity: 4,
+    roles: ['Sniper', 'Tactician'],
+    expansion: 'Arcane',
+    description: 'Gydion is an absent-minded archwizard who manages two separate hands—his action cards and a unique spellbook deck. He prepares spells that are consumed upon casting, requiring careful resource management to maximize his arcane potential.'
+  },
+ {
+    id: 28,
+    name: 'Nebkher',
+    icon: '/heroes/nebkher.png',
+    complexity: 4,
+    roles: ['Disabler', 'Tokens'],
+    expansion: 'Defiant',
+    description: 'NebKher is a space-bending undead mastermind who manipulates both the battlefield and enemy minds with equal malevolence. His ability to copy enemy actions, create illusion tokens for strategic teleportation, and control minions transforms him into a terrifying disruptor.'
+  },
+ {
+    id: 29,
+    name: 'Ignatia',
+    icon: '/heroes/ignatia.png',
+    complexity: 4,
+    roles: ['Sniper', 'Damager'],
+    expansion: 'Renowned',
+    description: 'Ignatia is a dual-natured elementalist whose abilities shift dramatically based on which team controls the tiebreaker coin.'
+  },
+ {
+    id: 30,
+    name: 'Takahide',
+    icon: '/heroes/takahide.png',
+    complexity: 4,
+    roles: ['Durable', 'Sniper'],
+    expansion: 'Wayward',
+    description: 'Takahide is a masterful battlefield commander who cycles between three distinct combat styles.'
+  },
+ {
+    id: 31,
+    name: 'Emmitt',
+    icon: '/heroes/emmitt.png',
+    complexity: 4,
+    roles: ['Melee', 'Tactician'],
+    expansion: 'Wayward',
+    description: "Emmitt is a chronological disruptor who bends the very rules of initiative, causing heroes with lower values to act before those with higher in a complete reversal of time's normal flow."
+  },
 ];
 
 // Helper function to get all available expansions

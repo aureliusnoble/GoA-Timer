@@ -4,8 +4,8 @@ A custom timer application for the board game "Guards of Atlantis II", designed 
 
 ## Features
 
-- **Hero Selection**: Choose from 40 unique heroes for each player
-- **Team Management**: Assign heroes to Titans (blue) or Atlanteans (red) teams
+- **Hero Selection**: Choose different heroes for each player and receive information about the heroes. 
+- **Drafting**: Choose a drafting method.
 - **Strategy Timer**: Set a countdown for the team discussion phase
 - **Move Timer**: Individual timers for each player's turn
 - **Game State Tracking**:
@@ -13,20 +13,6 @@ A custom timer application for the board game "Guards of Atlantis II", designed 
   - Team life counters
   - Turn and round tracking
   - Tiebreaker coin flipping functionality
-
-## Game Rules Overview
-
-Guards of Atlantis II is a competitive team-based board game that combines elements of strategy, positioning, and resource management. Players control unique heroes with their own abilities and playstyles, fighting alongside minions on a strategic map.
-
-The core game revolves around three main structures:
-
-1. **Actions**: Each round consists of 4 turns, and on each turn, you'll play a card and perform one action from that card.
-
-2. **Hand**: Your hand of cards represents your potential for the round. Each card has different attributes including initiative (speed), movement, defense, and either a skill or attack action.
-
-3. **Position**: The game is played on a map with different zones like battle zones, throne zones, and jungles.
-
-The primary win conditions involve defeating enemy heroes and controlling minions. Players must strategically manage their hero's position, actions, and cards to outmaneuver opponents and achieve victory.
 
 ## Getting Started
 
@@ -100,14 +86,5 @@ The application uses Tailwind CSS for styling. Custom styles can be added in:
 - `src/App.css` - For component-specific styles
 - `tailwind.config.js` - For Tailwind theme customization
 
-# Copyright
-
-
-# To-Do
-- Copyright notices
-
-
-
--Tooltip. Once all players selected a hero make it go away
-- tiebreaker: Team (should click to flip. )
-- Deploy
+# Disclaimer
+This app has not been officially approved by Wolff Designa (the designers of Guards of Atlantis). All game content, e.g. heroes, mechanics, images, etc. is the property of Wolff Designa.

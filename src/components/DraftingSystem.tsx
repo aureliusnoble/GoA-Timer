@@ -809,7 +809,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
   
   // Hero tooltip when hovering - 3x bigger
   const renderHeroTooltip = () => {
-    if (!hoveredHero) return null;
+    if (!hoveredHero || allPlayersHaveSelectedHeroes) return null;
     
     return (
       <div className="fixed bottom-8 left-8 bg-gray-900/95 p-8 rounded-lg shadow-lg max-w-2xl z-50">
