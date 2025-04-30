@@ -1,6 +1,6 @@
 # Guards of Atlantis II Timer
 
-A custom timer application for the board game "Guards of Atlantis II", designed to help manage gameplay timers and track game state.
+A custom timer application for the board game "Guards of Atlantis II", designed to help manage drafting, gameplay timers and track game state.
 
 ## Features
 
