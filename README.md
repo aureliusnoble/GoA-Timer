@@ -25,7 +25,7 @@ A custom timer application for the board game "Guards of Atlantis II", designed 
 
 1. Clone the repository
 ```bash
-git clone https://github.com/yourusername/guards-of-atlantis-timer.git
+git clone https://github.com/aureliusnoble/guards-of-atlantis-timer.git
 cd guards-of-atlantis-timer
 ```
 
@@ -62,7 +62,7 @@ npm run deploy
 yarn deploy
 ```
 
-3. Your app will be available at `https://yourusername.github.io/guards-of-atlantis-timer/`
+3. Your app will be available at `https://{github-username}.github.io/GoA-Timer/`
 
 ## Customization
 
