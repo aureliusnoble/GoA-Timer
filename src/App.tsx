@@ -35,7 +35,7 @@ const getInitialLaneState = (gameLength: GameLength, playerCount: number): LaneS
   if (playerCount <= 6) {
     return {
       single: {
-        currentWave: 0,
+        currentWave: 1,
         totalWaves: gameLength === GameLength.Quick ? 3 : 5
       },
       hasMultipleLanes: false
@@ -45,11 +45,11 @@ const getInitialLaneState = (gameLength: GameLength, playerCount: number): LaneS
   // Multiple lanes for 8-10 players
   return {
     top: {
-      currentWave: 0,
+      currentWave: 1,
       totalWaves: 7
     },
     bottom: {
-      currentWave: 0,
+      currentWave: 1,
       totalWaves: 7
     },
     hasMultipleLanes: true
