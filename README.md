@@ -88,3 +88,6 @@ The application uses Tailwind CSS for styling. Custom styles can be added in:
 
 # Disclaimer
 This app has not been officially approved by Wolff Designa (the designers of Guards of Atlantis). All game content, e.g. heroes, mechanics, images, etc. is the property of Wolff Designa.
+
+# Bugs
+- Tooltips on mobile

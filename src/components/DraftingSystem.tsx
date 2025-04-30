@@ -44,26 +44,33 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
   };
   
   // Get current phase label for Pick and Ban
+// Get current phase label for Pick and Ban
   const getCurrentPickBanLabel = () => {
-    if (draftingState.mode !== DraftMode.PickAndBan || draftingState.currentStep >= draftingState.pickBanSequence.length) {
-      return 'Complete';
+    if (draftingState.mode !== DraftMode.PickAndBan) {
+      return 'Invalid Mode'; // Should not happen if this is only called in P&B
     }
-    
+
+    // Check if the draft is complete based on steps
+    if (draftingState.currentStep >= draftingState.pickBanSequence.length) {
+       // Also check if all players have selected heroes in case sequence finished early
+       // (Though with correct sequence length, this should be the same condition)
+       const allPlayersHaveSelectedHeroes = players.every(player =>
+          draftingState.selectedHeroes.some(selection => selection.playerId === player.id)
+       );
+       if (allPlayersHaveSelectedHeroes) {
+          return 'Draft Complete';
+       }
+       // Should ideally not reach here if logic is correct, but as a fallback:
+       return 'Drafting Paused/Error';
+    }
+
+    // Get the current step in the sequence
     const step = draftingState.pickBanSequence[draftingState.currentStep];
-    
-    // Determine which team is active based on current step
-    let activeTeam;
-    if (step.team === 'A') {
-      // Team A is the first team (from coin toss)
-      activeTeam = draftingState.currentTeam;
-    } else {
-      // Team B is the other team
-      activeTeam = draftingState.currentTeam === Team.Titans ? Team.Atlanteans : Team.Titans;
-    }
-    
-    const teamLabel = getTeamName(activeTeam);
+
+    // Get the team name from the current drafting state
+    const teamLabel = getTeamName(draftingState.currentTeam);
     const actionLabel = step.action === 'ban' ? 'Ban' : 'Pick';
-    
+
     return `${teamLabel} ${actionLabel} - Round ${step.round}`;
   };
   

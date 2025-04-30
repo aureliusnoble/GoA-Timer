@@ -71,55 +71,41 @@ const calculateTeamLives = (gameLength: GameLength, playerCount: number): number
 // Generate pick/ban sequence based on player count
 const generatePickBanSequence = (playerCount: number): PickBanStep[] => {
   const sequence: PickBanStep[] = [];
-  
-  // First ban round - A then B
-  sequence.push({ team: 'A', action: 'ban', round: 1 });
-  sequence.push({ team: 'B', action: 'ban', round: 1 });
-  
-  // First pick round - A then B
-  sequence.push({ team: 'A', action: 'pick', round: 1 });
-  sequence.push({ team: 'B', action: 'pick', round: 1 });
-  
-  // More picks for larger player counts
-  if (playerCount > 2) {
-    sequence.push({ team: 'B', action: 'pick', round: 1 });
-    sequence.push({ team: 'A', action: 'pick', round: 1 });
-  }
-  
-  // Second ban round - B then A (only for 6+ players)
+
+  // Define the base sequence for 4 players as per your specification
+  sequence.push({ team: 'A', action: 'ban', round: 1 }); // Tie-break team bans
+  sequence.push({ team: 'B', action: 'ban', round: 1 }); // Other team bans
+  sequence.push({ team: 'A', action: 'pick', round: 1 }); // tie break team picks
+  sequence.push({ team: 'B', action: 'pick', round: 1 }); // other team picks
+  sequence.push({ team: 'B', action: 'ban', round: 2 }); // other team bans
+  sequence.push({ team: 'A', action: 'ban', round: 2 }); // tie break team bans
+  sequence.push({ team: 'B', action: 'pick', round: 2 }); // other team picks
+  sequence.push({ team: 'A', action: 'pick', round: 2 }); // tie break team picks
+
+  // Add steps for 6 players (appended to the 4-player sequence)
   if (playerCount >= 6) {
-    sequence.push({ team: 'B', action: 'ban', round: 2 });
-    sequence.push({ team: 'A', action: 'ban', round: 2 });
+    sequence.push({ team: 'A', action: 'ban', round: 3 }); // tie break team bans
+    sequence.push({ team: 'B', action: 'ban', round: 3 }); // other team bans
+    sequence.push({ team: 'B', action: 'pick', round: 3 }); // other team picks
+    sequence.push({ team: 'A', action: 'pick', round: 3 }); // tie break team picks
   }
-  
-  // More picks for larger player counts
-  if (playerCount >= 6) {
-    sequence.push({ team: 'B', action: 'pick', round: 2 });
-    sequence.push({ team: 'A', action: 'pick', round: 2 });
-    sequence.push({ team: 'A', action: 'pick', round: 2 });
-    sequence.push({ team: 'B', action: 'pick', round: 2 });
-  }
-  
-  // Third ban round for 8+ players
+
+  // Add steps for 8 players (appended to the 6-player sequence)
   if (playerCount >= 8) {
-    sequence.push({ team: 'B', action: 'ban', round: 3 });
-    sequence.push({ team: 'A', action: 'ban', round: 3 });
+    sequence.push({ team: 'B', action: 'ban', round: 4 }); // other team bans
+    sequence.push({ team: 'A', action: 'ban', round: 4 }); // tie break team bans
+    sequence.push({ team: 'A', action: 'pick', round: 4 }); // tie break team picks
+    sequence.push({ team: 'B', action: 'pick', round: 4 }); // other team picks
   }
-  
-  // More picks for 8+ players
-  if (playerCount >= 8) {
-    sequence.push({ team: 'A', action: 'pick', round: 3 });
-    sequence.push({ team: 'B', action: 'pick', round: 3 });
-    sequence.push({ team: 'B', action: 'pick', round: 3 });
-    sequence.push({ team: 'A', action: 'pick', round: 3 });
-  }
-  
-  // Additional picks for 10 players
+
+  // Add steps for 10 players (appended to the 8-player sequence)
   if (playerCount >= 10) {
-    sequence.push({ team: 'A', action: 'pick', round: 4 });
-    sequence.push({ team: 'B', action: 'pick', round: 4 });
+    sequence.push({ team: 'B', action: 'ban', round: 5 }); // other team bans
+    sequence.push({ team: 'A', action: 'ban', round: 5 }); // tie break team bans
+    sequence.push({ team: 'B', action: 'pick', round: 5 }); // other team picks
+    sequence.push({ team: 'A', action: 'pick', round: 5 }); // tie break team picks
   }
-  
+
   return sequence;
 };
 

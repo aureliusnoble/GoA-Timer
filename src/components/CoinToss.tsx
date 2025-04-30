@@ -69,7 +69,7 @@ const CoinToss: React.FC<CoinTossProps> = ({ result, onComplete }) => {
           40% { transform: rotateY(360deg) rotateX(-10deg); }
           60% { transform: rotateY(540deg) rotateX(10deg); }
           80% { transform: rotateY(720deg) rotateX(-10deg); }
-          100% { transform: rotateY(0deg) rotateX(0); } /* End on Titans side (heads) */
+          100% { transform: rotateY(0deg) rotateX(10deg); } /* End on Titans side (heads) */
         }
         
         @keyframes flipCoinAtlanteans {
@@ -78,7 +78,7 @@ const CoinToss: React.FC<CoinTossProps> = ({ result, onComplete }) => {
           40% { transform: rotateY(360deg) rotateX(-10deg); }
           60% { transform: rotateY(540deg) rotateX(10deg); }
           80% { transform: rotateY(720deg) rotateX(-10deg); }
-          100% { transform: rotateY(180deg) rotateX(0); } /* End on Atlanteans side (tails) */
+          100% { transform: rotateY(180deg) rotateX(10deg); } /* End on Atlanteans side (tails) */
         }
       `}</style>
     </div>
