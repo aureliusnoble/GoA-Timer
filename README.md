@@ -106,17 +106,14 @@ The application uses Tailwind CSS for styling. Custom styles can be added in:
 # To-Do
 
 - After Strategy Timer you pick which hero 
-
-- Coin Flip: Should be coloured Blue or Orange
-
-
-- Show Tiebreaker coin
 - Strategy phrase after each each player has taken their turn (i.e. when we increment the turn counter)
 - At start of round we want a start of round button
-- Change blue/red colours
+
+- Button for Start Turn, 
+
 - Add icons for roles and 
 - Add stars for complexity
-- Button for Start Turn, 
+
 - Add draft mode:
 -- Free Choice
 -- Pick and Ban

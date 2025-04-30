@@ -147,10 +147,17 @@ const GameTimer: React.FC<GameTimerProps> = ({
           
           <div className="mt-3">
             <button 
-              className="bg-amber-600 hover:bg-amber-500 px-4 py-2 rounded-lg text-white"
+              className={`flex items-center justify-center px-4 py-2 rounded-lg text-white ${
+                gameState.coinSide === Team.Titans 
+                  ? 'bg-blue-700 hover:bg-blue-600' 
+                  : 'bg-orange-600 hover:bg-orange-500'
+              }`}
               onClick={onFlipCoin}
             >
-              Flip Coin: <span className="font-bold capitalize">{gameState.coinSide}</span>
+              <span className="mr-2">Tiebreaker:</span>
+              <span className="font-bold">
+                {gameState.coinSide === Team.Titans ? 'Titans' : 'Atlanteans'}
+              </span>
             </button>
           </div>
         </div>

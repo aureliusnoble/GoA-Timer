@@ -52,6 +52,6 @@ export interface GameState {
   };
   currentPhase: GamePhase;
   activeHeroIndex: number;
-  coinSide: 'Titans' | 'Atlanteans';
+  coinSide: Team; // Changed from 'heads' | 'tails' to Team
   hasMultipleLanes: boolean;
 }

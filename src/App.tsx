@@ -155,7 +155,7 @@ const gameReducer = (state: GameState, action: GameAction): GameState => {
     case 'FLIP_COIN':
       return {
         ...state,
-        coinSide: Math.random() > 0.5 ? 'heads' : 'tails'
+        coinSide: state.coinSide === Team.Titans ? Team.Atlanteans : Team.Titans
       };
       
     default:
@@ -188,7 +188,7 @@ function App() {
     },
     currentPhase: 'setup',
     activeHeroIndex: -1,
-    coinSide: 'heads',
+    coinSide: Math.random() > 0.5 ? Team.Titans : Team.Atlanteans, // Random initial team
     hasMultipleLanes: false
   };
   
@@ -319,7 +319,7 @@ function App() {
       },
       currentPhase: 'strategy',
       activeHeroIndex: -1,
-      coinSide: 'heads',
+      coinSide: 'Titans',
       hasMultipleLanes: laneState.hasMultipleLanes
     };
     
