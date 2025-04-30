@@ -40,9 +40,19 @@ const GameSetup: React.FC<GameSetupProps> = ({
   const titanCount = players.filter(p => p.team === Team.Titans).length;
   const atlanteanCount = players.filter(p => p.team === Team.Atlanteans).length;
   const totalPlayers = titanCount + atlanteanCount;
+  
+  // Count players with heroes assigned
+  const playersWithHeroes = players.filter(p => p.hero).length;
+  const allPlayersHaveHeroes = playersWithHeroes === totalPlayers && totalPlayers > 0;
 
   // Check if quick game is available (6 or fewer players)
   const isQuickGameAvailable = totalPlayers <= 6;
+  
+  // Check if we can add more players (max 10 players total)
+  const canAddMorePlayers = totalPlayers < 10;
+  
+  // Check if teams have at least 2 players each
+  const teamsHaveMinPlayers = titanCount >= 2 && atlanteanCount >= 2;
 
   return (
     <div className="bg-gray-800 rounded-lg p-6 mb-8">
@@ -144,8 +154,13 @@ const GameSetup: React.FC<GameSetupProps> = ({
             <div className="flex justify-between mb-2">
               <span>Titans: {titanCount} players</span>
               <button
-                className="bg-blue-700 hover:bg-blue-600 px-3 py-1 rounded text-sm"
-                onClick={() => onAddPlayer(Team.Titans)}
+                className={`px-3 py-1 rounded text-sm ${
+                  canAddMorePlayers 
+                    ? 'bg-blue-700 hover:bg-blue-600' 
+                    : 'bg-gray-600 cursor-not-allowed'
+                }`}
+                onClick={() => canAddMorePlayers && onAddPlayer(Team.Titans)}
+                disabled={!canAddMorePlayers}
               >
                 Add Player
               </button>
@@ -154,13 +169,25 @@ const GameSetup: React.FC<GameSetupProps> = ({
             <div className="flex justify-between">
               <span>Atlanteans: {atlanteanCount} players</span>
               <button
-                className="bg-red-700 hover:bg-red-600 px-3 py-1 rounded text-sm"
-                onClick={() => onAddPlayer(Team.Atlanteans)}
+                className={`px-3 py-1 rounded text-sm ${
+                  canAddMorePlayers 
+                    ? 'bg-red-700 hover:bg-red-600' 
+                    : 'bg-gray-600 cursor-not-allowed'
+                }`}
+                onClick={() => canAddMorePlayers && onAddPlayer(Team.Atlanteans)}
+                disabled={!canAddMorePlayers}
               >
                 Add Player
               </button>
             </div>
           </div>
+          
+          {/* Validation warnings */}
+          {!canAddMorePlayers && (
+            <div className="text-amber-400 text-sm mt-2">
+              Maximum 10 players allowed
+            </div>
+          )}
           
           {titanCount !== atlanteanCount && (
             <div className="text-amber-400 text-sm mt-2">
@@ -168,7 +195,19 @@ const GameSetup: React.FC<GameSetupProps> = ({
             </div>
           )}
           
-          {titanCount > 0 && titanCount === atlanteanCount && (
+          {totalPlayers > 0 && !teamsHaveMinPlayers && (
+            <div className="text-amber-400 text-sm mt-2">
+              Each team must have at least 2 players
+            </div>
+          )}
+          
+          {totalPlayers > 0 && !allPlayersHaveHeroes && (
+            <div className="text-amber-400 text-sm mt-2">
+              All players must be assigned a hero
+            </div>
+          )}
+          
+          {titanCount > 0 && titanCount === atlanteanCount && allPlayersHaveHeroes && teamsHaveMinPlayers && (
             <div className="text-emerald-400 text-sm mt-2">
               Teams are balanced with {titanCount} players each
             </div>
@@ -177,9 +216,13 @@ const GameSetup: React.FC<GameSetupProps> = ({
       </div>
       
       <button
-        className="bg-emerald-600 hover:bg-emerald-500 px-6 py-2 rounded-lg font-medium text-white w-full"
+        className={`px-6 py-2 rounded-lg font-medium text-white w-full ${
+          titanCount > 0 && titanCount === atlanteanCount && allPlayersHaveHeroes && teamsHaveMinPlayers
+            ? 'bg-emerald-600 hover:bg-emerald-500'
+            : 'bg-gray-600 cursor-not-allowed'
+        }`}
         onClick={onStartGame}
-        disabled={players.length === 0 || titanCount !== atlanteanCount}
+        disabled={!(titanCount > 0 && titanCount === atlanteanCount && allPlayersHaveHeroes && teamsHaveMinPlayers)}
       >
         Start Game
       </button>

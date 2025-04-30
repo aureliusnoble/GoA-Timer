@@ -104,16 +104,15 @@ The application uses Tailwind CSS for styling. Custom styles can be added in:
 
 
 # To-Do
+- Copyright notices
 
-- After Strategy Timer you pick which hero 
-- Strategy phrase after each each player has taken their turn (i.e. when we increment the turn counter)
-- At start of round we want a start of round button
 
-- Button for Start Turn, 
-
-- Add icons for roles and 
+- Add roles field
+- Remove description field
 - Add stars for complexity
 
 - Add draft mode:
 -- Free Choice
 -- Pick and Ban
+
+- Add Icon

@@ -30,7 +30,7 @@ export interface Player {
   lane?: Lane; // Assigned lane for 8-10 player games
 }
 
-export type GamePhase = 'setup' | 'strategy' | 'move';
+export type GamePhase = 'setup' | 'strategy' | 'move' | 'turn-end';
 
 export interface LaneState {
   currentWave: number;
@@ -54,4 +54,8 @@ export interface GameState {
   activeHeroIndex: number;
   coinSide: Team; // Changed from 'heads' | 'tails' to Team
   hasMultipleLanes: boolean;
+  
+  // New fields to track player turns
+  completedTurns: number[]; // Array of player indices who have completed their turn
+  allPlayersMoved: boolean; // Flag to indicate when all players have completed their moves
 }

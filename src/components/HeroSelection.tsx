@@ -20,6 +20,17 @@ const HeroSelection: React.FC<HeroSelectionProps> = ({
     hero => !selectedHeroes.some(selected => selected.id === hero.id)
   );
 
+  // Function to handle "Change" button click - pass null hero to clear the selection
+  const handleChangeHero = (playerIndex: number) => {
+    // Find the player's current hero
+    const player = players[playerIndex];
+    if (player && player.hero) {
+      // Pass the same hero back to the parent component
+      // The parent component's handleHeroSelect will recognize this as removing the hero
+      onHeroSelect(player.hero, playerIndex);
+    }
+  };
+
   return (
     <div className="mb-8">
       <h2 className="text-2xl font-bold mb-4">Select Heroes</h2>
@@ -55,7 +66,7 @@ const HeroSelection: React.FC<HeroSelectionProps> = ({
                       <div className="font-medium">{player.hero.name}</div>
                       <button 
                         className="text-sm text-gray-300 underline"
-                        onClick={() => onHeroSelect(player.hero!, index)}
+                        onClick={() => handleChangeHero(index)}
                       >
                         Change
                       </button>
@@ -98,7 +109,8 @@ const HeroSelection: React.FC<HeroSelectionProps> = ({
             
             {players.length > 0 && (
               <div className="grid grid-cols-2 gap-1 mt-2">
-                {players.filter(p => !p.hero).map((player, index) => {
+                {/* Show assignment buttons for players without heroes */}
+                {players.filter(p => !p.hero).map((player) => {
                   const playerIndex = players.findIndex(p => p.id === player.id);
                   return (
                     <button

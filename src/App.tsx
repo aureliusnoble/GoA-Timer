@@ -4,7 +4,7 @@ import './App.css';
 import HeroSelection from './components/HeroSelection';
 import GameSetup from './components/GameSetup';
 import GameTimer from './components/GameTimer';
-import { Hero, GameState, Player, Team, GameLength, Lane, LaneState } from './types';
+import { Hero, GameState, Player, Team, GameLength, Lane, LaneState, GamePhase } from './types';
 import { heroes } from './data/heroes';
 
 // Initial state for different game configurations
@@ -53,8 +53,10 @@ const calculateTeamLives = (gameLength: GameLength, playerCount: number): number
 type GameAction = 
   | { type: 'START_GAME', payload: GameState }
   | { type: 'START_STRATEGY' }
-  | { type: 'START_MOVE' }
-  | { type: 'NEXT_PLAYER', playerCount: number }
+  | { type: 'END_STRATEGY' } // New action type for ending strategy phase
+  | { type: 'SELECT_PLAYER', playerIndex: number }
+  | { type: 'MARK_PLAYER_COMPLETE', playerIndex: number }
+  | { type: 'START_NEXT_TURN' }
   | { type: 'ADJUST_TEAM_LIFE', team: Team, delta: number }
   | { type: 'INCREMENT_WAVE', lane: Lane }
   | { type: 'FLIP_COIN' };
@@ -72,40 +74,69 @@ const gameReducer = (state: GameState, action: GameAction): GameState => {
         activeHeroIndex: -1
       };
       
-    case 'START_MOVE':
+    case 'END_STRATEGY':
+      // Transition from strategy to move selection phase
       return {
         ...state,
         currentPhase: 'move',
-        activeHeroIndex: 0
+        activeHeroIndex: -1, // No player selected yet
+        completedTurns: [] // Reset completed turns for this turn
       };
       
-    case 'NEXT_PLAYER': {
-      const nextIndex = (state.activeHeroIndex + 1) % action.playerCount;
+    case 'SELECT_PLAYER':
+      // Only allow selecting a player that hasn't moved yet
+      if (state.completedTurns.includes(action.playerIndex)) {
+        return state;
+      }
       
-      // If we've gone through all players, increment the turn
-      if (nextIndex === 0) {
-        const newTurn = state.turn + 1;
-        
-        // If we've completed all 4 turns, go to next round
-        if (newTurn > 4) {
-          return {
-            ...state,
-            round: state.round + 1,
-            turn: 1,
-            currentPhase: 'strategy',
-            activeHeroIndex: -1
-          };
-        } else {
-          return {
-            ...state,
-            turn: newTurn,
-            activeHeroIndex: nextIndex
-          };
-        }
+      return {
+        ...state,
+        activeHeroIndex: action.playerIndex
+      };
+      
+    case 'MARK_PLAYER_COMPLETE': {
+      // Add this player to the completed turns
+      const newCompletedTurns = [...state.completedTurns, action.playerIndex];
+      const allMoved = newCompletedTurns.length === players.length;
+      
+      // Check if all players have now moved
+      if (allMoved) {
+        return {
+          ...state,
+          completedTurns: newCompletedTurns,
+          activeHeroIndex: -1,
+          currentPhase: 'turn-end',
+          allPlayersMoved: true
+        };
+      }
+      
+      return {
+        ...state,
+        completedTurns: newCompletedTurns,
+        activeHeroIndex: -1
+      };
+    }
+      
+    case 'START_NEXT_TURN': {
+      const newTurn = state.turn + 1;
+      
+      // If we've completed all 4 turns, go to next round
+      if (newTurn > 4) {
+        return {
+          ...state,
+          round: state.round + 1,
+          turn: 1, 
+          currentPhase: 'strategy',
+          completedTurns: [],
+          allPlayersMoved: false
+        };
       } else {
         return {
           ...state,
-          activeHeroIndex: nextIndex
+          turn: newTurn,
+          currentPhase: 'strategy',
+          completedTurns: [],
+          allPlayersMoved: false
         };
       }
     }
@@ -163,6 +194,9 @@ const gameReducer = (state: GameState, action: GameAction): GameState => {
   }
 };
 
+// Make players accessible to the reducer
+let players: Player[] = [];
+
 function App() {
   // Game setup state
   const [gameStarted, setGameStarted] = useState<boolean>(false);
@@ -170,9 +204,12 @@ function App() {
   const [moveTime, setMoveTime] = useState<number>(30); // 30 seconds default
   const [gameLength, setGameLength] = useState<GameLength>(GameLength.Quick);
   
-  // Players and heroes
-  const [players, setPlayers] = useState<Player[]>([]);
+  // Players and heroes state
+  const [localPlayers, setLocalPlayers] = useState<Player[]>([]);
   const [selectedHeroes, setSelectedHeroes] = useState<Hero[]>([]);
+  
+  // Update the shared players reference
+  players = localPlayers;
   
   // Initial game state
   const initialGameState: GameState = {
@@ -189,7 +226,9 @@ function App() {
     currentPhase: 'setup',
     activeHeroIndex: -1,
     coinSide: Math.random() > 0.5 ? Team.Titans : Team.Atlanteans, // Random initial team
-    hasMultipleLanes: false
+    hasMultipleLanes: false,
+    completedTurns: [], // New field to track which players have moved
+    allPlayersMoved: false // New field to track when all players have moved
   };
   
   // Game state with reducer
@@ -203,13 +242,25 @@ function App() {
 
   // Handle hero selection
   const handleHeroSelect = (hero: Hero, playerIndex: number) => {
-    const updatedPlayers = [...players];
+    const updatedPlayers = [...localPlayers];
     
     // If this player already has a hero, remove it
     if (updatedPlayers[playerIndex]) {
       const previousHero = updatedPlayers[playerIndex].hero;
       if (previousHero) {
-        setSelectedHeroes(selectedHeroes.filter(h => h.id !== previousHero.id));
+        // If the same hero is passed back, we're clearing the selection (Change button)
+        if (previousHero.id === hero.id) {
+          setSelectedHeroes(selectedHeroes.filter(h => h.id !== previousHero.id));
+          updatedPlayers[playerIndex] = {
+            ...updatedPlayers[playerIndex],
+            hero: null
+          };
+          setLocalPlayers(updatedPlayers);
+          return; // Exit early, we're just clearing the hero
+        } else {
+          // Otherwise, we're changing to a new hero, so remove the old one
+          setSelectedHeroes(selectedHeroes.filter(h => h.id !== previousHero.id));
+        }
       }
     }
     
@@ -219,42 +270,47 @@ function App() {
       hero: hero
     };
     
-    setPlayers(updatedPlayers);
+    setLocalPlayers(updatedPlayers);
     setSelectedHeroes([...selectedHeroes, hero]);
   };
 
   // Add a new player
   const addPlayer = (team: Team) => {
+    // Don't add more than 10 players
+    if (localPlayers.length >= 10) {
+      return;
+    }
+    
     // Determine lane for 8+ player games
     let lane: Lane | undefined = undefined;
     
     // If we're adding the 7th or 8th player, assign lanes to everyone
-    if (players.length === 6) {
+    if (localPlayers.length === 6) {
       // We need to assign lanes to the first 6 players too
-      const updatedPlayers = players.map((player, index) => ({
+      const updatedPlayers = localPlayers.map((player, index) => ({
         ...player,
         lane: index < 3 ? Lane.Top : Lane.Bottom
       }));
-      setPlayers(updatedPlayers);
+      setLocalPlayers(updatedPlayers);
       lane = Lane.Top; // 7th player goes to top lane
-    } else if (players.length === 7) {
+    } else if (localPlayers.length === 7) {
       lane = Lane.Bottom; // 8th player goes to bottom lane
-    } else if (players.length >= 8) {
+    } else if (localPlayers.length >= 8) {
       // For 9th and 10th players, alternate lanes
-      lane = players.length % 2 === 0 ? Lane.Top : Lane.Bottom;
+      lane = localPlayers.length % 2 === 0 ? Lane.Top : Lane.Bottom;
     }
     
     const newPlayer: Player = {
-      id: players.length + 1,
+      id: localPlayers.length + 1,
       team,
       hero: null,
       lane
     };
     
-    setPlayers([...players, newPlayer]);
+    setLocalPlayers([...localPlayers, newPlayer]);
     
     // Enforce Long game for 8+ players
-    if (players.length >= 7 && gameLength === GameLength.Quick) {
+    if (localPlayers.length >= 7 && gameLength === GameLength.Quick) {
       setGameLength(GameLength.Long);
     }
   };
@@ -262,7 +318,7 @@ function App() {
   // Game length change handler
   const handleGameLengthChange = (newLength: GameLength) => {
     // Only allow changing to Quick if we have 6 or fewer players
-    if (newLength === GameLength.Quick && players.length > 6) {
+    if (newLength === GameLength.Quick && localPlayers.length > 6) {
       alert('Quick game is only available for 6 or fewer players');
       return;
     }
@@ -272,8 +328,8 @@ function App() {
   // Start the game
   const startGame = () => {
     // Validate team composition
-    const titansPlayers = players.filter(p => p.team === Team.Titans && p.hero);
-    const atlanteansPlayers = players.filter(p => p.team === Team.Atlanteans && p.hero);
+    const titansPlayers = localPlayers.filter(p => p.team === Team.Titans && p.hero);
+    const atlanteansPlayers = localPlayers.filter(p => p.team === Team.Atlanteans && p.hero);
     
     // Check if both teams have the same number of players
     if (titansPlayers.length !== atlanteansPlayers.length) {
@@ -287,8 +343,14 @@ function App() {
       return;
     }
     
+    // Check if all players have selected heroes
+    if (titansPlayers.length + atlanteansPlayers.length !== localPlayers.length) {
+      alert('All players must be assigned a hero');
+      return;
+    }
+    
     // Check if all players have selected unique heroes
-    const heroIds = players.filter(p => p.hero).map(p => p.hero!.id);
+    const heroIds = localPlayers.filter(p => p.hero).map(p => p.hero!.id);
     const uniqueHeroIds = new Set(heroIds);
     if (heroIds.length !== uniqueHeroIds.size) {
       alert('Each player must select a unique hero - no duplicate heroes allowed');
@@ -320,7 +382,9 @@ function App() {
       currentPhase: 'strategy',
       activeHeroIndex: -1,
       coinSide: 'Titans',
-      hasMultipleLanes: laneState.hasMultipleLanes
+      hasMultipleLanes: laneState.hasMultipleLanes,
+      completedTurns: [], // Initialize empty array for completed turn tracking
+      allPlayersMoved: false // Initialize to false
     };
     
     // Set game state and mark game as started
@@ -330,20 +394,35 @@ function App() {
     setStrategyTimeRemaining(strategyTime);
   };
 
-  // Start the move phase after strategy phase
-  const startMovePhase = () => {
-    setStrategyTimerActive(false);
-    dispatch({ type: 'START_MOVE' });
-    setMoveTimerActive(true);
-    setMoveTimeRemaining(moveTime);
+  // Select a player for their move
+  const selectPlayer = (playerIndex: number) => {
+    // Only allow selecting if we're not in the middle of a move and this player hasn't gone yet
+    if (gameState.activeHeroIndex === -1 && !gameState.completedTurns.includes(playerIndex)) {
+      dispatch({ type: 'SELECT_PLAYER', playerIndex });
+      setMoveTimerActive(true);
+      setMoveTimeRemaining(moveTime);
+    }
   };
 
-  // Move to the next player's turn
-  const nextPlayerTurn = () => {
-    setMoveTimerActive(false);
-    dispatch({ type: 'NEXT_PLAYER', playerCount: players.length });
-    setMoveTimerActive(true);
-    setMoveTimeRemaining(moveTime);
+  // Mark a player's turn as complete
+  const completePlayerTurn = () => {
+    if (gameState.activeHeroIndex >= 0) {
+      setMoveTimerActive(false);
+      dispatch({ type: 'MARK_PLAYER_COMPLETE', playerIndex: gameState.activeHeroIndex });
+    }
+  };
+
+  // Start the next turn (after all players have moved)
+  const startNextTurn = () => {
+    dispatch({ type: 'START_NEXT_TURN' });
+    setStrategyTimerActive(true);
+    setStrategyTimeRemaining(strategyTime);
+  };
+
+  // End the strategy phase
+  const endStrategyPhase = () => {
+    setStrategyTimerActive(false);
+    dispatch({ type: 'END_STRATEGY' }); // Fixed: Use the correct action type
   };
 
   // Adjust team life counter
@@ -371,7 +450,7 @@ function App() {
       }, 1000);
     } else if (strategyTimerActive && strategyTimeRemaining === 0) {
       setStrategyTimerActive(false);
-      startMovePhase();
+      endStrategyPhase();
     }
     
     return () => clearTimeout(timer);
@@ -387,7 +466,7 @@ function App() {
       }, 1000);
     } else if (moveTimerActive && moveTimeRemaining === 0) {
       setMoveTimerActive(false);
-      nextPlayerTurn();
+      completePlayerTurn();
     }
     
     return () => clearTimeout(timer);
@@ -408,31 +487,33 @@ function App() {
             onStrategyTimeChange={setStrategyTime}
             onMoveTimeChange={setMoveTime}
             onGameLengthChange={handleGameLengthChange}
-            players={players}
+            players={localPlayers}
             onAddPlayer={addPlayer}
             onStartGame={startGame}
           />
           <HeroSelection 
             heroes={heroes}
             selectedHeroes={selectedHeroes}
-            players={players}
+            players={localPlayers}
             onHeroSelect={handleHeroSelect}
           />
         </div>
       ) : (
         <GameTimer 
           gameState={gameState}
-          players={players}
+          players={localPlayers}
           strategyTimeRemaining={strategyTimeRemaining}
           moveTimeRemaining={moveTimeRemaining}
           strategyTimerActive={strategyTimerActive}
           moveTimerActive={moveTimerActive}
           onStartStrategyTimer={() => setStrategyTimerActive(true)}
           onPauseStrategyTimer={() => setStrategyTimerActive(false)}
-          onEndStrategyPhase={startMovePhase}
+          onEndStrategyPhase={endStrategyPhase}
           onStartMoveTimer={() => setMoveTimerActive(true)}
           onPauseMoveTimer={() => setMoveTimerActive(false)}
-          onNextPlayer={nextPlayerTurn}
+          onSelectPlayer={selectPlayer}
+          onCompletePlayerTurn={completePlayerTurn}
+          onStartNextTurn={startNextTurn}
           onAdjustTeamLife={adjustTeamLife}
           onIncrementWave={incrementWave}
           onFlipCoin={flipCoin}

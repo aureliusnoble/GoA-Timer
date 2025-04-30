@@ -1,7 +1,7 @@
 // src/components/GameTimer.tsx
 import React from 'react';
 import { GameState, Player, Team, Lane } from '../types';
-import { Plus } from 'lucide-react';
+import { Clock, Plus, Check, RotateCcw } from 'lucide-react';
 
 interface GameTimerProps {
   gameState: GameState;
@@ -15,7 +15,9 @@ interface GameTimerProps {
   onEndStrategyPhase: () => void;
   onStartMoveTimer: () => void;
   onPauseMoveTimer: () => void;
-  onNextPlayer: () => void;
+  onSelectPlayer: (playerIndex: number) => void;
+  onCompletePlayerTurn: () => void;
+  onStartNextTurn: () => void;
   onAdjustTeamLife: (team: Team, delta: number) => void;
   onIncrementWave: (lane: Lane) => void;
   onFlipCoin: () => void;
@@ -33,7 +35,9 @@ const GameTimer: React.FC<GameTimerProps> = ({
   onEndStrategyPhase,
   onStartMoveTimer,
   onPauseMoveTimer,
-  onNextPlayer,
+  onSelectPlayer,
+  onCompletePlayerTurn,
+  onStartNextTurn,
   onAdjustTeamLife,
   onIncrementWave,
   onFlipCoin
@@ -80,7 +84,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
             </div>
             <div>
               <span className="text-sm text-gray-400">Turn</span>
-              <div className="text-2xl font-bold">{gameState.turn}</div>
+              <div className="text-2xl font-bold">{gameState.turn}/4</div>
             </div>
             
             {/* We'll remove the wave counter from here for multiple lanes */}
@@ -102,6 +106,15 @@ const GameTimer: React.FC<GameTimerProps> = ({
                 </div>
               </div>
             )}
+          </div>
+          
+          {/* Phase indicator */}
+          <div className="mt-2 mb-2">
+            <span className="px-3 py-1 rounded-full bg-gray-700 text-sm">
+              {gameState.currentPhase === 'strategy' && 'Strategy Phase'}
+              {gameState.currentPhase === 'move' && 'Move Phase'}
+              {gameState.currentPhase === 'turn-end' && 'Turn Complete'}
+            </span>
           </div>
           
           {/* Wave Counters - Multiple Lanes - Now in its own section below the main game state */}
@@ -187,7 +200,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
       <div className="bg-gray-800 rounded-lg p-6">
         {gameState.currentPhase === 'strategy' ? (
           <div className="text-center">
-            <h2 className="text-2xl font-bold mb-4">Strategy Phase</h2>
+            <h2 className="text-2xl font-bold mb-4">Strategy Phase - Turn {gameState.turn}</h2>
             <div className="text-6xl font-bold mb-6">{formatTime(strategyTimeRemaining)}</div>
             <div className="flex justify-center gap-4">
               {strategyTimerActive ? (
@@ -213,7 +226,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
               </button>
             </div>
           </div>
-        ) : (
+        ) : gameState.currentPhase === 'move' ? (
           <div className="text-center">
             <h2 className="text-2xl font-bold mb-4">Move Phase</h2>
             
@@ -225,8 +238,6 @@ const GameTimer: React.FC<GameTimerProps> = ({
                   }`}
                 >
                   {activePlayer.team === Team.Titans ? 'Titans' : 'Atlanteans'}
-                  {activePlayer.lane && gameState.hasMultipleLanes && 
-                    ` - ${activePlayer.lane === Lane.Top ? 'Top' : 'Bottom'} Lane`}
                 </div>
                 <div className="flex items-center justify-center mt-2">
                   <div className="w-12 h-12 bg-gray-300 rounded-full overflow-hidden mr-3">
@@ -266,73 +277,74 @@ const GameTimer: React.FC<GameTimerProps> = ({
                 </button>
               )}
               <button 
-                className="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-lg text-white font-medium"
-                onClick={onNextPlayer}
+                className="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-lg text-white font-medium flex items-center"
+                onClick={onCompletePlayerTurn}
               >
-                Next Player
+                <Check size={18} className="mr-2" />
+                Complete Turn
               </button>
             </div>
+          </div>
+        ) : (
+          // Turn-end phase
+          <div className="text-center">
+            <h2 className="text-2xl font-bold mb-4">Turn {gameState.turn} Complete</h2>
+            <p className="text-lg mb-6">All players have completed their actions</p>
+            <button 
+              className="bg-green-600 hover:bg-green-500 px-8 py-4 rounded-lg text-white font-medium text-xl flex items-center mx-auto"
+              onClick={onStartNextTurn}
+            >
+              <RotateCcw size={20} className="mr-2" />
+              Start Next Turn
+            </button>
           </div>
         )}
       </div>
       
-      {/* Player Selection for Move Phase */}
-      {gameState.currentPhase === 'move' && (
+      {/* Player Selection Grid - FIXED: Shows all players with no lane tags */}
+      {gameState.currentPhase !== 'turn-end' && (
         <div className="mt-6">
-          <h3 className="text-xl font-bold mb-3">Quick Select Player</h3>
+          <h3 className="text-xl font-bold mb-3">
+            {gameState.currentPhase === 'strategy' 
+              ? 'Players (waiting for strategy phase to end)' 
+              : 'Select Player'}
+          </h3>
           
-          {gameState.hasMultipleLanes ? (
-            <div>
-              {/* Separate players by lane for 8-10 player games */}
-              <h4 className="text-lg font-semibold mb-2">Top Lane</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 mb-4">
-                {players
-                  .filter((player) => player.lane === Lane.Top)
-                  .map((player, index) => (
-                    player.hero && renderPlayerCard(player, players.findIndex(p => p.id === player.id))
-                  ))}
-              </div>
-              
-              <h4 className="text-lg font-semibold mb-2">Bottom Lane</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {players
-                  .filter((player) => player.lane === Lane.Bottom)
-                  .map((player, index) => (
-                    player.hero && renderPlayerCard(player, players.findIndex(p => p.id === player.id))
-                  ))}
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-              {players.map((player, index) => (
-                player.hero && renderPlayerCard(player, index)
-              ))}
-            </div>
-          )}
+          {/* Display all players in a single grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            {players.map((player, index) => (
+              player.hero && renderPlayerCard(player, index)
+            ))}
+          </div>
         </div>
       )}
     </div>
   );
   
-  // Helper function to render player cards
+  // Helper function to render player cards with status
   function renderPlayerCard(player: Player, index: number) {
+    const isActive = gameState.activeHeroIndex === index;
+    const hasCompleted = gameState.completedTurns.includes(index);
+    const isSelectable = gameState.currentPhase === 'move' && !hasCompleted && !isActive;
+    
     return (
       <div
         key={player.id}
-        className={`p-3 rounded-lg cursor-pointer transition-all ${
-          gameState.activeHeroIndex === index
+        className={`p-3 rounded-lg transition-all relative ${
+          // Different styles based on player status
+          isActive
             ? player.team === Team.Titans
-              ? 'bg-blue-700'
-              : 'bg-red-700'
+              ? 'bg-blue-700 ring-4 ring-white'
+              : 'bg-red-700 ring-4 ring-white'
+            : hasCompleted
+            ? 'bg-gray-700 opacity-60' // Greyed out for completed players
             : player.team === Team.Titans
             ? 'bg-blue-900/50 hover:bg-blue-800'
             : 'bg-red-900/50 hover:bg-red-800'
-        }`}
+        } ${isSelectable ? 'cursor-pointer' : ''}`}
         onClick={() => {
-          // Set this player as active and reset timer
-          if (gameState.activeHeroIndex !== index) {
-            // This would need to update the game state and reset the timer
-            // For this mockup, we'll just show that it's selectable
+          if (isSelectable) {
+            onSelectPlayer(index);
           }
         }}
       >
@@ -352,11 +364,23 @@ const GameTimer: React.FC<GameTimerProps> = ({
             <div className="font-medium">{player.hero.name}</div>
             <div className="text-xs text-gray-300">
               Player {player.id}
-              {gameState.hasMultipleLanes && player.lane && 
-                ` (${player.lane === Lane.Top ? 'Top' : 'Bottom'})`}
+              {/* Removed lane tag display */}
             </div>
           </div>
         </div>
+        
+        {/* Status indicators */}
+        {hasCompleted && (
+          <div className="absolute top-1 right-1 bg-green-600 rounded-full p-0.5" title="Completed">
+            <Check size={14} />
+          </div>
+        )}
+        
+        {isActive && (
+          <div className="absolute top-1 right-1 bg-yellow-500 rounded-full p-0.5 animate-pulse" title="Active">
+            <Clock size={14} />
+          </div>
+        )}
       </div>
     );
   }
