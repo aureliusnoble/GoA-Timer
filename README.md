@@ -51,7 +51,7 @@ yarn dev
 ```ts
 export default defineConfig({
   plugins: [react()],
-  base: '/guards-of-atlantis-timer/', // Replace with your repo name
+  base: '/GoA-Timer/',
 });
 ```
 
