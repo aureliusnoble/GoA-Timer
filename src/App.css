@@ -1,9 +1,11 @@
 /* src/App.css */
 .App {
-  min-height: 100vh;
-  background-image: url('/bg-pattern.png'), linear-gradient(to bottom, #051930, #082344);
-  background-size: 200px, cover;
-  background-blend-mode: overlay;
+  /* Load your static image from public/img/bg-timer.png */
+  background-image: url('/img/bg-timer.png'),
+                    linear-gradient(to bottom, #031930, #082344);
+  background-size: cover, cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 .App-header {

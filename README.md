@@ -100,11 +100,19 @@ The application uses Tailwind CSS for styling. Custom styles can be added in:
 - `src/App.css` - For component-specific styles
 - `tailwind.config.js` - For Tailwind theme customization
 
-## License
+# Copyright
 
-This project is licensed under the MIT License - see the LICENSE file for details.
 
-## Acknowledgments
-
-- Game design and artwork by Wolff Designa
-- Guards of Atlantis II copyright by Wolff Designa
+# To-Do
+- Change background
+- Choose long or short game (wave counters)
+- Choose wave pushed button
+- After Strategy Timer you pick which hero 
+- Show Tiebreaker coin
+- Strategy phrase after each each player has taken their turn (i.e. when we increment the turn counter)
+- At start of round we want a start of round button
+- Fix Slider
+- Change default to 90
+- Change blue/red colours
+- Add icons for roles and 
+- Add stars for complexity

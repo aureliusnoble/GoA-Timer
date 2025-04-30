@@ -40,7 +40,7 @@ const HeroSelection: React.FC<HeroSelectionProps> = ({
                 </h4>
                 {player.hero ? (
                   <div className="flex items-center">
-                    <div className="w-12 h-12 bg-gray-300 rounded-full overflow-hidden mr-3">
+                    <div className="w-30 h-30 bg-gray-300 rounded-full overflow-hidden mr-3">
                       <img 
                         src={player.hero.icon} 
                         alt={player.hero.name} 
@@ -79,10 +79,10 @@ const HeroSelection: React.FC<HeroSelectionProps> = ({
         {availableHeroes.map(hero => (
           <div 
             key={hero.id} 
-            className="bg-gray-800 rounded-lg p-3 transition-all hover:bg-gray-700 cursor-pointer"
+            className="bg-gray-800 rounded-lg p-6 transition-all hover:bg-gray-700 cursor-pointer"
           >
-            <div className="text-center mb-2">
-              <div className="w-16 h-16 bg-gray-300 rounded-full mx-auto overflow-hidden">
+            <div className="text-center mb-4">
+              <div className="w-20 h-20 bg-gray-300 rounded-full mx-auto overflow-hidden">
                 <img 
                   src={hero.icon} 
                   alt={hero.name} 
