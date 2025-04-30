@@ -90,4 +90,5 @@ The application uses Tailwind CSS for styling. Custom styles can be added in:
 This app has not been officially approved by Wolff Designa (the designers of Guards of Atlantis). All game content, e.g. heroes, mechanics, images, etc. is the property of Wolff Designa.
 
 # Bugs
-- Tooltips on mobile
+- Tooltips on mobile Sometimes we need to access content behind them.
+- display player names on game timer screen. 
