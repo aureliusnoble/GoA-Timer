@@ -19,6 +19,7 @@ interface GameSetupProps {
   selectedExpansions: string[];
   onToggleExpansion: (expansion: string) => void;
   onPlayerNameChange: (playerId: number, name: string) => void;
+  duplicateNames: string[]; // Added this prop to show duplicate name warnings
 }
 
 const GameSetup: React.FC<GameSetupProps> = ({
@@ -34,7 +35,8 @@ const GameSetup: React.FC<GameSetupProps> = ({
   onDraftHeroes,
   selectedExpansions,
   onToggleExpansion,
-  onPlayerNameChange
+  onPlayerNameChange,
+  duplicateNames
 }) => {
   const [expandedSection, setExpandedSection] = useState<{[key: string]: boolean}>({
     'timers': true,
@@ -65,6 +67,9 @@ const GameSetup: React.FC<GameSetupProps> = ({
   const playersWithNames = players.filter(p => p.name.trim() !== '').length;
   const allPlayersHaveHeroes = playersWithHeroes === totalPlayers && totalPlayers > 0;
   const allPlayersHaveNames = playersWithNames === totalPlayers && totalPlayers > 0;
+  
+  // Check if player names are unique
+  const hasUniquenames = duplicateNames.length === 0;
 
   // Check if quick game is available (6 or fewer players)
   const isQuickGameAvailable = totalPlayers <= 6;
@@ -76,8 +81,8 @@ const GameSetup: React.FC<GameSetupProps> = ({
   const teamsHaveMinPlayers = titanCount >= 2 && atlanteanCount >= 2;
   
   // Requirements for starting game and drafting
-  const canStartGame = titanCount > 0 && titanCount === atlanteanCount && allPlayersHaveHeroes && teamsHaveMinPlayers && allPlayersHaveNames;
-  const canDraft = titanCount > 0 && titanCount === atlanteanCount && teamsHaveMinPlayers && allPlayersHaveNames;
+  const canStartGame = titanCount > 0 && titanCount === atlanteanCount && allPlayersHaveHeroes && teamsHaveMinPlayers && allPlayersHaveNames && hasUniquenames;
+  const canDraft = titanCount > 0 && titanCount === atlanteanCount && teamsHaveMinPlayers && allPlayersHaveNames && hasUniquenames;
 
   return (
     <div className="bg-gray-800 rounded-lg p-6 mb-8">
@@ -254,7 +259,14 @@ const GameSetup: React.FC<GameSetupProps> = ({
                 </div>
               )}
               
-              {titanCount > 0 && titanCount === atlanteanCount && allPlayersHaveNames && teamsHaveMinPlayers && (
+              {/* Display duplicate names warning */}
+              {duplicateNames.length > 0 && (
+                <div className="text-red-400 text-sm mt-2">
+                  Duplicate names found: {duplicateNames.join(', ')}
+                </div>
+              )}
+              
+              {titanCount > 0 && titanCount === atlanteanCount && allPlayersHaveNames && teamsHaveMinPlayers && duplicateNames.length === 0 && (
                 <div className="text-emerald-400 text-sm mt-2">
                   Teams are balanced with {titanCount} players each
                 </div>
@@ -300,13 +312,19 @@ const GameSetup: React.FC<GameSetupProps> = ({
           
           {expandedSection['names'] && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {players.map((player, index) => (
-                <PlayerNameInput
-                  key={player.id}
-                  player={player}
-                  onNameChange={(name) => onPlayerNameChange(player.id, name)}
-                />
-              ))}
+              {players.map((player) => {
+                // Check if this player's name is a duplicate
+                const isDuplicate = player.name.trim() !== '' && duplicateNames.includes(player.name.trim());
+                
+                return (
+                  <PlayerNameInput
+                    key={player.id}
+                    player={player}
+                    onNameChange={(name) => onPlayerNameChange(player.id, name)}
+                    isDuplicate={isDuplicate}
+                  />
+                );
+              })}
             </div>
           )}
         </div>

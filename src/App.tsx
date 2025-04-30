@@ -1,10 +1,11 @@
 // src/App.tsx
-import React, { useState, useEffect, useReducer } from 'react';
+import React, { useState, useEffect, useReducer, useRef } from 'react';
 import './App.css';
 import HeroSelection from './components/HeroSelection';
 import GameSetup from './components/GameSetup';
 import GameTimer from './components/GameTimer';
 import DraftingSystem from './components/DraftingSystem';
+import CoinToss from './components/CoinToss';
 import DraftModeSelection from './components/DraftModeSelection';
 import { 
   Hero, 
@@ -75,42 +76,44 @@ const generatePickBanSequence = (playerCount: number): PickBanStep[] => {
   sequence.push({ team: 'A', action: 'pick', round: 1 });
   sequence.push({ team: 'B', action: 'pick', round: 1 });
   
-  // Second ban round - B then A
-  sequence.push({ team: 'B', action: 'ban', round: 2 });
-  sequence.push({ team: 'A', action: 'ban', round: 2 });
+  // More picks for larger player counts
+  if (playerCount > 2) {
+    sequence.push({ team: 'B', action: 'pick', round: 1 });
+    sequence.push({ team: 'A', action: 'pick', round: 1 });
+  }
   
-  // Second pick round - B then A
-  sequence.push({ team: 'B', action: 'pick', round: 2 });
-  sequence.push({ team: 'A', action: 'pick', round: 2 });
+  // Second ban round - B then A (only for 6+ players)
+  if (playerCount >= 6) {
+    sequence.push({ team: 'B', action: 'ban', round: 2 });
+    sequence.push({ team: 'A', action: 'ban', round: 2 });
+  }
   
-  if (playerCount > 4) {
-    // Third ban round - A then B (6+ players)
-    sequence.push({ team: 'A', action: 'ban', round: 3 });
+  // More picks for larger player counts
+  if (playerCount >= 6) {
+    sequence.push({ team: 'B', action: 'pick', round: 2 });
+    sequence.push({ team: 'A', action: 'pick', round: 2 });
+    sequence.push({ team: 'A', action: 'pick', round: 2 });
+    sequence.push({ team: 'B', action: 'pick', round: 2 });
+  }
+  
+  // Third ban round for 8+ players
+  if (playerCount >= 8) {
     sequence.push({ team: 'B', action: 'ban', round: 3 });
-    
-    // Third pick round - B then A (6+ players)
+    sequence.push({ team: 'A', action: 'ban', round: 3 });
+  }
+  
+  // More picks for 8+ players
+  if (playerCount >= 8) {
+    sequence.push({ team: 'A', action: 'pick', round: 3 });
+    sequence.push({ team: 'B', action: 'pick', round: 3 });
     sequence.push({ team: 'B', action: 'pick', round: 3 });
     sequence.push({ team: 'A', action: 'pick', round: 3 });
   }
   
-  if (playerCount > 6) {
-    // Fourth ban round - B then A (8+ players)
-    sequence.push({ team: 'B', action: 'ban', round: 4 });
-    sequence.push({ team: 'A', action: 'ban', round: 4 });
-    
-    // Fourth pick round - A then B (8+ players)
+  // Additional picks for 10 players
+  if (playerCount >= 10) {
     sequence.push({ team: 'A', action: 'pick', round: 4 });
     sequence.push({ team: 'B', action: 'pick', round: 4 });
-  }
-  
-  if (playerCount > 8) {
-    // Fifth ban round - B then A (10 players)
-    sequence.push({ team: 'B', action: 'ban', round: 5 });
-    sequence.push({ team: 'A', action: 'ban', round: 5 });
-    
-    // Fifth pick round - A then B (10 players)
-    sequence.push({ team: 'A', action: 'pick', round: 5 });
-    sequence.push({ team: 'B', action: 'pick', round: 5 });
   }
   
   return sequence;
@@ -293,11 +296,17 @@ function App() {
     isComplete: false
   });
   
+  // Coin flip animation state
+  const [showCoinAnimation, setShowCoinAnimation] = useState<boolean>(false);
+  
   // Available heroes (filtered by expansions)
   const filteredHeroes = filterHeroesByExpansions(selectedExpansions);
   
   // Update the shared players reference
   players = localPlayers;
+  
+  // Reference to track if we've checked player names
+  const nameCheckRef = useRef<boolean>(false);
   
   // Initial game state
   const initialGameState: GameState = {
@@ -327,6 +336,30 @@ function App() {
   const [moveTimerActive, setMoveTimerActive] = useState<boolean>(false);
   const [strategyTimeRemaining, setStrategyTimeRemaining] = useState<number>(strategyTime);
   const [moveTimeRemaining, setMoveTimeRemaining] = useState<number>(moveTime);
+
+  // Check for duplicate player names
+  const findDuplicateNames = (): string[] => {
+    const names = localPlayers.map(p => p.name.trim()).filter(name => name !== '');
+    const uniqueNames = new Set(names);
+    
+    if (uniqueNames.size !== names.length) {
+      // Find which names are duplicated
+      const duplicates: string[] = [];
+      const seen = new Set<string>();
+      
+      for (const name of names) {
+        if (seen.has(name)) {
+          duplicates.push(name);
+        } else {
+          seen.add(name);
+        }
+      }
+      
+      return [...new Set(duplicates)]; // Return unique duplicates
+    }
+    
+    return [];
+  };
 
   // Handle hero selection (for non-draft mode)
   const handleHeroSelect = (hero: Hero, playerIndex: number) => {
@@ -435,10 +468,18 @@ function App() {
     });
     
     setLocalPlayers(updatedPlayers);
+    nameCheckRef.current = false; // Reset name check when names change
   };
 
   // Start the drafting process
   const startDrafting = () => {
+    // Check for duplicate names
+    const duplicateNames = findDuplicateNames();
+    if (duplicateNames.length > 0) {
+      alert(`Players must have unique names. Duplicates found: ${duplicateNames.join(', ')}`);
+      return;
+    }
+    
     // Validate team composition
     const titansPlayers = localPlayers.filter(p => p.team === Team.Titans);
     const atlanteansPlayers = localPlayers.filter(p => p.team === Team.Atlanteans);
@@ -462,24 +503,38 @@ function App() {
       return;
     }
     
-    // Show draft mode selection
-    setShowDraftModeSelection(true);
+    // Set an initial random tiebreaker coin and show animation
+    const initialCoinSide = Math.random() > 0.5 ? Team.Titans : Team.Atlanteans;
+    dispatch({ 
+      type: 'START_GAME', 
+      payload: {
+        ...initialGameState,
+        coinSide: initialCoinSide
+      }
+    });
+    
+    // Show coin animation - the CoinToss component will handle showing
+    // the draft mode selection when the user clicks "Continue"
+    setShowCoinAnimation(true);
   };
 
   // Handle draft mode selection
   const handleSelectDraftMode = (mode: DraftMode) => {
     let initialDraftingState: DraftingState;
     const totalPlayerCount = localPlayers.length;
+    
+    // Always create a fresh copy of heroes to shuffle
     const availableHeroesForDraft = [...filteredHeroes];
     
     // Set current team based on the tiebreaker coin
     const firstTeam = gameState.coinSide; 
     
+    // Shuffle heroes for all draft modes
+    shuffleArray(availableHeroesForDraft);
+    
     switch (mode) {
       case DraftMode.Single:
-        // Shuffle heroes and assign 3 to each player
-        shuffleArray(availableHeroesForDraft);
-        
+        // Assign 3 random heroes to each player
         const assignedHeroes = localPlayers.map(player => {
           // Get 3 heroes for this player
           const heroOptions = availableHeroesForDraft.splice(0, 3);
@@ -504,7 +559,6 @@ function App() {
         
       case DraftMode.Random:
         // Shuffle heroes and select N+2 for the pool
-        shuffleArray(availableHeroesForDraft);
         const randomPoolSize = Math.min(totalPlayerCount + 2, availableHeroesForDraft.length);
         const randomHeroPool = availableHeroesForDraft.slice(0, randomPoolSize);
         
@@ -582,12 +636,12 @@ function App() {
         })
       : draftingState.assignedHeroes;
     
-    // Determine next team
+    // Determine next team and completion status
     let newCurrentTeam = draftingState.currentTeam;
     let newStep = draftingState.currentStep;
-    let isComplete = draftingState.isComplete;
+    let isComplete = false;
     
-    // Check if we need to switch teams
+    // Determine completion status based on selected heroes
     const titansPlayers = localPlayers.filter(p => p.team === Team.Titans);
     const atlanteansPlayers = localPlayers.filter(p => p.team === Team.Atlanteans);
     
@@ -599,14 +653,25 @@ function App() {
       localPlayers.find(p => p.id === s.playerId)?.team === Team.Atlanteans
     ).length;
     
-    // If this team has picked all their heroes, switch to the other team
-    if (draftingState.currentTeam === Team.Titans && titansPicked >= titansPlayers.length) {
-      newCurrentTeam = Team.Atlanteans;
-    } else if (draftingState.currentTeam === Team.Atlanteans && atlanteansPicked >= atlanteansPlayers.length) {
-      newCurrentTeam = Team.Titans;
-    } else if (draftingState.mode === DraftMode.Single) {
-      // For Single draft, always switch teams after one player makes a selection
+    // Check if all players have selected heroes
+    if (titansPicked >= titansPlayers.length && atlanteansPicked >= atlanteansPlayers.length) {
+      isComplete = true;
+    }
+    
+    // Handle next team selection based on draft mode
+    if (draftingState.mode === DraftMode.Single) {
+      // For Single draft, always alternate teams
       newCurrentTeam = draftingState.currentTeam === Team.Titans ? Team.Atlanteans : Team.Titans;
+    } else if (draftingState.mode === DraftMode.Random) {
+      // For Random draft, check if current team has all picks and switch if necessary
+      if (draftingState.currentTeam === Team.Titans && titansPicked >= titansPlayers.length) {
+        newCurrentTeam = Team.Atlanteans;
+      } else if (draftingState.currentTeam === Team.Atlanteans && atlanteansPicked >= atlanteansPlayers.length) {
+        newCurrentTeam = Team.Titans;
+      } else {
+        // Otherwise alternate teams
+        newCurrentTeam = draftingState.currentTeam === Team.Titans ? Team.Atlanteans : Team.Titans;
+      }
     } else if (draftingState.mode === DraftMode.PickAndBan) {
       // For pick and ban, move to next step
       newStep = draftingState.currentStep + 1;
@@ -625,14 +690,6 @@ function App() {
           newCurrentTeam = teamAIsFirst ? Team.Atlanteans : Team.Titans;
         }
       }
-    } else {
-      // For other modes, just alternate teams
-      newCurrentTeam = draftingState.currentTeam === Team.Titans ? Team.Atlanteans : Team.Titans;
-    }
-    
-    // Check if drafting is complete
-    if (titansPicked >= titansPlayers.length && atlanteansPicked >= atlanteansPlayers.length) {
-      isComplete = true;
     }
     
     // Update drafting state
@@ -708,8 +765,48 @@ function App() {
     players = updatedPlayers;
     setSelectedHeroes(draftingState.selectedHeroes.map(s => s.hero));
     
-    // Start the game
-    startGame();
+    // Start the game without additional validation
+    startGameWithPlayers(updatedPlayers);
+  };
+
+  // Start the game with the specified players
+  const startGameWithPlayers = (playersToUse: Player[]) => {
+    // Calculate total player count
+    const playerCount = playersToUse.length;
+    
+    // Set initial lives and wave counters
+    const laneState = getInitialLaneState(gameLength, playerCount);
+    const teamLives = calculateTeamLives(gameLength, playerCount);
+    
+    // Create initial game state
+    const initialState: GameState = {
+      round: 1,
+      turn: 1,
+      gameLength: gameLength,
+      waves: laneState.hasMultipleLanes 
+        ? { 
+            [Lane.Top]: laneState[Lane.Top],
+            [Lane.Bottom]: laneState[Lane.Bottom]
+          }
+        : { [Lane.Single]: laneState[Lane.Single] },
+      teamLives: {
+        [Team.Titans]: teamLives,
+        [Team.Atlanteans]: teamLives
+      },
+      currentPhase: 'strategy',
+      activeHeroIndex: -1,
+      coinSide: gameState.coinSide,
+      hasMultipleLanes: laneState.hasMultipleLanes,
+      completedTurns: [], // Initialize empty array for completed turn tracking
+      allPlayersMoved: false // Initialize to false
+    };
+    
+    // Set game state and mark game as started
+    dispatch({ type: 'START_GAME', payload: initialState });
+    setGameStarted(true);
+    setStrategyTimerActive(true);
+    setStrategyTimeRemaining(strategyTime);
+    setIsDraftingMode(false);
   };
 
   // Cancel drafting and return to setup
@@ -720,6 +817,13 @@ function App() {
 
   // Start the game
   const startGame = () => {
+    // Check for duplicate names
+    const duplicateNames = findDuplicateNames();
+    if (duplicateNames.length > 0) {
+      alert(`Players must have unique names. Duplicates found: ${duplicateNames.join(', ')}`);
+      return;
+    }
+    
     // Validate team composition
     const titansPlayers = localPlayers.filter(p => p.team === Team.Titans && p.hero);
     const atlanteansPlayers = localPlayers.filter(p => p.team === Team.Atlanteans && p.hero);
@@ -757,42 +861,8 @@ function App() {
       return;
     }
     
-    // Calculate total player count
-    const playerCount = titansPlayers.length + atlanteansPlayers.length;
-    
-    // Set initial lives and wave counters
-    const laneState = getInitialLaneState(gameLength, playerCount);
-    const teamLives = calculateTeamLives(gameLength, playerCount);
-    
-    // Create initial game state
-    const initialState: GameState = {
-      round: 1,
-      turn: 1,
-      gameLength: gameLength,
-      waves: laneState.hasMultipleLanes 
-        ? { 
-            [Lane.Top]: laneState[Lane.Top],
-            [Lane.Bottom]: laneState[Lane.Bottom]
-          }
-        : { [Lane.Single]: laneState[Lane.Single] },
-      teamLives: {
-        [Team.Titans]: teamLives,
-        [Team.Atlanteans]: teamLives
-      },
-      currentPhase: 'strategy',
-      activeHeroIndex: -1,
-      coinSide: gameState.coinSide,
-      hasMultipleLanes: laneState.hasMultipleLanes,
-      completedTurns: [], // Initialize empty array for completed turn tracking
-      allPlayersMoved: false // Initialize to false
-    };
-    
-    // Set game state and mark game as started
-    dispatch({ type: 'START_GAME', payload: initialState });
-    setGameStarted(true);
-    setStrategyTimerActive(true);
-    setStrategyTimeRemaining(strategyTime);
-    setIsDraftingMode(false);
+    // Start the game with current players
+    startGameWithPlayers(localPlayers);
   };
 
   // Select a player for their move
@@ -889,6 +959,18 @@ function App() {
         <h1 className="text-3xl font-bold mb-2">Guards of Atlantis II Timer</h1>
       </header>
 
+      {/* Coin flip animation */}
+      {showCoinAnimation && (
+        <CoinToss 
+          result={gameState.coinSide} 
+          onComplete={() => {
+            setShowCoinAnimation(false);
+            setShowDraftModeSelection(true);
+          }} 
+        />
+      )}
+
+
       {!gameStarted ? (
         <div className="game-setup-container">
           {showDraftModeSelection ? (
@@ -923,6 +1005,7 @@ function App() {
                 selectedExpansions={selectedExpansions}
                 onToggleExpansion={handleToggleExpansion}
                 onPlayerNameChange={handlePlayerNameChange}
+                duplicateNames={findDuplicateNames()}
               />
               <HeroSelection 
                 heroes={filteredHeroes}

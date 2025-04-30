@@ -1,15 +1,18 @@
 // src/components/PlayerNameInput.tsx
 import React from 'react';
 import { Player, Team } from '../types';
+import { AlertCircle } from 'lucide-react';
 
 interface PlayerNameInputProps {
   player: Player;
   onNameChange: (name: string) => void;
+  isDuplicate?: boolean;
 }
 
 const PlayerNameInput: React.FC<PlayerNameInputProps> = ({ 
   player, 
-  onNameChange 
+  onNameChange,
+  isDuplicate = false 
 }) => {
   return (
     <div 
@@ -17,7 +20,7 @@ const PlayerNameInput: React.FC<PlayerNameInputProps> = ({
         player.team === Team.Titans 
           ? 'bg-blue-900/30 border border-blue-800' 
           : 'bg-red-900/30 border border-red-800'
-      }`}
+      } ${isDuplicate ? 'border-2 border-yellow-500' : ''}`}
     >
       <div className="flex items-center mb-2">
         <div className={`w-3 h-3 rounded-full mr-2 ${
@@ -28,13 +31,27 @@ const PlayerNameInput: React.FC<PlayerNameInputProps> = ({
         </span>
       </div>
       
-      <input
-        type="text"
-        value={player.name}
-        onChange={(e) => onNameChange(e.target.value)}
-        placeholder="Enter player name"
-        className="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-      />
+      <div className="relative">
+        <input
+          type="text"
+          value={player.name}
+          onChange={(e) => onNameChange(e.target.value)}
+          placeholder="Enter player name"
+          className={`w-full bg-gray-700 text-white px-3 py-2 rounded 
+                     border ${isDuplicate ? 'border-yellow-500 focus:border-yellow-400' : 'border-gray-600 focus:border-blue-500'} 
+                     focus:outline-none focus:ring-1 ${isDuplicate ? 'focus:ring-yellow-500' : 'focus:ring-blue-500'}`}
+        />
+        {isDuplicate && (
+          <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-yellow-500">
+            <AlertCircle size={16} />
+          </div>
+        )}
+      </div>
+      {isDuplicate && (
+        <div className="text-yellow-500 text-xs mt-1">
+          Duplicate name found
+        </div>
+      )}
     </div>
   );
 };

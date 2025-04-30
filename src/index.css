@@ -57,42 +57,204 @@ h1, h2, h3 {
   }
 }
 
-/* Coin flip animation */
-.coin {
+
+/* Coin flip container */
+.coin-flip-container {
+  perspective: 1000px;
+  width: 200px;
+  height: 200px;
   position: relative;
-  width: 100px;
-  height: 100px;
-  transition: transform 1s;
+  margin: 0 auto;
+}
+
+/* The actual coin */
+.coin {
+  width: 100%;
+  height: 100%;
+  position: relative;
   transform-style: preserve-3d;
+  transition: transform 0.8s ease-out;
 }
 
-.coin.flip {
-  animation: flip 1s forwards;
+/* Animation for the coin */
+.coin.flipping {
+  animation: flipCoin 3s ease-out forwards;
 }
 
+@keyframes flipCoin {
+  0% {
+    transform: rotateY(0) rotateX(0);
+  }
+  20% {
+    transform: rotateY(180deg) rotateX(10deg);
+  }
+  40% {
+    transform: rotateY(360deg) rotateX(-10deg);
+  }
+  60% {
+    transform: rotateY(540deg) rotateX(10deg);
+  }
+  80% {
+    transform: rotateY(720deg) rotateX(-10deg);
+  }
+  100% {
+    transform: rotateY(900deg) rotateX(0);
+  }
+}
+
+/* Coin face styling (front and back) */
 .coin-face {
   position: absolute;
   width: 100%;
   height: 100%;
-  border-radius: 50%;
   backface-visibility: hidden;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.0rem;
+  font-weight: bold;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+  color: white;
+  user-select: none;
 }
 
-.coin-heads {
-  background: linear-gradient(45deg, #d4af37, #f1c232, #d4af37);
+/* Front face - Titans */
+.coin-face.heads {
+  background: linear-gradient(135deg, #143d6c, #275d9c, #143d6c);
+  border: 1px solid #1e5aa8;
   z-index: 2;
 }
 
-.coin-tails {
-  background: linear-gradient(45deg, #c0c0c0, #e0e0e0, #c0c0c0);
+/* Back face - Atlanteans */
+.coin-face.tails {
+  background: linear-gradient(135deg, #8c1c1c, #b33030, #8c1c1c);
+  border: 1px solid #a81e1e;
   transform: rotateY(180deg);
 }
 
-@keyframes flip {
+/* Face emblem */
+.coin-emblem {
+  width: 70%;
+  height: 70%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(1px);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Shine effect overlay */
+.coin-shine {
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(255, 255, 255, 0.6) 0%,
+    rgba(255, 255, 255, 0.3) 25%,
+    rgba(255, 255, 255, 0) 60%
+  );
+  opacity: 0;
+  transform: rotate(120deg);
+  pointer-events: none;
+}
+
+
+
+@keyframes coinShine {
+  0%, 100% { 
+    opacity: 0; 
+    transform: rotate(120deg) translateY(-60%);
+  }
+  25% { 
+    opacity: 0.5; 
+    transform: rotate(120deg) translateY(-30%);
+  }
+  50% { 
+    opacity: 0.8; 
+    transform: rotate(120deg) translateY(0%);
+  }
+  75% { 
+    opacity: 0.5; 
+    transform: rotate(120deg) translateY(30%);
+  }
+}
+
+/* Continue button styling */
+.continue-button {
+  opacity: 0;
+  visibility: hidden;
+  margin-top: 2rem;
+  padding: 0.8rem 2rem;
+  background: linear-gradient(135deg, #143d6c, #275d9c);
+  border: none;
+  border-radius: 50px;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  transform: translateY(20px);
+  position: relative;
+  overflow: hidden;
+}
+
+.continue-button::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(255, 255, 255, 0.3) 0%,
+    rgba(255, 255, 255, 0) 70%
+  );
+  opacity: 0;
+  transform: rotate(30deg);
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.continue-button:hover::after {
+  opacity: 1;
+}
+
+.continue-button:hover {
+  background: linear-gradient(135deg, #275d9c, #3672b7);
+  transform: translateY(18px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+}
+
+.continue-button:active {
+  transform: translateY(20px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.continue-button.visible {
+  opacity: 1;
+  visibility: visible;
+  animation: pulse 2s infinite;
+  transform: translateY(0);
+}
+
+@keyframes pulse {
   0% {
-    transform: rotateY(0);
+    box-shadow: 0 0 0 0 rgba(39, 93, 156, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(39, 93, 156, 0);
   }
   100% {
-    transform: rotateY(1800deg);
+    box-shadow: 0 0 0 0 rgba(39, 93, 156, 0);
   }
 }
