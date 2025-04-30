@@ -93,13 +93,16 @@ const GameTimer: React.FC<GameTimerProps> = ({
                 <span className="text-sm text-gray-400">Wave</span>
                 <div className="flex items-center justify-center">
                   <div className="text-2xl font-bold">
-                    {gameState.waves[Lane.Single].currentWave}/{gameState.waves[Lane.Single].totalWaves}
+                    {gameState.waves[Lane.Single]?.currentWave || 1}/{gameState.waves[Lane.Single]?.totalWaves || 3}
                   </div>
                   {/* Plus button to increment wave */}
                   <button 
                     className="ml-1 bg-amber-600 hover:bg-amber-500 rounded-full w-5 h-5 flex items-center justify-center text-xs"
                     onClick={() => onIncrementWave(Lane.Single)}
-                    disabled={gameState.waves[Lane.Single].currentWave >= gameState.waves[Lane.Single].totalWaves}
+                    disabled={
+                      !gameState.waves[Lane.Single] || 
+                      gameState.waves[Lane.Single].currentWave >= gameState.waves[Lane.Single].totalWaves
+                    }
                   >
                     <Plus size={14} />
                   </button>
@@ -126,13 +129,16 @@ const GameTimer: React.FC<GameTimerProps> = ({
                   <span className="text-sm text-gray-300">Top Lane</span>
                   <div className="flex items-center justify-center mt-1">
                     <div className="text-xl font-bold">
-                      {gameState.waves[Lane.Top].currentWave}/{gameState.waves[Lane.Top].totalWaves}
+                      {gameState.waves[Lane.Top]?.currentWave || 1}/{gameState.waves[Lane.Top]?.totalWaves || 7}
                     </div>
                     {/* Plus button to increment top lane wave */}
                     <button 
                       className="ml-1 bg-amber-600 hover:bg-amber-500 rounded-full w-5 h-5 flex items-center justify-center text-xs"
                       onClick={() => onIncrementWave(Lane.Top)}
-                      disabled={gameState.waves[Lane.Top].currentWave >= gameState.waves[Lane.Top].totalWaves}
+                      disabled={
+                        !gameState.waves[Lane.Top] || 
+                        gameState.waves[Lane.Top].currentWave >= gameState.waves[Lane.Top].totalWaves
+                      }
                     >
                       <Plus size={14} />
                     </button>
@@ -142,13 +148,16 @@ const GameTimer: React.FC<GameTimerProps> = ({
                   <span className="text-sm text-gray-300">Bottom Lane</span>
                   <div className="flex items-center justify-center mt-1">
                     <div className="text-xl font-bold">
-                      {gameState.waves[Lane.Bottom].currentWave}/{gameState.waves[Lane.Bottom].totalWaves}
+                      {gameState.waves[Lane.Bottom]?.currentWave || 1}/{gameState.waves[Lane.Bottom]?.totalWaves || 7}
                     </div>
                     {/* Plus button to increment bottom lane wave */}
                     <button 
                       className="ml-1 bg-amber-600 hover:bg-amber-500 rounded-full w-5 h-5 flex items-center justify-center text-xs"
                       onClick={() => onIncrementWave(Lane.Bottom)}
-                      disabled={gameState.waves[Lane.Bottom].currentWave >= gameState.waves[Lane.Bottom].totalWaves}
+                      disabled={
+                        !gameState.waves[Lane.Bottom] || 
+                        gameState.waves[Lane.Bottom].currentWave >= gameState.waves[Lane.Bottom].totalWaves
+                      }
                     >
                       <Plus size={14} />
                     </button>
@@ -349,19 +358,21 @@ const GameTimer: React.FC<GameTimerProps> = ({
         }}
       >
         <div className="flex items-center">
-          <div className="w-10 h-10 bg-gray-300 rounded-full overflow-hidden mr-2">
-            <img 
-              src={player.hero.icon} 
-              alt={player.hero.name} 
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.src = 'https://via.placeholder.com/40?text=Hero';
-              }}
-            />
-          </div>
+          {player.hero && (
+            <div className="w-10 h-10 bg-gray-300 rounded-full overflow-hidden mr-2">
+              <img 
+                src={player.hero.icon} 
+                alt={player.hero.name} 
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.src = 'https://via.placeholder.com/40?text=Hero';
+                }}
+              />
+            </div>
+          )}
           <div>
-            <div className="font-medium">{player.hero.name}</div>
+            <div className="font-medium">{player.hero?.name || 'Unknown Hero'}</div>
             <div className="text-xs text-gray-300">
               Player {player.id}
               {/* Removed lane tag display */}

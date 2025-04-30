@@ -42,12 +42,13 @@ export interface LaneState {
   totalWaves: number;
 }
 
+// Updated interface to ensure proper type checking for multiple lanes
 export interface GameState {
   round: number;
   turn: number;
   gameLength: GameLength;
   waves: {
-    [Lane.Single]: LaneState;
+    [Lane.Single]?: LaneState;
     [Lane.Top]?: LaneState;
     [Lane.Bottom]?: LaneState;
   };

@@ -20,9 +20,12 @@ import {
 } from './types';
 import { getAllExpansions, filterHeroesByExpansions } from './data/heroes';
 
-// Improved interface for lane state return type
+// Modified interface for lane state return type
+// Fix: Removed the index signature and made it more explicit
 interface LaneStateResult {
-  [key: string]: LaneState;
+  single?: LaneState;
+  top?: LaneState;
+  bottom?: LaneState;
   hasMultipleLanes: boolean;
 }
 
@@ -31,7 +34,7 @@ const getInitialLaneState = (gameLength: GameLength, playerCount: number): LaneS
   // Default single lane
   if (playerCount <= 6) {
     return {
-      [Lane.Single]: {
+      single: {
         currentWave: 1,
         totalWaves: gameLength === GameLength.Quick ? 3 : 5
       },
@@ -41,11 +44,11 @@ const getInitialLaneState = (gameLength: GameLength, playerCount: number): LaneS
   
   // Multiple lanes for 8-10 players
   return {
-    [Lane.Top]: {
+    top: {
       currentWave: 1,
       totalWaves: 7
     },
-    [Lane.Bottom]: {
+    bottom: {
       currentWave: 1,
       totalWaves: 7
     },
@@ -801,10 +804,10 @@ const handleSelectDraftMode = (mode: DraftMode) => {
       gameLength: gameLength,
       waves: laneState.hasMultipleLanes 
         ? { 
-            [Lane.Top]: laneState[Lane.Top],
-            [Lane.Bottom]: laneState[Lane.Bottom]
+            [Lane.Top]: laneState.top!,
+            [Lane.Bottom]: laneState.bottom!
           }
-        : { [Lane.Single]: laneState[Lane.Single] },
+        : { [Lane.Single]: laneState.single! },
       teamLives: {
         [Team.Titans]: teamLives,
         [Team.Atlanteans]: teamLives
