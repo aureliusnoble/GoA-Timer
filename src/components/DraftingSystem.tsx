@@ -1,7 +1,7 @@
 // src/components/DraftingSystem.tsx
 import React, { useState, useRef } from 'react';
 import { Hero, Player, Team, DraftMode, DraftingState } from '../types';
-import { X, User, Play, RotateCcw, RefreshCw, ArrowLeft, HelpCircle } from 'lucide-react';
+import { X, User, Play, RotateCcw, RefreshCw, ArrowLeft } from 'lucide-react';
 
 interface DraftingSystemProps {
   players: Player[];
@@ -62,7 +62,6 @@ const Tooltip: React.FC<TooltipProps> = ({ text, children }) => {
 
 const DraftingSystem: React.FC<DraftingSystemProps> = ({
   players,
-  availableHeroes,
   draftingState,
   onHeroSelect,
   onHeroBan,
@@ -1002,20 +1001,56 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
           </h2>
           
           <div className="flex gap-3">
-            <button 
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center"
-              onClick={onCancelDrafting}
-            >
-              <X size={16} className="mr-2" /> Cancel
-            </button>
+            {/* Undo button */}
+            <Tooltip text="Undo the last hero selection">
+              <button 
+                className={`px-4 py-2 ${canUndo ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-800 opacity-50 cursor-not-allowed'} rounded-lg flex items-center`}
+                onClick={onUndoLastAction}
+                disabled={!canUndo}
+              >
+                <RotateCcw size={16} className="mr-2" /> Undo
+              </button>
+            </Tooltip>
+            
+            {/* Reset button */}
+            <Tooltip text="Reset all selections and restart with the same draft mode">
+              <button 
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center"
+                onClick={onResetDraft}
+              >
+                <RefreshCw size={16} className="mr-2" /> Reset
+              </button>
+            </Tooltip>
+            
+            {/* Back button */}
+            <Tooltip text="Go back to draft mode selection without rerolling tiebreaker">
+              <button 
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center"
+                onClick={onBackToDraftSelection}
+              >
+                <ArrowLeft size={16} className="mr-2" /> Back
+              </button>
+            </Tooltip>
+            
+            {/* Cancel button */}
+            <Tooltip text="Return to game setup screen">
+              <button 
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center"
+                onClick={onCancelDrafting}
+              >
+                <X size={16} className="mr-2" /> Cancel
+              </button>
+            </Tooltip>
             
             {(draftingState.isComplete || allPlayersHaveSelectedHeroes) && (
-              <button 
-                className="px-4 py-2 bg-green-700 hover:bg-green-600 rounded-lg flex items-center"
-                onClick={onFinishDrafting}
-              >
-                <Play size={16} className="mr-2" /> Start Game
-              </button>
+              <Tooltip text="Finish drafting and start the game">
+                <button 
+                  className="px-4 py-2 bg-green-700 hover:bg-green-600 rounded-lg flex items-center"
+                  onClick={onFinishDrafting}
+                >
+                  <Play size={16} className="mr-2" /> Start Game
+                </button>
+              </Tooltip>
             )}
           </div>
         </div>
