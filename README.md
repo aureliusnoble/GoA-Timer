@@ -108,6 +108,9 @@ The application uses Tailwind CSS for styling. Custom styles can be added in:
 
 - Remove hero selection on setup screen and add new draft mode: All Pick
 
-- with Random and Pick and Ban we should choose which player on that team we are assigning to (similar to how we do in current Game Setup page)
-- Once all players have selected a hero instead of display {team}'s Turn\nAll {team} have selected heroes. Instead display "Start Game\nAll players have selected heroes. Click Start Game."
-- hero tooltip bigger (everything, the icon, the text, etc.)
+
+- We must have at least as many heroes available as players. Game setup warning. Then for each draft mode we want to gray out under the following conditions:
+- All Pick: As long as heroes we include in filter=player count
+- Single: 3x as many heroes as players (remember all players must be shown a unique set of 3)
+- Random: Heroes + 2 of players
+- Ban and Pick: 2x as many heroes as players.

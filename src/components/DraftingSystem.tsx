@@ -1,7 +1,7 @@
 // src/components/DraftingSystem.tsx
 import React, { useState, useRef } from 'react';
 import { Hero, Player, Team, DraftMode, DraftingState } from '../types';
-import { X, Check, ChevronRight, User } from 'lucide-react';
+import { X, Check, ChevronRight, User, Play } from 'lucide-react';
 
 interface DraftingSystemProps {
   players: Player[];
@@ -28,14 +28,15 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
   const titansDraftRef = useRef<HTMLDivElement>(null);
   const atlanteansDraftRef = useRef<HTMLDivElement>(null);
   
-  // Get current team players
-  const currentTeamPlayers = players.filter(player => 
-    player.team === draftingState.currentTeam
+  // Get players who haven't selected a hero yet for the current team
+  const pendingCurrentTeamPlayers = players.filter(player => 
+    player.team === draftingState.currentTeam && 
+    !draftingState.selectedHeroes.some(selection => selection.playerId === player.id)
   );
   
-  // Get players who haven't selected a hero yet in the current team
-  const pendingPlayers = currentTeamPlayers.filter(player => 
-    !draftingState.selectedHeroes.some(selection => selection.playerId === player.id)
+  // Check if ALL players from BOTH teams have selected heroes
+  const allPlayersHaveSelectedHeroes = players.every(player =>
+    draftingState.selectedHeroes.some(selection => selection.playerId === player.id)
   );
   
   // Get team name
@@ -74,10 +75,20 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
     const isSelected = context === 'selected';
     const isBanned = context === 'banned';
     
+    // Get pending players for the current team
+    const pendingPlayers = players.filter(player => 
+      player.team === draftingState.currentTeam && 
+      !draftingState.selectedHeroes.some(selection => selection.playerId === player.id)
+    );
+    
+    // Determine if this card should be grayed out (all players have heroes)
+    const isGrayedOut = allPlayersHaveSelectedHeroes && (isAvailable || isAssigned);
+    
     return (
       <div 
         key={hero.id}
         className={`relative p-4 rounded-lg transition-all ${
+          isGrayedOut ? 'opacity-40 pointer-events-none' :
           isAvailable ? 'bg-gray-800 hover:bg-gray-700' : 
           isAssigned ? 'bg-amber-900/30 hover:bg-amber-800/40' :
           isSelected ? 'bg-green-900/30' :
@@ -86,6 +97,16 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
         onMouseEnter={() => setHoveredHero(hero)}
         onMouseLeave={() => setHoveredHero(null)}
       >
+        {/* For banned heroes, add a centered X overlay */}
+        {isBanned && (
+          <div className="absolute inset-0 flex items-center justify-center z-10">
+            <div className="relative w-full h-full flex items-center justify-center">
+              <div className="absolute w-3/4 h-0.5 bg-red-500 transform rotate-45"></div>
+              <div className="absolute w-3/4 h-0.5 bg-red-500 transform -rotate-45"></div>
+            </div>
+          </div>
+        )}
+        
         <div className="text-center mb-3">
           <div className="w-24 h-24 bg-gray-300 rounded-full mx-auto overflow-hidden">
             <img 
@@ -127,14 +148,21 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                 Ban Hero
               </button>
             )}
+            
+            {/* For pick action, show a button for each pending player */}
             {draftingState.pickBanSequence[draftingState.currentStep]?.action === 'pick' && pendingPlayers.length > 0 && (
-              <button
-                className="w-full px-3 py-2 bg-green-700 hover:bg-green-600 rounded text-sm flex items-center justify-center"
-                onClick={() => onHeroSelect(hero, pendingPlayers[0].id)}
-              >
-                <span className="mr-1">Pick for</span>
-                <span className="font-bold">{pendingPlayers[0].name}</span>
-              </button>
+              <div className="grid grid-cols-1 gap-1">
+                {pendingPlayers.map(player => (
+                  <button
+                    key={player.id}
+                    className="w-full px-3 py-2 bg-green-700 hover:bg-green-600 rounded text-sm flex items-center justify-center"
+                    onClick={() => onHeroSelect(hero, player.id)}
+                  >
+                    <span className="mr-1">Pick for</span>
+                    <span className="font-bold">{player.name}</span>
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         )}
@@ -143,13 +171,18 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
         {isAvailable && draftingState.mode === DraftMode.Random && (
           <div className="mt-3">
             {pendingPlayers.length > 0 && (
-              <button
-                className="w-full px-3 py-2 bg-green-700 hover:bg-green-600 rounded text-sm flex items-center justify-center"
-                onClick={() => onHeroSelect(hero, pendingPlayers[0].id)}
-              >
-                <span className="mr-1">Pick for</span>
-                <span className="font-bold">{pendingPlayers[0].name}</span>
-              </button>
+              <div className="grid grid-cols-1 gap-1">
+                {pendingPlayers.map(player => (
+                  <button
+                    key={player.id}
+                    className="w-full px-3 py-2 bg-green-700 hover:bg-green-600 rounded text-sm flex items-center justify-center"
+                    onClick={() => onHeroSelect(hero, player.id)}
+                  >
+                    <span className="mr-1">Pick for</span>
+                    <span className="font-bold">{player.name}</span>
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         )}
@@ -184,23 +217,34 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
         <h3 className="text-xl font-bold mb-4">Single Draft</h3>
         
         <div className="mb-6">
-          <div className={`p-3 rounded-lg ${
-            draftingState.currentTeam === Team.Titans ? 'bg-blue-900/50 border-2 border-blue-400' : 'bg-red-900/50 border-2 border-red-400'
-          }`}>
-            <h4 className="text-lg font-semibold mb-2">
-              {getTeamName(draftingState.currentTeam)}'s Turn
-            </h4>
-            
-            {pendingPlayers.length > 0 ? (
+          {allPlayersHaveSelectedHeroes ? (
+            <div className="p-3 rounded-lg bg-green-900/50 border-2 border-green-400">
+              <h4 className="text-lg font-semibold mb-2">
+                Start Game
+              </h4>
               <div className="text-md mb-3">
-                Any {getTeamName(draftingState.currentTeam)} player can select a hero from their options
+                All players have selected heroes. Click Start Game.
               </div>
-            ) : (
-              <div className="text-md mb-3">
-                All {getTeamName(draftingState.currentTeam)} players have selected heroes
-              </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className={`p-3 rounded-lg ${
+              draftingState.currentTeam === Team.Titans ? 'bg-blue-900/50 border-2 border-blue-400' : 'bg-red-900/50 border-2 border-red-400'
+            }`}>
+              <h4 className="text-lg font-semibold mb-2">
+                {getTeamName(draftingState.currentTeam)}'s Turn
+              </h4>
+              
+              {pendingCurrentTeamPlayers.length > 0 ? (
+                <div className="text-md mb-3">
+                  Any {getTeamName(draftingState.currentTeam)} player can select a hero from their options
+                </div>
+              ) : (
+                <div className="text-md mb-3">
+                  All {getTeamName(draftingState.currentTeam)} players have selected heroes
+                </div>
+              )}
+            </div>
+          )}
         </div>
         
         {/* Titans Section */}
@@ -244,12 +288,13 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                         <div
                           key={hero.id}
                           className={`relative p-4 rounded-lg ${
+                            allPlayersHaveSelectedHeroes ? 'opacity-40 pointer-events-none' :
                             draftingState.currentTeam === Team.Titans && !hasSelected 
                               ? 'bg-blue-900/30 hover:bg-blue-800/40 cursor-pointer' 
                               : 'bg-gray-800'
                           }`}
                           onClick={() => {
-                            if (draftingState.currentTeam === Team.Titans && !hasSelected) {
+                            if (draftingState.currentTeam === Team.Titans && !hasSelected && !allPlayersHaveSelectedHeroes) {
                               onHeroSelect(hero, player.id);
                             }
                           }}
@@ -287,7 +332,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                           </div>
                           
                           {/* Select button when it's this team's turn */}
-                          {draftingState.currentTeam === Team.Titans && !hasSelected && (
+                          {draftingState.currentTeam === Team.Titans && !hasSelected && !allPlayersHaveSelectedHeroes && (
                             <button
                               className="w-full mt-2 px-3 py-2 bg-blue-700 hover:bg-blue-600 rounded text-sm"
                             >
@@ -344,12 +389,13 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                         <div
                           key={hero.id}
                           className={`relative p-4 rounded-lg ${
+                            allPlayersHaveSelectedHeroes ? 'opacity-40 pointer-events-none' :
                             draftingState.currentTeam === Team.Atlanteans && !hasSelected 
                               ? 'bg-red-900/30 hover:bg-red-800/40 cursor-pointer' 
                               : 'bg-gray-800'
                           }`}
                           onClick={() => {
-                            if (draftingState.currentTeam === Team.Atlanteans && !hasSelected) {
+                            if (draftingState.currentTeam === Team.Atlanteans && !hasSelected && !allPlayersHaveSelectedHeroes) {
                               onHeroSelect(hero, player.id);
                             }
                           }}
@@ -387,7 +433,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                           </div>
                           
                           {/* Select button when it's this team's turn */}
-                          {draftingState.currentTeam === Team.Atlanteans && !hasSelected && (
+                          {draftingState.currentTeam === Team.Atlanteans && !hasSelected && !allPlayersHaveSelectedHeroes && (
                             <button
                               className="w-full mt-2 px-3 py-2 bg-red-700 hover:bg-red-600 rounded text-sm"
                             >
@@ -413,39 +459,46 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
         <h3 className="text-xl font-bold mb-4">Random Draft</h3>
         
         <div className="mb-6">
-          <div className={`p-3 rounded-lg ${
-            draftingState.currentTeam === Team.Titans ? 'bg-blue-900/50 border-2 border-blue-400' : 'bg-red-900/50 border-2 border-red-400'
-          }`}>
-            <h4 className="text-lg font-semibold mb-2">
-              {getTeamName(draftingState.currentTeam)}'s Turn
-            </h4>
-            
-            {pendingPlayers.length > 0 ? (
+          {allPlayersHaveSelectedHeroes ? (
+            <div className="p-3 rounded-lg bg-green-900/50 border-2 border-green-400">
+              <h4 className="text-lg font-semibold mb-2">
+                Start Game
+              </h4>
               <div className="text-md mb-3">
-                {pendingPlayers.map(player => player.name).join(', ')} need to select a hero
+                All players have selected heroes. Click Start Game.
               </div>
-            ) : (
-              <div className="text-md mb-3">
-                All {getTeamName(draftingState.currentTeam)} players have selected heroes
-              </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className={`p-3 rounded-lg ${
+              draftingState.currentTeam === Team.Titans ? 'bg-blue-900/50 border-2 border-blue-400' : 'bg-red-900/50 border-2 border-red-400'
+            }`}>
+              <h4 className="text-lg font-semibold mb-2">
+                {getTeamName(draftingState.currentTeam)}'s Turn
+              </h4>
+              
+              {pendingCurrentTeamPlayers.length > 0 ? (
+                <div className="text-md mb-3">
+                  {pendingCurrentTeamPlayers.map(player => player.name).join(', ')} need to select a hero
+                </div>
+              ) : (
+                <div className="text-md mb-3">
+                  All {getTeamName(draftingState.currentTeam)} players have selected heroes
+                </div>
+              )}
+            </div>
+          )}
         </div>
         
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
           {draftingState.availableHeroes.map(hero => (
             <div 
               key={hero.id} 
-              className={`relative p-4 rounded-lg transition-all cursor-pointer ${
+              className={`relative p-4 rounded-lg transition-all ${
+                allPlayersHaveSelectedHeroes ? 'opacity-40 pointer-events-none' :
                 draftingState.currentTeam === Team.Titans 
                   ? 'bg-blue-900/30 hover:bg-blue-800/40' 
                   : 'bg-red-900/30 hover:bg-red-800/40'
               }`}
-              onClick={() => {
-                if (pendingPlayers.length > 0) {
-                  onHeroSelect(hero, pendingPlayers[0].id);
-                }
-              }}
               onMouseEnter={() => setHoveredHero(hero)}
               onMouseLeave={() => setHoveredHero(null)}
             >
@@ -479,18 +532,18 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                 {hero.roles.join(', ')}
               </div>
               
-              {pendingPlayers.length > 0 && (
-                <div className="mt-2">
-                  <button
-                    className="w-full px-3 py-2 rounded text-sm bg-green-600 hover:bg-green-500 flex items-center justify-center"
-                    onClick={(e) => {
-                      e.stopPropagation(); // Prevent double triggering
-                      onHeroSelect(hero, pendingPlayers[0].id);
-                    }}
-                  >
-                    <span className="mr-1">Pick for</span>
-                    <span className="font-bold">{pendingPlayers[0].name}</span>
-                  </button>
+              {pendingCurrentTeamPlayers.length > 0 && !allPlayersHaveSelectedHeroes && (
+                <div className="grid grid-cols-1 gap-1 mt-2">
+                  {pendingCurrentTeamPlayers.map(player => (
+                    <button
+                      key={player.id}
+                      className="w-full px-3 py-2 rounded text-sm bg-green-600 hover:bg-green-500 flex items-center justify-center"
+                      onClick={() => onHeroSelect(hero, player.id)}
+                    >
+                      <span className="mr-1">Pick for</span>
+                      <span className="font-bold">{player.name}</span>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -509,35 +562,46 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
       ? draftingState.pickBanSequence[draftingState.currentStep] 
       : null;
       
-    if (!currentStep) return <div>Draft complete</div>;
+    if (!currentStep && !allPlayersHaveSelectedHeroes) return <div>Draft complete</div>;
     
-    const isPickingPhase = currentStep.action === 'pick';
-    const isBanningPhase = currentStep.action === 'ban';
+    const isPickingPhase = currentStep?.action === 'pick';
+    const isBanningPhase = currentStep?.action === 'ban';
     
     return (
       <div>
         <h3 className="text-xl font-bold mb-4">Pick and Ban</h3>
         
         <div className="mb-6">
-          <div className={`p-4 rounded-lg ${
-            draftingState.currentTeam === Team.Titans 
-              ? 'bg-blue-900/50 border-2 border-blue-400' 
-              : 'bg-red-900/50 border-2 border-red-400'
-          }`}>
-            <h4 className="text-xl font-semibold mb-2">
-              {getCurrentPickBanLabel()}
-            </h4>
-            
-            <div className="text-md mb-3">
-              {isBanningPhase && 'Select a hero to ban from the pool'}
-              {isPickingPhase && pendingPlayers.length > 0 && 
-                `${pendingPlayers.map(player => player.name).join(', ')} need to pick a hero`
-              }
-              {isPickingPhase && pendingPlayers.length === 0 && 
-                'All players on this team have selected heroes'
-              }
+          {allPlayersHaveSelectedHeroes ? (
+            <div className="p-4 rounded-lg bg-green-900/50 border-2 border-green-400">
+              <h4 className="text-xl font-semibold mb-2">
+                Start Game
+              </h4>
+              <div className="text-md mb-3">
+                All players have selected heroes. Click Start Game.
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className={`p-4 rounded-lg ${
+              draftingState.currentTeam === Team.Titans 
+                ? 'bg-blue-900/50 border-2 border-blue-400' 
+                : 'bg-red-900/50 border-2 border-red-400'
+            }`}>
+              <h4 className="text-xl font-semibold mb-2">
+                {getCurrentPickBanLabel()}
+              </h4>
+              
+              <div className="text-md mb-3">
+                {isBanningPhase && 'Select a hero to ban from the pool'}
+                {isPickingPhase && pendingCurrentTeamPlayers.length > 0 && 
+                  `${pendingCurrentTeamPlayers.map(player => player.name).join(', ')} need to pick a hero`
+                }
+                {isPickingPhase && pendingCurrentTeamPlayers.length === 0 && 
+                  'All players on this team have selected heroes'
+                }
+              </div>
+            </div>
+          )}
         </div>
         
         {/* Banned heroes section */}
@@ -550,10 +614,14 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                   key={hero.id} 
                   className="relative p-3 rounded-lg bg-gray-800 opacity-50"
                 >
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-full h-0.5 bg-red-500 transform rotate-45"></div>
-                    <div className="w-full h-0.5 bg-red-500 transform -rotate-45"></div>
+                  {/* Improved X overlay for banned heroes */}
+                  <div className="absolute inset-0 flex items-center justify-center z-10">
+                    <div className="relative w-full h-full flex items-center justify-center">
+                      <div className="absolute w-3/4 h-0.5 bg-red-500 transform rotate-45"></div>
+                      <div className="absolute w-3/4 h-0.5 bg-red-500 transform -rotate-45"></div>
+                    </div>
                   </div>
+                  
                   <div className="text-center mb-2">
                     <div className="w-20 h-20 bg-gray-300 rounded-full mx-auto overflow-hidden">
                       <img 
@@ -584,6 +652,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
             <div 
               key={hero.id} 
               className={`relative p-4 rounded-lg transition-all ${
+                allPlayersHaveSelectedHeroes ? 'opacity-40 pointer-events-none' :
                 draftingState.currentTeam === Team.Titans
                   ? 'bg-blue-900/30 hover:bg-blue-800/40'
                   : 'bg-red-900/30 hover:bg-red-800/40'
@@ -622,26 +691,33 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
               </div>
               
               {/* Action buttons */}
-              <div className="mt-3 grid grid-cols-1 gap-2">
-                {isBanningPhase && (
-                  <button
-                    className="w-full px-3 py-2 bg-red-600 hover:bg-red-500 rounded text-sm flex items-center justify-center"
-                    onClick={() => onHeroBan(hero)}
-                  >
-                    Ban Hero
-                  </button>
-                )}
-                
-                {isPickingPhase && pendingPlayers.length > 0 && (
-                  <button
-                    className="w-full px-3 py-2 bg-green-600 hover:bg-green-500 rounded text-sm flex items-center justify-center"
-                    onClick={() => onHeroSelect(hero, pendingPlayers[0].id)}
-                  >
-                    <span className="mr-1">Pick for</span>
-                    <span className="font-bold">{pendingPlayers[0].name}</span>
-                  </button>
-                )}
-              </div>
+              {!allPlayersHaveSelectedHeroes && (
+                <div className="mt-3 grid grid-cols-1 gap-2">
+                  {isBanningPhase && (
+                    <button
+                      className="w-full px-3 py-2 bg-red-600 hover:bg-red-500 rounded text-sm flex items-center justify-center"
+                      onClick={() => onHeroBan(hero)}
+                    >
+                      Ban Hero
+                    </button>
+                  )}
+                  
+                  {isPickingPhase && pendingCurrentTeamPlayers.length > 0 && (
+                    <div className="grid grid-cols-1 gap-1">
+                      {pendingCurrentTeamPlayers.map(player => (
+                        <button
+                          key={player.id}
+                          className="w-full px-3 py-2 bg-green-600 hover:bg-green-500 rounded text-sm flex items-center justify-center"
+                          onClick={() => onHeroSelect(hero, player.id)}
+                        >
+                          <span className="mr-1">Pick for</span>
+                          <span className="font-bold">{player.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -663,36 +739,36 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
     }
   };
   
-  // Hero tooltip when hovering
+  // Hero tooltip when hovering - 3x bigger
   const renderHeroTooltip = () => {
     if (!hoveredHero) return null;
     
     return (
-      <div className="fixed bottom-4 left-4 bg-gray-900/90 p-4 rounded-lg shadow-lg max-w-md z-50">
+      <div className="fixed bottom-8 left-8 bg-gray-900/95 p-8 rounded-lg shadow-lg max-w-2xl z-50">
         <div className="flex items-start">
-          <div className="w-16 h-16 bg-gray-300 rounded-full overflow-hidden mr-3 flex-shrink-0">
+          <div className="w-32 h-32 bg-gray-300 rounded-full overflow-hidden mr-6 flex-shrink-0">
             <img 
               src={hoveredHero.icon} 
               alt={hoveredHero.name} 
               className="w-full h-full object-cover"
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
-                target.src = 'https://via.placeholder.com/64?text=Hero';
+                target.src = 'https://via.placeholder.com/192?text=Hero';
               }}
             />
           </div>
           <div>
-            <h3 className="text-lg font-bold">{hoveredHero.name}</h3>
-            <div className="text-sm text-gray-300 mb-1">{hoveredHero.roles.join(' • ')}</div>
-            <div className="flex mb-2">
+            <h3 className="text-3xl font-bold mb-2">{hoveredHero.name}</h3>
+            <div className="text-xl text-gray-300 mb-3">{hoveredHero.roles.join(' • ')}</div>
+            <div className="flex mb-4">
               {[...Array(hoveredHero.complexity)].map((_, i) => (
-                <span key={i} className="text-yellow-400">★</span>
+                <span key={i} className="text-yellow-400 text-2xl">★</span>
               ))}
               {[...Array(4 - hoveredHero.complexity)].map((_, i) => (
-                <span key={i + hoveredHero.complexity} className="text-gray-600">★</span>
+                <span key={i + hoveredHero.complexity} className="text-gray-600 text-2xl">★</span>
               ))}
             </div>
-            <p className="text-sm">{hoveredHero.description}</p>
+            <p className="text-lg leading-relaxed">{hoveredHero.description || "This hero's abilities and playstyle are shrouded in mystery."}</p>
           </div>
         </div>
       </div>
@@ -805,12 +881,12 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
               <X size={16} className="mr-2" /> Cancel
             </button>
             
-            {draftingState.isComplete && (
+            {(draftingState.isComplete || allPlayersHaveSelectedHeroes) && (
               <button 
                 className="px-4 py-2 bg-green-700 hover:bg-green-600 rounded-lg flex items-center"
                 onClick={onFinishDrafting}
               >
-                <ChevronRight size={16} className="mr-2" /> Start Game
+                <Play size={16} className="mr-2" /> Start Game
               </button>
             )}
           </div>

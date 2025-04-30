@@ -977,7 +977,7 @@ const shuffleArray = <T extends unknown>(array: T[]): T[] => {
 };
 
   return (
-    <div className="App min-h-screen bg-gradient-to-b from-gray-400 to-gray-600 text-white p-6">
+    <div className="App min-h-screen bg-gradient-to-b from-blue-400 to-orange-800 text-white p-6">
       <header className="App-header mb-8">
         <h1 className="text-3xl font-bold mb-2">Guards of Atlantis II Timer</h1>
       </header>
