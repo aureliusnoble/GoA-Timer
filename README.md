@@ -99,3 +99,16 @@ This app has not been officially approved by Wolff Designa (the designers of Gua
 - Hero tooltip:
 -- Add additional roles
 -- Add Attack, Initiative, Defence, Movement (and upgraded version)
+
+Ideas:
+- Track:
+-- Level
+-- Kills
+-- Assists
+-- Minion Kills
+-- Gold
+
+- Login/Database
+-- Track player stats between games. Victories vs Losses, Favourite Heroes, ELO
+-- Suggest teams based on ELO
+-- Persistent expansions
