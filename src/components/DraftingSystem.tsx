@@ -36,6 +36,13 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
   const { isMobile } = useDevice();
   const [hoveredHero, setHoveredHero] = useState<Hero | null>(null);
   const [heroInfoVisible, setHeroInfoVisible] = useState<boolean>(false);
+  // New state to track card position
+  const [hoveredCardPosition, setHoveredCardPosition] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | undefined>(undefined);
   
   // Refs for scrollable containers
   const titansDraftRef = useRef<HTMLDivElement>(null);
@@ -103,16 +110,27 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
     setHeroInfoVisible(false);
   };
   
-  // Desktop hover handlers
-  const handleHeroMouseEnter = (hero: Hero) => {
+  // Desktop hover handlers - Updated to capture position
+  const handleHeroMouseEnter = (hero: Hero, event: React.MouseEvent<HTMLDivElement>) => {
     if (!isMobile) {
       setHoveredHero(hero);
+      
+      // Capture the hero card's position
+      const cardElement = event.currentTarget;
+      const rect = cardElement.getBoundingClientRect();
+      setHoveredCardPosition({
+        x: rect.left,
+        y: rect.top,
+        width: rect.width,
+        height: rect.height
+      });
     }
   };
   
   const handleHeroMouseLeave = () => {
     if (!isMobile) {
       setHoveredHero(null);
+      setHoveredCardPosition(undefined);
     }
   };
   
@@ -143,7 +161,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
           'bg-red-900/30 opacity-50'
         }`}
         onClick={() => handleHeroInfoClick(hero)}
-        onMouseEnter={() => handleHeroMouseEnter(hero)}
+        onMouseEnter={(e) => handleHeroMouseEnter(hero, e)}
         onMouseLeave={handleHeroMouseLeave}
       >
         {/* For banned heroes, add a centered X overlay */}
@@ -436,7 +454,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                               handleHeroInfoClick(hero);
                             }
                           }}
-                          onMouseEnter={() => handleHeroMouseEnter(hero)}
+                          onMouseEnter={(e) => handleHeroMouseEnter(hero, e)}
                           onMouseLeave={handleHeroMouseLeave}
                         >
                           <div className="text-center mb-3">
@@ -547,7 +565,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                               handleHeroInfoClick(hero);
                             }
                           }}
-                          onMouseEnter={() => handleHeroMouseEnter(hero)}
+                          onMouseEnter={(e) => handleHeroMouseEnter(hero, e)}
                           onMouseLeave={handleHeroMouseLeave}
                         >
                           <div className="text-center mb-3">
@@ -656,7 +674,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                   : 'bg-red-900/30 hover:bg-red-800/40'
               }`}
               onClick={() => handleHeroInfoClick(hero)}
-              onMouseEnter={() => handleHeroMouseEnter(hero)}
+              onMouseEnter={(e) => handleHeroMouseEnter(hero, e)}
               onMouseLeave={handleHeroMouseLeave}
             >
               <div className="text-center mb-3">
@@ -777,7 +795,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                   key={hero.id} 
                   className="relative p-3 rounded-lg bg-gray-800 opacity-50"
                   onClick={() => handleHeroInfoClick(hero)}
-                  onMouseEnter={() => handleHeroMouseEnter(hero)}
+                  onMouseEnter={(e) => handleHeroMouseEnter(hero, e)}
                   onMouseLeave={handleHeroMouseLeave}
                 >
                   {/* Improved X overlay for banned heroes */}
@@ -824,7 +842,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                   : 'bg-red-900/30 hover:bg-red-800/40'
               } cursor-pointer`}
               onClick={() => handleHeroInfoClick(hero)}
-              onMouseEnter={() => handleHeroMouseEnter(hero)}
+              onMouseEnter={(e) => handleHeroMouseEnter(hero, e)}
               onMouseLeave={handleHeroMouseLeave}
             >
               <div className="text-center mb-3">
@@ -1090,6 +1108,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
         hero={hoveredHero} 
         onClose={handleCloseHeroInfo} 
         isVisible={isMobile ? heroInfoVisible : !!hoveredHero} 
+        cardPosition={hoveredCardPosition}
       />
 
       {/* Add custom scrollbar styles */}
