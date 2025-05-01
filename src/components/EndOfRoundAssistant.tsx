@@ -311,7 +311,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
           
           {loggingEnabled && (
             <div className="space-y-4">
-              <p className="text-gray-300 italic">Enter stats for this round only. Cumulative totals will be calculated automatically.</p>
+              <p className="text-gray-300 italic">Enter stats for this round only. You only need to enter the stats you are interested in tracking.</p>
               
               {/* Tabs for different stat types */}
               <div className="flex border-b border-gray-700">
@@ -461,7 +461,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                 {activeTab === StatTrackingTab.Deaths && (
                   <div>
                     <div className="mb-4 text-sm text-gray-300">
-                      <p>Record player deaths. Remember that deaths cost team lives.</p>
+                      <p>Record player deaths.</p>
                     </div>
                     
                     {/* Team-based layout for deaths */}
@@ -579,7 +579,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                 {activeTab === StatTrackingTab.Minions && (
                   <div>
                     <div className="mb-4 text-sm text-gray-300">
-                      <p>Record minion kills. Ranged and melee minions are worth 2 coins, heavy minions are worth 4 coins.</p>
+                      <p>Record minion kills.</p>
                     </div>
                     
                     {/* Team-based layout for minion kills */}
@@ -697,7 +697,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                 {activeTab === StatTrackingTab.Gold && (
                   <div>
                     <div className="mb-4 text-sm text-gray-300">
-                      <p>Record gold collected this round (before spending on level-ups).</p>
+                      <p>Record gold collected this round (before spending on level-ups and including pity coins).</p>
                     </div>
                     
                     {/* Team-based layout for gold collection */}

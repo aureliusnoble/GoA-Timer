@@ -14,7 +14,9 @@ import {
   Users, 
   Bot, 
   Coins,
-  Star
+  Star,
+  Shield, // New icon for player level
+  Gauge // Alternative icon for player level
 } from 'lucide-react';
 import EnhancedTooltip from './common/EnhancedTooltip';
 import { useSound } from '../context/SoundContext';
@@ -118,6 +120,26 @@ const GameTimer: React.FC<GameTimerProps> = ({
       }
     }
   }, [moveTimeRemaining, moveTimerActive, moveTimerEnabled, playSound]);
+
+  // Helper function to check if ANY player has logged stats
+  const hasAnyPlayerLoggedStats = (): boolean => {
+    return players.some(player => 
+      player.stats && (
+        player.stats.totalKills > 0 ||
+        player.stats.totalAssists > 0 ||
+        player.stats.totalDeaths > 0 ||
+        player.stats.totalMinionKills > 0 ||
+        player.stats.totalGoldEarned > 0
+      )
+    );
+  };
+
+  // Helper function to check if ANY player has a specific stat
+  const hasAnyPlayerLoggedStat = (statName: keyof Player['stats']): boolean => {
+    return players.some(player => 
+      player.stats && player.stats[statName] > 0
+    );
+  };
 
   // Button click handlers with sound
   const handleButtonClick = () => {
@@ -534,7 +556,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
                       <div className="flex items-center text-2xl font-bold">
                         {activePlayer.hero.name}
                         <span className="ml-2 text-sm bg-yellow-500/70 text-white px-1.5 py-0.5 rounded-full">
-                          <Star size={14} className="inline mr-0.5" />
+                          <Shield size={14} className="inline mr-0.5" />
                           {activePlayer.hero.complexity}
                         </span>
                       </div>
@@ -639,8 +661,17 @@ const GameTimer: React.FC<GameTimerProps> = ({
     const hasCompleted = gameState.completedTurns.includes(index);
     const isSelectable = gameState.currentPhase === 'move' && !hasCompleted && !isActive;
     
-    // Get player level (complexity is 1-4, representing player level)
-    const playerLevel = player.hero?.complexity || 1;
+    // Get hero complexity (1-4)
+    const heroComplexity = player.hero?.complexity || 1;
+    
+    // Check if this player has any stats
+    const playerHasStats = player.stats && (
+      player.stats.totalKills > 0 ||
+      player.stats.totalAssists > 0 ||
+      player.stats.totalDeaths > 0 ||
+      player.stats.totalMinionKills > 0 ||
+      player.stats.totalGoldEarned > 0
+    );
     
     return (
       <div
@@ -683,9 +714,10 @@ const GameTimer: React.FC<GameTimerProps> = ({
             <div className="flex justify-between items-start">
               <div className="text-xl font-bold mb-1 flex items-center">
                 {player.hero?.name || 'Unknown Hero'}
-                <span className="ml-2 text-sm bg-yellow-500/80 text-white px-2 py-0.5 rounded-full">
-                  <Star size={14} className="inline mr-0.5" />
-                  {playerLevel}
+                {/* Show hero complexity with shield icon instead of star */}
+                <span className="ml-2 text-sm bg-yellow-500/70 text-white px-1.5 py-0.5 rounded-full">
+                  <Shield size={14} className="inline mr-0.5" />
+                  {heroComplexity}
                 </span>
               </div>
               
@@ -711,24 +743,48 @@ const GameTimer: React.FC<GameTimerProps> = ({
               </div>
             )}
             
-            {/* Show player stats if available with icons - larger text */}
-            {player.stats && (
+            {/* Only show stats if they've been logged and at least one stat exists */}
+            {playerHasStats && hasAnyPlayerLoggedStats() && (
               <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-base bg-black/20 p-2 rounded">
-                <span className="flex items-center" title="Kills">
-                  <Swords size={18} className="mr-2 text-blue-400" /> <span className="font-bold">{player.stats.totalKills}</span>
-                </span>
-                <span className="flex items-center" title="Deaths">
-                  <Skull size={18} className="mr-2 text-red-400" /> <span className="font-bold">{player.stats.totalDeaths}</span>
-                </span>
-                <span className="flex items-center" title="Assists">
-                  <Users size={18} className="mr-2 text-green-400" /> <span className="font-bold">{player.stats.totalAssists}</span>
-                </span>
-                <span className="flex items-center" title="Minion Kills">
-                  <Bot size={18} className="mr-2 text-yellow-400" /> <span className="font-bold">{player.stats.totalMinionKills}</span>
-                </span>
-                <span className="flex items-center col-span-2 mt-1 justify-center bg-amber-900/30 py-1 px-2 rounded" title="Total Gold Earned">
-                  <Coins size={18} className="mr-2 text-amber-400" /> <span className="font-bold">{player.stats.totalGoldEarned}</span>
-                </span>
+                {/* Only show kills stat if at least one player has kills */}
+                {hasAnyPlayerLoggedStat('totalKills') && (
+                  <span className="flex items-center" title="Kills">
+                    <Swords size={18} className="mr-2 text-blue-400" /> 
+                    <span className="font-bold">{player.stats?.totalKills || 0}</span>
+                  </span>
+                )}
+                
+                {/* Only show deaths stat if at least one player has deaths */}
+                {hasAnyPlayerLoggedStat('totalDeaths') && (
+                  <span className="flex items-center" title="Deaths">
+                    <Skull size={18} className="mr-2 text-red-400" /> 
+                    <span className="font-bold">{player.stats?.totalDeaths || 0}</span>
+                  </span>
+                )}
+                
+                {/* Only show assists stat if at least one player has assists */}
+                {hasAnyPlayerLoggedStat('totalAssists') && (
+                  <span className="flex items-center" title="Assists">
+                    <Users size={18} className="mr-2 text-green-400" /> 
+                    <span className="font-bold">{player.stats?.totalAssists || 0}</span>
+                  </span>
+                )}
+                
+                {/* Only show minion kills stat if at least one player has minion kills */}
+                {hasAnyPlayerLoggedStat('totalMinionKills') && (
+                  <span className="flex items-center" title="Minion Kills">
+                    <Bot size={18} className="mr-2 text-yellow-400" /> 
+                    <span className="font-bold">{player.stats?.totalMinionKills || 0}</span>
+                  </span>
+                )}
+                
+                {/* Only show gold earned stat if at least one player has gold */}
+                {hasAnyPlayerLoggedStat('totalGoldEarned') && (
+                  <span className="flex items-center col-span-2 mt-1 justify-center bg-amber-900/30 py-1 px-2 rounded" title="Total Gold Earned">
+                    <Coins size={18} className="mr-2 text-amber-400" /> 
+                    <span className="font-bold">{player.stats?.totalGoldEarned || 0}</span>
+                  </span>
+                )}
               </div>
             )}
           </div>
