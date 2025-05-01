@@ -6,7 +6,10 @@ import DraftingSystem from './components/DraftingSystem';
 import CoinToss from './components/CoinToss';
 import DraftModeSelection from './components/DraftModeSelection';
 import CollapsibleFeedback from './components/common/CollapsibleFeedback';
+import SoundToggle from './components/common/SoundToggle';
+import AudioInitializer from './components/common/AudioInitializer';
 import VictoryScreen from './components/VictoryScreen';
+import { SoundProvider, useSound } from './context/SoundContext';
 import { 
   Hero, 
   GameState, 
@@ -377,7 +380,11 @@ const gameReducer = (state: GameState, action: GameAction): GameState => {
 // Make players accessible to the reducer
 let players: Player[] = [];
 
-function App() {
+// Inner App component that has access to the Sound context
+function AppContent() {
+  // Access sound functions
+  const { playSound, unlockAudio, isAudioReady } = useSound();
+
   // Game setup state
   const [gameStarted, setGameStarted] = useState<boolean>(false);
   const [strategyTime, setStrategyTime] = useState<number>(90); // 90 seconds default
@@ -446,6 +453,29 @@ function App() {
   const [strategyTimeRemaining, setStrategyTimeRemaining] = useState<number>(strategyTime);
   const [moveTimeRemaining, setMoveTimeRemaining] = useState<number>(moveTime);
 
+  // Attempt to unlock audio on first user interaction
+  useEffect(() => {
+    const handleFirstInteraction = () => {
+      console.log("First interaction detected, unlocking audio");
+      unlockAudio();
+      
+      // Remove listeners after first interaction
+      document.removeEventListener('click', handleFirstInteraction, true);
+      document.removeEventListener('keydown', handleFirstInteraction, true);
+      document.removeEventListener('touchstart', handleFirstInteraction, true);
+    };
+    
+    // Add event listeners for first interaction
+    document.addEventListener('click', handleFirstInteraction, true);
+    document.addEventListener('keydown', handleFirstInteraction, true);
+    document.addEventListener('touchstart', handleFirstInteraction, true);
+    
+    return () => {
+      document.removeEventListener('click', handleFirstInteraction, true);
+      document.removeEventListener('keydown', handleFirstInteraction, true);
+      document.removeEventListener('touchstart', handleFirstInteraction, true);
+    };
+  }, [unlockAudio]);
 
   // Check for duplicate player names
   const findDuplicateNames = (): string[] => {
@@ -477,6 +507,8 @@ function App() {
     if (localPlayers.length >= 10) {
       return;
     }
+    
+    playSound('buttonClick');
     
     // Determine lane for 8+ player games or 6 players with double lane enabled
     let lane: Lane | undefined = undefined;
@@ -529,6 +561,8 @@ function App() {
     const playerToRemove = localPlayers.find(p => p.id === playerId);
     if (!playerToRemove) return;
     
+    playSound('buttonClick');
+    
     // Filter out the player
     const updatedPlayers = localPlayers.filter(p => p.id !== playerId);
     
@@ -567,6 +601,8 @@ function App() {
       return;
     }
     
+    playSound('toggleSwitch');
+    
     // When changing to Long, reset double lane for 6 players to false
     if (newLength === GameLength.Long && localPlayers.length === 6 && useDoubleLaneFor6Players) {
       // Remove lane assignments if we had them
@@ -583,6 +619,8 @@ function App() {
 
   // Handle toggling expansions
   const handleToggleExpansion = (expansion: string) => {
+    playSound('toggleSwitch');
+    
     if (selectedExpansions.includes(expansion)) {
       // Remove the expansion if it's already selected
       setSelectedExpansions(selectedExpansions.filter(exp => exp !== expansion));
@@ -623,76 +661,86 @@ function App() {
         return false;
     }
   };
-const [handicapTeam, setHandicapTeam] = useState<Team | null>(null);
+  
+  const [handicapTeam, setHandicapTeam] = useState<Team | null>(null);
 
-
-// Update the startDrafting function
-const startDrafting = () => {
-  // Check for duplicate names
-  const duplicateNames = findDuplicateNames();
-  if (duplicateNames.length > 0) {
-    alert(`Players must have unique names. Duplicates found: ${duplicateNames.join(', ')}`);
-    return;
-  }
-  
-  // Validate team composition
-  const titansPlayers = localPlayers.filter(p => p.team === Team.Titans);
-  const atlanteansPlayers = localPlayers.filter(p => p.team === Team.Atlanteans);
-  
-  // UPDATED: Allow a difference of at most 1 player between teams
-  if (Math.abs(titansPlayers.length - atlanteansPlayers.length) > 1) {
-    alert('Teams must have equal player counts or differ by only 1 player');
-    return;
-  }
-  
-  // NEW: Determine which team has more players (if any)
-  if (titansPlayers.length !== atlanteansPlayers.length) {
-    const teamWithMorePlayers = titansPlayers.length > atlanteansPlayers.length 
-      ? Team.Titans 
-      : Team.Atlanteans;
-    setHandicapTeam(teamWithMorePlayers);
-  } else {
-    setHandicapTeam(null);
-  }
-  
-  // Check if each team has at least 2 players
-  if (titansPlayers.length < 2 || atlanteansPlayers.length < 2) {
-    alert('Each team must have at least 2 players');
-    return;
-  }
-  
-  // Check if all players have entered their names
-  const playersWithoutNames = localPlayers.filter(p => !p.name.trim());
-  if (playersWithoutNames.length > 0) {
-    alert('All players must enter their names');
-    return;
-  }
-  
-  // Check if we have enough heroes in selected expansions
-  if (!canUseDraftMode(DraftMode.AllPick)) {
-    alert('Not enough heroes in selected expansions. Please select more expansions, increase complexity, or reduce player count.');
-    return;
-  }
-  
-  // Set an initial random tiebreaker coin and show animation
-  const initialCoinSide = Math.random() > 0.5 ? Team.Titans : Team.Atlanteans;
-  dispatch({ 
-    type: 'START_GAME', 
-    payload: {
-      ...initialGameState,
-      coinSide: initialCoinSide
+  // Update the startDrafting function
+  const startDrafting = () => {
+    // Try to unlock audio again
+    unlockAudio();
+    
+    // Check for duplicate names
+    const duplicateNames = findDuplicateNames();
+    if (duplicateNames.length > 0) {
+      alert(`Players must have unique names. Duplicates found: ${duplicateNames.join(', ')}`);
+      return;
     }
-  });
-  
-  // Show coin animation - the CoinToss component will handle showing
-  // the draft mode selection when the user clicks "Continue"
-  setShowCoinAnimation(true);
-};
+    
+    playSound('buttonClick');
+    
+    // Validate team composition
+    const titansPlayers = localPlayers.filter(p => p.team === Team.Titans);
+    const atlanteansPlayers = localPlayers.filter(p => p.team === Team.Atlanteans);
+    
+    // UPDATED: Allow a difference of at most 1 player between teams
+    if (Math.abs(titansPlayers.length - atlanteansPlayers.length) > 1) {
+      alert('Teams must have equal player counts or differ by only 1 player');
+      return;
+    }
+    
+    // NEW: Determine which team has more players (if any)
+    if (titansPlayers.length !== atlanteansPlayers.length) {
+      const teamWithMorePlayers = titansPlayers.length > atlanteansPlayers.length 
+        ? Team.Titans 
+        : Team.Atlanteans;
+      setHandicapTeam(teamWithMorePlayers);
+    } else {
+      setHandicapTeam(null);
+    }
+    
+    // Check if each team has at least 2 players
+    if (titansPlayers.length < 2 || atlanteansPlayers.length < 2) {
+      alert('Each team must have at least 2 players');
+      return;
+    }
+    
+    // Check if all players have entered their names
+    const playersWithoutNames = localPlayers.filter(p => !p.name.trim());
+    if (playersWithoutNames.length > 0) {
+      alert('All players must enter their names');
+      return;
+    }
+    
+    // Check if we have enough heroes in selected expansions
+    if (!canUseDraftMode(DraftMode.AllPick)) {
+      alert('Not enough heroes in selected expansions. Please select more expansions, increase complexity, or reduce player count.');
+      return;
+    }
+    
+    // Set an initial random tiebreaker coin and show animation
+    const initialCoinSide = Math.random() > 0.5 ? Team.Titans : Team.Atlanteans;
+    dispatch({ 
+      type: 'START_GAME', 
+      payload: {
+        ...initialGameState,
+        coinSide: initialCoinSide
+      }
+    });
+    
+    // Play coin flip sound and show animation
+    playSound('coinFlip');
+    
+    // Show coin animation - the CoinToss component will handle showing
+    // the draft mode selection when the user clicks "Continue"
+    setShowCoinAnimation(true);
+  };
 
   // Handle draft mode selection
   const handleSelectDraftMode = (mode: DraftMode) => {
     let initialDraftingState: DraftingState;
     const totalPlayerCount = localPlayers.length;
+    
+    playSound('buttonClick');
     
     // Always create a fresh copy of heroes to shuffle
     const availableHeroesForDraft = [...filteredHeroes];
@@ -811,149 +859,152 @@ const startDrafting = () => {
     setIsDraftingMode(true);
   };
 
-
-const handleDraftHeroSelect = (hero: Hero, playerId: number) => {
-  // Save current state to history for undo
-  setDraftHistory(prev => [...prev, { ...draftingState }]);
-  
-  const player = localPlayers.find(p => p.id === playerId);
-  if (!player) return;
-  
-  // Update selected heroes
-  const newSelectedHeroes = [...draftingState.selectedHeroes, { playerId, hero }];
-  
-  // Update available heroes (remove selected hero)
-  const newAvailableHeroes = draftingState.availableHeroes.filter(h => h.id !== hero.id);
-  
-  // Update assigned heroes (remove this assignment if in Single mode)
-  const newAssignedHeroes = draftingState.mode === DraftMode.Single 
-    ? draftingState.assignedHeroes.map(assignment => {
-        if (assignment.playerId === playerId) {
-          return {
-            ...assignment,
-            heroOptions: [] // Clear options after selection
-          };
-        }
-        return assignment;
-      })
-    : draftingState.assignedHeroes;
-  
-  // Determine next team and completion status
-  let newCurrentTeam = draftingState.currentTeam;
-  let newStep = draftingState.currentStep;
-  let isComplete = false;
-  
-  // Get player counts for each team
-  const titansPlayers = localPlayers.filter(p => p.team === Team.Titans);
-  const atlanteansPlayers = localPlayers.filter(p => p.team === Team.Atlanteans);
-  
-  // Count how many players on each team have selected heroes
-  const titansPicked = newSelectedHeroes.filter(s => 
-    localPlayers.find(p => p.id === s.playerId)?.team === Team.Titans
-  ).length;
-  
-  const atlanteansPicked = newSelectedHeroes.filter(s => 
-    localPlayers.find(p => p.id === s.playerId)?.team === Team.Atlanteans
-  ).length;
-  
-  // Check if all players have selected heroes
-  if (titansPicked >= titansPlayers.length && atlanteansPicked >= atlanteansPlayers.length) {
-    isComplete = true;
-  }
-  
-  // Handle next team selection based on draft mode
-  if (draftingState.mode === DraftMode.Single || draftingState.mode === DraftMode.AllPick || draftingState.mode === DraftMode.Random) {
-    // UPDATED: Check if a team has all heroes picked
-    const titansComplete = titansPicked >= titansPlayers.length;
-    const atlanteansComplete = atlanteansPicked >= atlanteansPlayers.length;
+  const handleDraftHeroSelect = (hero: Hero, playerId: number) => {
+    // Save current state to history for undo
+    setDraftHistory(prev => [...prev, { ...draftingState }]);
     
-    if (titansComplete && !atlanteansComplete) {
-      // If Titans are complete but Atlanteans aren't, it's Atlanteans' turn
-      newCurrentTeam = Team.Atlanteans;
-    } else if (atlanteansComplete && !titansComplete) {
-      // If Atlanteans are complete but Titans aren't, it's Titans' turn
-      newCurrentTeam = Team.Titans;
-    } else {
-      // Otherwise, alternate as normal
-      newCurrentTeam = draftingState.currentTeam === Team.Titans ? Team.Atlanteans : Team.Titans;
-    }
-  } else if (draftingState.mode === DraftMode.PickAndBan) {
-    // For pick and ban, move to next step
-    newStep = draftingState.currentStep + 1;
+    playSound('heroSelect');
     
-    // Check if we've completed all steps
-    if (newStep >= draftingState.pickBanSequence.length) {
+    const player = localPlayers.find(p => p.id === playerId);
+    if (!player) return;
+    
+    // Update selected heroes
+    const newSelectedHeroes = [...draftingState.selectedHeroes, { playerId, hero }];
+    
+    // Update available heroes (remove selected hero)
+    const newAvailableHeroes = draftingState.availableHeroes.filter(h => h.id !== hero.id);
+    
+    // Update assigned heroes (remove this assignment if in Single mode)
+    const newAssignedHeroes = draftingState.mode === DraftMode.Single 
+      ? draftingState.assignedHeroes.map(assignment => {
+          if (assignment.playerId === playerId) {
+            return {
+              ...assignment,
+              heroOptions: [] // Clear options after selection
+            };
+          }
+          return assignment;
+        })
+      : draftingState.assignedHeroes;
+    
+    // Determine next team and completion status
+    let newCurrentTeam = draftingState.currentTeam;
+    let newStep = draftingState.currentStep;
+    let isComplete = false;
+    
+    // Get player counts for each team
+    const titansPlayers = localPlayers.filter(p => p.team === Team.Titans);
+    const atlanteansPlayers = localPlayers.filter(p => p.team === Team.Atlanteans);
+    
+    // Count how many players on each team have selected heroes
+    const titansPicked = newSelectedHeroes.filter(s => 
+      localPlayers.find(p => p.id === s.playerId)?.team === Team.Titans
+    ).length;
+    
+    const atlanteansPicked = newSelectedHeroes.filter(s => 
+      localPlayers.find(p => p.id === s.playerId)?.team === Team.Atlanteans
+    ).length;
+    
+    // Check if all players have selected heroes
+    if (titansPicked >= titansPlayers.length && atlanteansPicked >= atlanteansPlayers.length) {
       isComplete = true;
-    } else {
-      // UPDATED: Check if we need to skip a step because a team has all heroes
-      let skipStep = false;
+    }
+    
+    // Handle next team selection based on draft mode
+    if (draftingState.mode === DraftMode.Single || draftingState.mode === DraftMode.AllPick || draftingState.mode === DraftMode.Random) {
+      // UPDATED: Check if a team has all heroes picked
+      const titansComplete = titansPicked >= titansPlayers.length;
+      const atlanteansComplete = atlanteansPicked >= atlanteansPlayers.length;
       
-      do {
-        // Get the next step
-        const nextStep = draftingState.pickBanSequence[newStep];
+      if (titansComplete && !atlanteansComplete) {
+        // If Titans are complete but Atlanteans aren't, it's Atlanteans' turn
+        newCurrentTeam = Team.Atlanteans;
+      } else if (atlanteansComplete && !titansComplete) {
+        // If Atlanteans are complete but Titans aren't, it's Titans' turn
+        newCurrentTeam = Team.Titans;
+      } else {
+        // Otherwise, alternate as normal
+        newCurrentTeam = draftingState.currentTeam === Team.Titans ? Team.Atlanteans : Team.Titans;
+      }
+    } else if (draftingState.mode === DraftMode.PickAndBan) {
+      // For pick and ban, move to next step
+      newStep = draftingState.currentStep + 1;
+      
+      // Check if we've completed all steps
+      if (newStep >= draftingState.pickBanSequence.length) {
+        isComplete = true;
+      } else {
+        // UPDATED: Check if we need to skip a step because a team has all heroes
+        let skipStep = false;
         
-        // Only need to check for 'pick' actions (can't skip bans)
-        if (nextStep && nextStep.action === 'pick') {
-          // Determine which team corresponds to 'A' and 'B'
-          const teamAIsFirst = gameState.coinSide === Team.Titans;
-          const nextTeam = nextStep.team === 'A' 
-            ? (teamAIsFirst ? Team.Titans : Team.Atlanteans)
-            : (teamAIsFirst ? Team.Atlanteans : Team.Titans);
+        do {
+          // Get the next step
+          const nextStep = draftingState.pickBanSequence[newStep];
           
-          // Check if this team already has all heroes picked
-          const teamComplete = nextTeam === Team.Titans 
-            ? titansPicked >= titansPlayers.length
-            : atlanteansPicked >= atlanteansPlayers.length;
-          
-          // Skip this step if team is complete
-          if (teamComplete) {
-            skipStep = true;
-            newStep++;
+          // Only need to check for 'pick' actions (can't skip bans)
+          if (nextStep && nextStep.action === 'pick') {
+            // Determine which team corresponds to 'A' and 'B'
+            const teamAIsFirst = gameState.coinSide === Team.Titans;
+            const nextTeam = nextStep.team === 'A' 
+              ? (teamAIsFirst ? Team.Titans : Team.Atlanteans)
+              : (teamAIsFirst ? Team.Atlanteans : Team.Titans);
             
-            // If we've run out of steps, mark as complete
-            if (newStep >= draftingState.pickBanSequence.length) {
-              isComplete = true;
-              break;
+            // Check if this team already has all heroes picked
+            const teamComplete = nextTeam === Team.Titans 
+              ? titansPicked >= titansPlayers.length
+              : atlanteansPicked >= atlanteansPlayers.length;
+            
+            // Skip this step if team is complete
+            if (teamComplete) {
+              skipStep = true;
+              newStep++;
+              
+              // If we've run out of steps, mark as complete
+              if (newStep >= draftingState.pickBanSequence.length) {
+                isComplete = true;
+                break;
+              }
+            } else {
+              skipStep = false;
             }
           } else {
+            // Don't skip ban steps
             skipStep = false;
           }
-        } else {
-          // Don't skip ban steps
-          skipStep = false;
-        }
-      } while (skipStep && newStep < draftingState.pickBanSequence.length);
-      
-      // If we haven't completed all steps, determine the next team
-      if (!isComplete && newStep < draftingState.pickBanSequence.length) {
-        const nextTeamChar = draftingState.pickBanSequence[newStep].team;
-        const teamAIsFirst = gameState.coinSide === Team.Titans;
+        } while (skipStep && newStep < draftingState.pickBanSequence.length);
         
-        if (nextTeamChar === 'A') {
-          newCurrentTeam = teamAIsFirst ? Team.Titans : Team.Atlanteans;
-        } else {
-          newCurrentTeam = teamAIsFirst ? Team.Atlanteans : Team.Titans;
+        // If we haven't completed all steps, determine the next team
+        if (!isComplete && newStep < draftingState.pickBanSequence.length) {
+          const nextTeamChar = draftingState.pickBanSequence[newStep].team;
+          const teamAIsFirst = gameState.coinSide === Team.Titans;
+          
+          if (nextTeamChar === 'A') {
+            newCurrentTeam = teamAIsFirst ? Team.Titans : Team.Atlanteans;
+          } else {
+            newCurrentTeam = teamAIsFirst ? Team.Atlanteans : Team.Titans;
+          }
         }
       }
     }
-  }
-  
-  // Update drafting state
-  setDraftingState({
-    ...draftingState,
-    currentTeam: newCurrentTeam,
-    availableHeroes: newAvailableHeroes,
-    assignedHeroes: newAssignedHeroes,
-    selectedHeroes: newSelectedHeroes,
-    currentStep: newStep,
-    isComplete
-  });
-};
+    
+    // Update drafting state
+    setDraftingState({
+      ...draftingState,
+      currentTeam: newCurrentTeam,
+      availableHeroes: newAvailableHeroes,
+      assignedHeroes: newAssignedHeroes,
+      selectedHeroes: newSelectedHeroes,
+      currentStep: newStep,
+      isComplete
+    });
+  };
 
   // Handle hero ban in draft mode
   const handleDraftHeroBan = (hero: Hero) => {
     // Save current state to history for undo
     setDraftHistory(prev => [...prev, { ...draftingState }]);
+    
+    playSound('heroBan');
     
     if (draftingState.mode !== DraftMode.PickAndBan) return;
     
@@ -999,6 +1050,8 @@ const handleDraftHeroSelect = (hero: Hero, playerId: number) => {
   // NEW: Handle undo last draft action
   const handleUndoLastDraftAction = () => {
     if (draftHistory.length > 0) {
+      playSound('buttonClick');
+      
       // Get the last state from history
       const previousState = draftHistory[draftHistory.length - 1];
       
@@ -1112,19 +1165,21 @@ const handleDraftHeroSelect = (hero: Hero, playerId: number) => {
   // NEW: Handle reset draft
   const handleResetDraft = () => {
     // Ask for confirmation before resetting
+    playSound('buttonClick');
     
-      // Create a fresh initial state with the same draft mode
-      const freshState = createInitialStateForDraftMode(draftingState.mode);
-      
-      // Reset drafting state and history
-      setDraftingState(freshState);
-      setDraftHistory([]);
+    // Create a fresh initial state with the same draft mode
+    const freshState = createInitialStateForDraftMode(draftingState.mode);
     
+    // Reset drafting state and history
+    setDraftingState(freshState);
+    setDraftHistory([]);
   };
 
   // NEW: Handle back to draft selection
   const handleBackToDraftSelection = () => {
     // Return to draft mode selection without flipping the coin
+    playSound('buttonClick');
+    
     setIsDraftingMode(false);
     setShowDraftModeSelection(true);
     // Clear history
@@ -1144,6 +1199,8 @@ const handleDraftHeroSelect = (hero: Hero, playerId: number) => {
       }
       return player;
     });
+    
+    playSound('phaseChange');
     
     setLocalPlayers(updatedPlayers);
     players = updatedPlayers;
@@ -1190,10 +1247,14 @@ const handleDraftHeroSelect = (hero: Hero, playerId: number) => {
     setStrategyTimerActive(true);
     setStrategyTimeRemaining(strategyTime);
     setIsDraftingMode(false);
+    
+    playSound('turnStart');
   };
 
   // Cancel drafting and return to setup
   const cancelDrafting = () => {
+    playSound('buttonClick');
+    
     setIsDraftingMode(false);
     setShowDraftModeSelection(false);
   };
@@ -1202,6 +1263,8 @@ const handleDraftHeroSelect = (hero: Hero, playerId: number) => {
   const selectPlayer = (playerIndex: number) => {
     // Only allow selecting if we're not in the middle of a move and this player hasn't gone yet
     if (gameState.activeHeroIndex === -1 && !gameState.completedTurns.includes(playerIndex)) {
+      playSound('heroSelect');
+      
       dispatch({ type: 'SELECT_PLAYER', playerIndex });
       setMoveTimerActive(true);
       setMoveTimeRemaining(moveTime);
@@ -1211,6 +1274,8 @@ const handleDraftHeroSelect = (hero: Hero, playerId: number) => {
   // Mark a player's turn as complete
   const completePlayerTurn = () => {
     if (gameState.activeHeroIndex >= 0) {
+      playSound('turnComplete');
+      
       setMoveTimerActive(false);
       dispatch({ type: 'MARK_PLAYER_COMPLETE', playerIndex: gameState.activeHeroIndex });
     }
@@ -1218,6 +1283,8 @@ const handleDraftHeroSelect = (hero: Hero, playerId: number) => {
 
   // Start the next turn (after all players have moved)
   const startNextTurn = () => {
+    playSound('turnStart');
+    
     dispatch({ type: 'START_NEXT_TURN' });
     setStrategyTimerActive(true);
     setStrategyTimeRemaining(strategyTime);
@@ -1225,43 +1292,59 @@ const handleDraftHeroSelect = (hero: Hero, playerId: number) => {
 
   // End the strategy phase
   const endStrategyPhase = () => {
+    playSound('phaseChange');
+    
     setStrategyTimerActive(false);
     dispatch({ type: 'END_STRATEGY' });
   };
 
   // Adjust team life counter
   const adjustTeamLife = (team: Team, delta: number) => {
+    playSound('lifeChange');
+    
     dispatch({ type: 'ADJUST_TEAM_LIFE', team, delta });
   };
 
   // Increment wave counter for a specific lane
   const incrementWave = (lane: Lane) => {
+    playSound('buttonClick');
+    
     dispatch({ type: 'INCREMENT_WAVE', lane });
   };
   
   // Decrement wave counter for a specific lane
   const decrementWave = (lane: Lane) => {
+    playSound('buttonClick');
+    
     dispatch({ type: 'DECREMENT_WAVE', lane });
   };
   
   // Adjust round counter
   const adjustRound = (delta: number) => {
+    playSound('buttonClick');
+    
     dispatch({ type: 'ADJUST_ROUND', delta });
   };
   
   // Adjust turn counter
   const adjustTurn = (delta: number) => {
+    playSound('buttonClick');
+    
     dispatch({ type: 'ADJUST_TURN', delta });
   };
   
   // Declare victory for a team
   const declareVictory = (team: Team) => {
+    playSound('victory');
+    
     setVictorTeam(team);
     setShowVictoryScreen(true);
   };
   
   // Reset game to setup
   const resetToSetup = () => {
+    playSound('buttonClick');
+    
     setShowVictoryScreen(false);
     setVictorTeam(null);
     setGameStarted(false);
@@ -1272,6 +1355,8 @@ const handleDraftHeroSelect = (hero: Hero, playerId: number) => {
 
   // Flip the tiebreaker coin
   const flipCoin = () => {
+    playSound('coinFlip');
+    
     dispatch({ type: 'FLIP_COIN' });
   };
 
@@ -1281,15 +1366,27 @@ const handleDraftHeroSelect = (hero: Hero, playerId: number) => {
     
     if (strategyTimerActive && strategyTimeRemaining > 0) {
       timer = setTimeout(() => {
+        // Play warning sound at 10 seconds remaining
+        if (strategyTimeRemaining === 11) {
+          playSound('timerWarning');
+        }
+        
+        // Play tick sound every second if not muted
+        if (isAudioReady) {
+          playSound('timerTick');
+        }
+        
         setStrategyTimeRemaining(strategyTimeRemaining - 1);
       }, 1000);
     } else if (strategyTimerActive && strategyTimeRemaining === 0) {
+      playSound('timerComplete');
+      
       setStrategyTimerActive(false);
       endStrategyPhase();
     }
     
     return () => clearTimeout(timer);
-  }, [strategyTimerActive, strategyTimeRemaining]);
+  }, [strategyTimerActive, strategyTimeRemaining, playSound, isAudioReady]);
 
   // Handle move timer
   useEffect(() => {
@@ -1297,15 +1394,27 @@ const handleDraftHeroSelect = (hero: Hero, playerId: number) => {
     
     if (moveTimerActive && moveTimeRemaining > 0) {
       timer = setTimeout(() => {
+        // Play warning sound at 10 seconds remaining
+        if (moveTimeRemaining === 11) {
+          playSound('timerWarning');
+        }
+        
+        // Play tick sound every second if not muted
+        if (isAudioReady) {
+          playSound('timerTick');
+        }
+        
         setMoveTimeRemaining(moveTimeRemaining - 1);
       }, 1000);
     } else if (moveTimerActive && moveTimeRemaining === 0) {
+      playSound('timerComplete');
+      
       setMoveTimerActive(false);
       completePlayerTurn();
     }
     
     return () => clearTimeout(timer);
-  }, [moveTimerActive, moveTimeRemaining]);
+  }, [moveTimerActive, moveTimeRemaining, playSound, isAudioReady]);
 
   // Utility function to shuffle an array
   const shuffleArray = <T extends unknown>(array: T[]): T[] => {
@@ -1334,6 +1443,9 @@ const handleDraftHeroSelect = (hero: Hero, playerId: number) => {
 
   return (
     <div className="App min-h-screen bg-gradient-to-b from-blue-400 to-orange-300 text-white p-6">
+      {/* Add AudioInitializer at the top level */}
+      <AudioInitializer />
+      
       <header className="App-header mb-8">
         <h1 className="text-3xl font-bold mb-2">Guards of Atlantis II Timer</h1>
       </header>
@@ -1416,7 +1528,7 @@ const handleDraftHeroSelect = (hero: Hero, playerId: number) => {
           strategyTimeRemaining={strategyTimeRemaining}
           moveTimeRemaining={moveTimeRemaining}
           strategyTimerEnabled={strategyTimerEnabled}
-moveTimerEnabled={moveTimerEnabled}
+          moveTimerEnabled={moveTimerEnabled}
           strategyTimerActive={strategyTimerActive}
           moveTimerActive={moveTimerActive}
           onStartStrategyTimer={() => setStrategyTimerActive(true)}
@@ -1445,9 +1557,21 @@ moveTimerEnabled={moveTimerEnabled}
         />
       )}
 
-      {/* Replace static footer with CollapsibleFeedback */}
+      {/* CollapsibleFeedback component */}
       <CollapsibleFeedback feedbackUrl="https://forms.gle/dsjjDSbqhTn3hATt6" />
+      
+      {/* Sound toggle component */}
+      <SoundToggle />
     </div>
+  );
+}
+
+// Main App component wrapped with SoundProvider
+function App() {
+  return (
+    <SoundProvider>
+      <AppContent />
+    </SoundProvider>
   );
 }
 

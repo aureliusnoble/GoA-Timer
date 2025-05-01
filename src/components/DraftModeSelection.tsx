@@ -2,6 +2,7 @@
 import React from 'react';
 import { DraftMode, Team } from '../types';
 import { AlertCircle } from 'lucide-react';
+import { useSound } from '../context/SoundContext';
 
 interface DraftModeSelectionProps {
   onSelectMode: (mode: DraftMode) => void;
@@ -23,6 +24,8 @@ const DraftModeSelection: React.FC<DraftModeSelectionProps> = ({
   heroCount,
   handicapTeam
 }) => {
+  const { playSound } = useSound();
+  
   // Descriptions for each draft mode
   const modeDescriptions = {
     [DraftMode.AllPick]: 
@@ -49,6 +52,20 @@ const DraftModeSelection: React.FC<DraftModeSelectionProps> = ({
     [DraftMode.Single]: "Forces players to try new heroes",
     [DraftMode.Random]: "Good for balanced hero selection",
     [DraftMode.PickAndBan]: "Best for competitive play"
+  };
+  
+  // Handle mode selection with sound
+  const handleSelectMode = (mode: DraftMode) => {
+    if (availableDraftModes[mode]) {
+      playSound('buttonClick');
+      onSelectMode(mode);
+    }
+  };
+  
+  // Handle cancel button with sound
+  const handleCancel = () => {
+    playSound('buttonClick');
+    onCancel();
   };
 
   return (
@@ -79,7 +96,7 @@ const DraftModeSelection: React.FC<DraftModeSelectionProps> = ({
               ? 'bg-gray-700 hover:bg-gray-600 cursor-pointer' 
               : 'bg-gray-800 opacity-50 cursor-not-allowed'
           } p-5 rounded-lg transition-colors`}
-          onClick={() => availableDraftModes[DraftMode.AllPick] && onSelectMode(DraftMode.AllPick)}
+          onClick={() => handleSelectMode(DraftMode.AllPick)}
         >
           <h3 className="text-xl font-semibold mb-3">All Pick</h3>
           <p className="text-gray-300 mb-4">{modeDescriptions[DraftMode.AllPick]}</p>
@@ -102,7 +119,7 @@ const DraftModeSelection: React.FC<DraftModeSelectionProps> = ({
               ? 'bg-gray-700 hover:bg-gray-600 cursor-pointer' 
               : 'bg-gray-800 opacity-50 cursor-not-allowed'
           } p-5 rounded-lg transition-colors`}
-          onClick={() => availableDraftModes[DraftMode.Single] && onSelectMode(DraftMode.Single)}
+          onClick={() => handleSelectMode(DraftMode.Single)}
         >
           <h3 className="text-xl font-semibold mb-3">Single Draft</h3>
           <p className="text-gray-300 mb-4">{modeDescriptions[DraftMode.Single]}</p>
@@ -125,7 +142,7 @@ const DraftModeSelection: React.FC<DraftModeSelectionProps> = ({
               ? 'bg-gray-700 hover:bg-gray-600 cursor-pointer' 
               : 'bg-gray-800 opacity-50 cursor-not-allowed'
           } p-5 rounded-lg transition-colors`}
-          onClick={() => availableDraftModes[DraftMode.Random] && onSelectMode(DraftMode.Random)}
+          onClick={() => handleSelectMode(DraftMode.Random)}
         >
           <h3 className="text-xl font-semibold mb-3">Random Draft</h3>
           <p className="text-gray-300 mb-4">{modeDescriptions[DraftMode.Random]}</p>
@@ -148,7 +165,7 @@ const DraftModeSelection: React.FC<DraftModeSelectionProps> = ({
               ? 'bg-gray-700 hover:bg-gray-600 cursor-pointer' 
               : 'bg-gray-800 opacity-50 cursor-not-allowed'
           } p-5 rounded-lg transition-colors`}
-          onClick={() => availableDraftModes[DraftMode.PickAndBan] && onSelectMode(DraftMode.PickAndBan)}
+          onClick={() => handleSelectMode(DraftMode.PickAndBan)}
         >
           <h3 className="text-xl font-semibold mb-3">Pick and Ban</h3>
           <p className="text-gray-300 mb-4">{modeDescriptions[DraftMode.PickAndBan]}</p>
@@ -172,7 +189,7 @@ const DraftModeSelection: React.FC<DraftModeSelectionProps> = ({
         
         <button 
           className="px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg"
-          onClick={onCancel}
+          onClick={handleCancel}
         >
           Cancel
         </button>

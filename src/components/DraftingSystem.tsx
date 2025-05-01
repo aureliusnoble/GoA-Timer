@@ -1,4 +1,4 @@
-// src/components/DraftingSystem.tsx
+// src/components/DraftingSystem.tsx with sound implementation
 import React, { useState, useRef } from 'react';
 import { Hero, Player, Team, DraftMode, DraftingState } from '../types';
 import { X, User, Play, RotateCcw, RefreshCw, ArrowLeft } from 'lucide-react';
@@ -6,6 +6,7 @@ import HeroRoleExplanation from './HeroRoleExplanation';
 import { useDevice } from '../hooks/useDevice';
 import EnhancedTooltip from './common/EnhancedTooltip';
 import HeroInfoDisplay from './common/HeroInfoDisplay';
+import { useSound } from '../context/SoundContext';
 
 interface DraftingSystemProps {
   players: Player[];
@@ -34,6 +35,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
   canUndo
 }) => {
   const { isMobile } = useDevice();
+  const { playSound } = useSound();
   const [hoveredHero, setHoveredHero] = useState<Hero | null>(null);
   const [heroInfoVisible, setHeroInfoVisible] = useState<boolean>(false);
   // State to track card position
@@ -97,9 +99,52 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
     });
   };
   
+  // Button click handlers with sound
+  const handleButtonClick = () => {
+    playSound('buttonClick');
+  };
+  
+  const handleHeroSelect = (hero: Hero, playerId: number) => {
+    playSound('heroSelect');
+    onHeroSelect(hero, playerId);
+  };
+  
+  const handleHeroBan = (hero: Hero) => {
+    playSound('heroBan');
+    onHeroBan(hero);
+  };
+  
+  const handleFinishDrafting = () => {
+    playSound('phaseChange');
+    onFinishDrafting();
+  };
+  
+  const handleCancelDrafting = () => {
+    playSound('buttonClick');
+    onCancelDrafting();
+  };
+  
+  const handleUndoLastAction = () => {
+    if (canUndo) {
+      playSound('buttonClick');
+      onUndoLastAction();
+    }
+  };
+  
+  const handleResetDraft = () => {
+    playSound('buttonClick');
+    onResetDraft();
+  };
+  
+  const handleBackToDraftSelection = () => {
+    playSound('buttonClick');
+    onBackToDraftSelection();
+  };
+  
   // Show hero info on mobile
   const handleHeroInfoClick = (hero: Hero) => {
     if (isMobile && !allPlayersHaveSelectedHeroes) {
+      playSound('buttonClick');
       setHoveredHero(hero);
       setHeroInfoVisible(true);
     }
@@ -107,6 +152,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
   
   // Hide hero info on mobile
   const handleCloseHeroInfo = () => {
+    playSound('buttonClick');
     setHeroInfoVisible(false);
   };
   
@@ -233,7 +279,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                 className="w-full px-3 py-2 bg-red-700 hover:bg-red-600 rounded text-sm flex items-center justify-center"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onHeroBan(hero);
+                  handleHeroBan(hero);
                 }}
               >
                 Ban Hero
@@ -249,7 +295,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                     className="w-full px-3 py-2 bg-green-700 hover:bg-green-600 rounded text-sm flex items-center justify-center"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onHeroSelect(hero, player.id);
+                      handleHeroSelect(hero, player.id);
                     }}
                   >
                     <span className="mr-1">Pick for</span>
@@ -272,7 +318,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                     className="w-full px-3 py-2 bg-green-700 hover:bg-green-600 rounded text-sm flex items-center justify-center"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onHeroSelect(hero, player.id);
+                      handleHeroSelect(hero, player.id);
                     }}
                   >
                     <span className="mr-1">Pick for</span>
@@ -295,7 +341,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                     className="w-full px-3 py-2 bg-green-700 hover:bg-green-600 rounded text-sm flex items-center justify-center"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onHeroSelect(hero, player.id);
+                      handleHeroSelect(hero, player.id);
                     }}
                   >
                     <span className="mr-1">Pick for</span>
@@ -319,7 +365,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                 )?.playerId;
                 
                 if (playerId) {
-                  onHeroSelect(hero, playerId);
+                  handleHeroSelect(hero, playerId);
                 }
               }}
             >
@@ -470,7 +516,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                           onClick={(e) => {
                             if (draftingState.currentTeam === Team.Titans && !hasSelected && !allPlayersHaveSelectedHeroes) {
                               e.stopPropagation();
-                              onHeroSelect(hero, player.id);
+                              handleHeroSelect(hero, player.id);
                             } else {
                               handleHeroInfoClick(hero);
                             }
@@ -514,7 +560,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                               className="w-full mt-2 px-3 py-2 bg-blue-700 hover:bg-blue-600 rounded text-sm"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onHeroSelect(hero, player.id);
+                                handleHeroSelect(hero, player.id);
                               }}
                             >
                               Select This Hero
@@ -581,7 +627,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                           onClick={(e) => {
                             if (draftingState.currentTeam === Team.Atlanteans && !hasSelected && !allPlayersHaveSelectedHeroes) {
                               e.stopPropagation();
-                              onHeroSelect(hero, player.id);
+                              handleHeroSelect(hero, player.id);
                             } else {
                               handleHeroInfoClick(hero);
                             }
@@ -625,7 +671,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                               className="w-full mt-2 px-3 py-2 bg-red-700 hover:bg-red-600 rounded text-sm"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onHeroSelect(hero, player.id);
+                                handleHeroSelect(hero, player.id);
                               }}
                             >
                               Select This Hero
@@ -736,7 +782,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                       className="w-full px-3 py-2 rounded text-sm bg-green-600 hover:bg-green-500 flex items-center justify-center"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onHeroSelect(hero, player.id);
+                        handleHeroSelect(hero, player.id);
                       }}
                     >
                       <span className="mr-1">Pick for</span>
@@ -872,7 +918,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                       className="w-full px-3 py-2 bg-red-600 hover:bg-red-500 rounded text-sm flex items-center justify-center"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onHeroBan(hero);
+                        handleHeroBan(hero);
                       }}
                     >
                       Ban Hero
@@ -887,7 +933,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                           className="w-full px-3 py-2 bg-green-600 hover:bg-green-500 rounded text-sm flex items-center justify-center"
                           onClick={(e) => {
                             e.stopPropagation();
-                            onHeroSelect(hero, player.id);
+                            handleHeroSelect(hero, player.id);
                           }}
                         >
                           <span className="mr-1">Pick for</span>
@@ -990,7 +1036,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
             <EnhancedTooltip text="Undo the last hero selection">
               <button 
                 className={`px-3 py-2 ${canUndo ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-800 opacity-50 cursor-not-allowed'} rounded-lg flex items-center`}
-                onClick={onUndoLastAction}
+                onClick={handleUndoLastAction}
                 disabled={!canUndo}
               >
                 <RotateCcw size={16} className="mr-1 sm:mr-2" /> 
@@ -1002,7 +1048,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
             <EnhancedTooltip text="Reset all selections and restart with the same draft mode">
               <button 
                 className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center"
-                onClick={onResetDraft}
+                onClick={handleResetDraft}
               >
                 <RefreshCw size={16} className="mr-1 sm:mr-2" /> 
                 <span className="hidden sm:inline">Reset</span>
@@ -1013,7 +1059,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
             <EnhancedTooltip text="Go back to draft mode selection without rerolling tiebreaker">
               <button 
                 className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center"
-                onClick={onBackToDraftSelection}
+                onClick={handleBackToDraftSelection}
               >
                 <ArrowLeft size={16} className="mr-1 sm:mr-2" /> 
                 <span className="hidden sm:inline">Back</span>
@@ -1024,7 +1070,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
             <EnhancedTooltip text="Return to game setup screen">
               <button 
                 className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center"
-                onClick={onCancelDrafting}
+                onClick={handleCancelDrafting}
               >
                 <X size={16} className="mr-1 sm:mr-2" /> 
                 <span className="hidden sm:inline">Cancel</span>
@@ -1035,7 +1081,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
               <EnhancedTooltip text="Finish drafting and start the game">
                 <button 
                   className="px-3 py-2 bg-green-700 hover:bg-green-600 rounded-lg flex items-center"
-                  onClick={onFinishDrafting}
+                  onClick={handleFinishDrafting}
                 >
                   <Play size={16} className="mr-1 sm:mr-2" /> 
                   <span className="hidden sm:inline">Start Game</span>

@@ -91,7 +91,8 @@ This app has not been officially approved by Wolff Designa (the designers of Gua
 
 # To-do
 
-- Sound cues. Sound effects. Warning flash for last 5 seconds of timer.
 - End of Round Assistant. Can optionally record Level: Amount of Gold; Kills; Asssists; Minion Kills
 - If we logged level, amount of gold, kills, assists at end of round, we can display on the hero cards.
 - Game State Import/Export
+- coin shine broken again
+- sound toggle button weird

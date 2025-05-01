@@ -1,6 +1,7 @@
 // src/components/CoinToss.tsx
 import React, { useState, useEffect } from 'react';
 import { Team } from '../types';
+import { useSound } from '../context/SoundContext';
 
 interface CoinTossProps {
   result: Team;
@@ -10,18 +11,29 @@ interface CoinTossProps {
 const CoinToss: React.FC<CoinTossProps> = ({ result, onComplete }) => {
   const [isFlipping, setIsFlipping] = useState(false);
   const [showButton, setShowButton] = useState(false);
+  const { playSound } = useSound();
   
   useEffect(() => {
     // Start the coin flip animation
     setIsFlipping(true);
     
+    // Play coin flip sound when component mounts
+    playSound('coinFlip');
+    
     // After animation completes, show the continue button
     const timer = setTimeout(() => {
       setShowButton(true);
+      // Play a sound when the button appears
+      playSound('buttonClick');
     }, 3000); // Match this to the animation duration in CSS
     
     return () => clearTimeout(timer);
   }, []);
+  
+  const handleContinue = () => {
+    playSound('buttonClick');
+    onComplete();
+  };
   
   return (
     <div className="fixed top-0 left-0 w-full h-full bg-black/80 flex flex-col items-center justify-center z-50">
@@ -47,7 +59,7 @@ const CoinToss: React.FC<CoinTossProps> = ({ result, onComplete }) => {
         
         <button 
           className={`continue-button ${showButton ? 'visible' : ''}`}
-          onClick={onComplete}
+          onClick={handleContinue}
         >
           Continue to Draft
         </button>
@@ -79,6 +91,10 @@ const CoinToss: React.FC<CoinTossProps> = ({ result, onComplete }) => {
           60% { transform: rotateY(540deg) rotateX(10deg); }
           80% { transform: rotateY(720deg) rotateX(-10deg); }
           100% { transform: rotateY(180deg) rotateX(10deg); } /* End on Atlanteans side (tails) */
+        }
+        
+        .coin-shine {
+          animation: coinShine 4s ease-in-out infinite;
         }
       `}</style>
     </div>

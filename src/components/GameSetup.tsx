@@ -5,6 +5,7 @@ import TimerInput from './TimerInput';
 import PlayerNameInput from './PlayerNameInput';
 import { Info, Clock, Infinity } from 'lucide-react';
 import EnhancedTooltip from './common/EnhancedTooltip';
+import { useSound } from '../context/SoundContext';
 
 interface GameSetupProps {
   strategyTime: number;
@@ -63,6 +64,8 @@ const GameSetup: React.FC<GameSetupProps> = ({
   useDoubleLaneFor6Players,
   onUseDoubleLaneFor6PlayersChange
 }) => {
+  const { playSound } = useSound();
+
   const [expandedSection, setExpandedSection] = useState<{[key: string]: boolean}>({
     'timers': true,
     'game-length': true,
@@ -121,6 +124,58 @@ const GameSetup: React.FC<GameSetupProps> = ({
   // Requirements for drafting
   const canDraft = isTeamsBalanced && allPlayersHaveNames && hasUniqueNames && canStartDrafting;
 
+  // Function handlers with sound effects
+  const handleToggleSection = (section: string) => {
+    playSound('buttonClick');
+    setExpandedSection({...expandedSection, [section]: !expandedSection[section]});
+  };
+
+  const handleAddPlayer = (team: Team) => {
+    if (canAddMorePlayers && (team === Team.Titans ? canAddMoreTitans : canAddMoreAtlanteans)) {
+      playSound('buttonClick');
+      onAddPlayer(team);
+    }
+  };
+
+  const handleTimerToggle = (isStrategy: boolean) => {
+    playSound('toggleSwitch');
+    if (isStrategy) {
+      onStrategyTimerEnabledChange(!strategyTimerEnabled);
+    } else {
+      onMoveTimerEnabledChange(!moveTimerEnabled);
+    }
+  };
+
+  const handleGameLengthChange = (length: GameLength) => {
+    if (length === GameLength.Quick && !isQuickGameAvailable) {
+      return;
+    }
+    playSound('buttonClick');
+    onGameLengthChange(length);
+  };
+
+  const handleToggleExpansion = (expansion: string) => {
+    playSound('toggleSwitch');
+    onToggleExpansion(expansion);
+  };
+
+  const handleComplexityChange = (complexity: number) => {
+    playSound('buttonClick');
+    onMaxComplexityChange(complexity);
+  };
+
+  const handleDoubleLaneToggle = () => {
+    playSound('toggleSwitch');
+    onUseDoubleLaneFor6PlayersChange(!useDoubleLaneFor6Players);
+  };
+
+  const handleDraftHeroes = () => {
+    if (canDraft) {
+      playSound('buttonClick');
+      onDraftHeroes();
+    }
+  };
+
   return (
     <div className="bg-gray-800 rounded-lg p-4 sm:p-6 mb-8">
       <h2 className="text-2xl font-bold mb-4">Game Setup</h2>
@@ -129,7 +184,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
         {/* Timer Settings Column */}
         <div>
           <h3 className="text-xl mb-3 cursor-pointer flex items-center" 
-              onClick={() => setExpandedSection({...expandedSection, 'timers': !expandedSection['timers']})}>
+              onClick={() => handleToggleSection('timers')}>
             <span className="mr-2">{expandedSection['timers'] ? '▼' : '▶'}</span>
             Timer Settings
           </h3>
@@ -148,7 +203,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                         className={`w-12 h-6 rounded-full flex items-center p-1 cursor-pointer transition-colors ${
                           strategyTimerEnabled ? 'bg-green-600 justify-end' : 'bg-gray-600 justify-start'
                         }`}
-                        onClick={() => onStrategyTimerEnabledChange(!strategyTimerEnabled)}
+                        onClick={() => handleTimerToggle(true)}
                       >
                         <div className="bg-white w-4 h-4 rounded-full"></div>
                       </div>
@@ -184,7 +239,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                         className={`w-12 h-6 rounded-full flex items-center p-1 cursor-pointer transition-colors ${
                           moveTimerEnabled ? 'bg-green-600 justify-end' : 'bg-gray-600 justify-start'
                         }`}
-                        onClick={() => onMoveTimerEnabledChange(!moveTimerEnabled)}
+                        onClick={() => handleTimerToggle(false)}
                       >
                         <div className="bg-white w-4 h-4 rounded-full"></div>
                       </div>
@@ -214,7 +269,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
         {/* Game Length Column */}
         <div>
           <h3 className="text-xl mb-3 cursor-pointer flex items-center"
-              onClick={() => setExpandedSection({...expandedSection, 'game-length': !expandedSection['game-length']})}>
+              onClick={() => handleToggleSection('game-length')}>
             <span className="mr-2">{expandedSection['game-length'] ? '▼' : '▶'}</span>
             Game Length
           </h3>
@@ -228,7 +283,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                     name="gameLength"
                     value={GameLength.Quick}
                     checked={gameLength === GameLength.Quick}
-                    onChange={() => onGameLengthChange(GameLength.Quick)}
+                    onChange={() => handleGameLengthChange(GameLength.Quick)}
                     disabled={!isQuickGameAvailable}
                     className="form-radio h-5 w-5 text-blue-600"
                   />
@@ -244,7 +299,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                     name="gameLength"
                     value={GameLength.Long}
                     checked={gameLength === GameLength.Long}
-                    onChange={() => onGameLengthChange(GameLength.Long)}
+                    onChange={() => handleGameLengthChange(GameLength.Long)}
                     className="form-radio h-5 w-5 text-blue-600"
                   />
                   <span className="ml-2">Long</span>
@@ -258,7 +313,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                     <input
                       type="checkbox"
                       checked={useDoubleLaneFor6Players}
-                      onChange={() => onUseDoubleLaneFor6PlayersChange(!useDoubleLaneFor6Players)}
+                      onChange={handleDoubleLaneToggle}
                       className="form-checkbox h-5 w-5 text-blue-600 mr-2"
                     />
                     <span className="font-medium">Use Double Lane Map</span>
@@ -309,7 +364,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
         {/* Max Complexity Column */}
         <div>
           <h3 className="text-xl mb-3 cursor-pointer flex items-center"
-              onClick={() => setExpandedSection({...expandedSection, 'complexity': !expandedSection['complexity']})}>
+              onClick={() => handleToggleSection('complexity')}>
             <span className="mr-2">{expandedSection['complexity'] ? '▼' : '▶'}</span>
             Max Complexity
           </h3>
@@ -324,7 +379,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                       name="complexity"
                       value={level}
                       checked={maxComplexity === level}
-                      onChange={() => onMaxComplexityChange(level)}
+                      onChange={() => handleComplexityChange(level)}
                       className="form-radio h-5 w-5 text-blue-600"
                     />
                     <span className="ml-2">
@@ -340,7 +395,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
         {/* Players Column */}
         <div>
           <h3 className="text-xl mb-3 cursor-pointer flex items-center"
-              onClick={() => setExpandedSection({...expandedSection, 'players': !expandedSection['players']})}>
+              onClick={() => handleToggleSection('players')}>
             <span className="mr-2">{expandedSection['players'] ? '▼' : '▶'}</span>
             Players
           </h3>
@@ -356,7 +411,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                         ? 'bg-blue-700 hover:bg-blue-600' 
                         : 'bg-gray-600 cursor-not-allowed'
                     }`}
-                    onClick={() => canAddMorePlayers && canAddMoreTitans && onAddPlayer(Team.Titans)}
+                    onClick={() => handleAddPlayer(Team.Titans)}
                     disabled={!canAddMorePlayers || !canAddMoreTitans}
                   >
                     Add Player
@@ -371,7 +426,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                         ? 'bg-red-700 hover:bg-red-600' 
                         : 'bg-gray-600 cursor-not-allowed'
                     }`}
-                    onClick={() => canAddMorePlayers && canAddMoreAtlanteans && onAddPlayer(Team.Atlanteans)}
+                    onClick={() => handleAddPlayer(Team.Atlanteans)}
                     disabled={!canAddMorePlayers || !canAddMoreAtlanteans}
                   >
                     Add Player
@@ -457,7 +512,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
       {/* Expansions Section */}
       <div className="mb-8">
         <h3 className="text-xl mb-3 cursor-pointer flex items-center"
-            onClick={() => setExpandedSection({...expandedSection, 'expansions': !expandedSection['expansions']})}>
+            onClick={() => handleToggleSection('expansions')}>
           <span className="mr-2">{expandedSection['expansions'] ? '▼' : '▶'}</span>
           Expansions
         </h3>
@@ -470,7 +525,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                   <input
                     type="checkbox"
                     checked={selectedExpansions.includes(expansion)}
-                    onChange={() => onToggleExpansion(expansion)}
+                    onChange={() => handleToggleExpansion(expansion)}
                     className="mr-2 h-5 w-5"
                   />
                   <span>{expansion}</span>
@@ -485,7 +540,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
       {players.length > 0 && (
         <div className="mb-8">
           <h3 className="text-xl mb-3 cursor-pointer flex items-center"
-              onClick={() => setExpandedSection({...expandedSection, 'names': !expandedSection['names']})}>
+              onClick={() => handleToggleSection('names')}>
             <span className="mr-2">{expandedSection['names'] ? '▼' : '▶'}</span>
             Player Names
           </h3>
@@ -501,7 +556,10 @@ const GameSetup: React.FC<GameSetupProps> = ({
                     key={player.id}
                     player={player}
                     onNameChange={(name) => onPlayerNameChange(player.id, name)}
-                    onRemove={() => onRemovePlayer(player.id)}
+                    onRemove={() => {
+                      playSound('buttonClick');
+                      onRemovePlayer(player.id);
+                    }}
                     isDuplicate={isDuplicate}
                   />
                 );
@@ -520,7 +578,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
           ? 'bg-blue-600 hover:bg-blue-500'
           : 'bg-gray-600 cursor-not-allowed'
       }`}
-      onClick={onDraftHeroes}
+      onClick={handleDraftHeroes}
       disabled={!canDraft}
     >
       Draft Heroes
@@ -552,7 +610,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
   </div>
 </div>
       
-      <p className="mt-4 text-xs text-gray-300 text-center mb-2">
+      <p className="mt-4 text-xs text-gray-300 text-center translate-y-5">
         Disclaimer: This is not an official product and has not been approved by Wolff Designa. All game content is the property of Wolff Designa.
       </p>
     </div>

@@ -1,8 +1,9 @@
 // src/components/GameTimer.tsx
-import React from 'react';
+import React, { useEffect } from 'react';
 import { GameState, Player, Team, Lane } from '../types';
 import { Clock, Plus, Minus, Check, RotateCcw, Award, Infinity } from 'lucide-react';
 import EnhancedTooltip from './common/EnhancedTooltip';
+import { useSound } from '../context/SoundContext';
 
 interface GameTimerProps {
   gameState: GameState;
@@ -57,6 +58,8 @@ const GameTimer: React.FC<GameTimerProps> = ({
   strategyTimerEnabled,
   moveTimerEnabled
 }) => {
+  const { playSound } = useSound();
+  
   const formatTime = (seconds: number): string => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
@@ -66,6 +69,90 @@ const GameTimer: React.FC<GameTimerProps> = ({
   const activePlayer = gameState.activeHeroIndex >= 0 
     ? players[gameState.activeHeroIndex] 
     : null;
+  
+  // Play warning sounds for low time
+  useEffect(() => {
+    if (strategyTimerActive && strategyTimerEnabled) {
+      // Play warning at 10 seconds
+      if (strategyTimeRemaining === 10) {
+        playSound('timerWarning');
+      }
+      
+      // Play tick sound every second if time is > 0
+      if (strategyTimeRemaining > 0) {
+        playSound('timerTick');
+      }
+    }
+  }, [strategyTimeRemaining, strategyTimerActive, strategyTimerEnabled, playSound]);
+  
+  useEffect(() => {
+    if (moveTimerActive && moveTimerEnabled) {
+      // Play warning at 10 seconds
+      if (moveTimeRemaining === 10) {
+        playSound('timerWarning');
+      }
+      
+      // Play tick sound every second if time is > 0
+      if (moveTimeRemaining > 0) {
+        playSound('timerTick');
+      }
+    }
+  }, [moveTimeRemaining, moveTimerActive, moveTimerEnabled, playSound]);
+
+  // Button click handlers with sound
+  const handleButtonClick = () => {
+    playSound('buttonClick');
+  };
+  
+  const handleStartStrategyTimer = () => {
+    playSound('buttonClick');
+    onStartStrategyTimer();
+  };
+  
+  const handlePauseStrategyTimer = () => {
+    playSound('buttonClick');
+    onPauseStrategyTimer();
+  };
+  
+  const handleEndStrategyPhase = () => {
+    playSound('phaseChange');
+    onEndStrategyPhase();
+  };
+  
+  const handleStartMoveTimer = () => {
+    playSound('buttonClick');
+    onStartMoveTimer();
+  };
+  
+  const handlePauseMoveTimer = () => {
+    playSound('buttonClick');
+    onPauseMoveTimer();
+  };
+  
+  const handleCompletePlayerTurn = () => {
+    playSound('turnComplete');
+    onCompletePlayerTurn();
+  };
+  
+  const handleStartNextTurn = () => {
+    playSound('turnStart');
+    onStartNextTurn();
+  };
+  
+  const handleDeclareVictory = (team: Team) => {
+    playSound('victory');
+    onDeclareVictory(team);
+  };
+  
+  const handleFlipCoin = () => {
+    playSound('coinFlip');
+    onFlipCoin();
+  };
+  
+  const handleAdjustTeamLife = (team: Team, delta: number) => {
+    playSound('lifeChange');
+    onAdjustTeamLife(team, delta);
+  };
 
   return (
     <div className="game-timer">
@@ -76,14 +163,14 @@ const GameTimer: React.FC<GameTimerProps> = ({
           <div className="flex justify-center items-center gap-4">
             <button 
               className="bg-blue-700 hover:bg-blue-600 rounded-full w-10 h-10 flex items-center justify-center text-2xl font-bold"
-              onClick={() => onAdjustTeamLife(Team.Titans, -1)}
+              onClick={() => handleAdjustTeamLife(Team.Titans, -1)}
             >
               -
             </button>
             <span className="text-4xl font-bold">{gameState.teamLives[Team.Titans]}</span>
             <button 
               className="bg-blue-700 hover:bg-blue-600 rounded-full w-10 h-10 flex items-center justify-center text-2xl font-bold"
-              onClick={() => onAdjustTeamLife(Team.Titans, 1)}
+              onClick={() => handleAdjustTeamLife(Team.Titans, 1)}
             >
               +
             </button>
@@ -92,7 +179,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
           {/* New: Titans Victory Button */}
           <button
             className="mt-4 w-full bg-blue-700 hover:bg-blue-600 rounded-lg py-2 px-4 flex items-center justify-center"
-            onClick={() => onDeclareVictory(Team.Titans)}
+            onClick={() => handleDeclareVictory(Team.Titans)}
           >
             <Award size={18} className="mr-2" />
             <span>Declare Titan Victory</span>
@@ -108,14 +195,20 @@ const GameTimer: React.FC<GameTimerProps> = ({
               <div className="flex items-center">
                 <button 
                   className="bg-gray-700 hover:bg-gray-600 rounded-full w-7 h-7 flex items-center justify-center mr-2"
-                  onClick={() => onAdjustRound(-1)}
+                  onClick={() => {
+                    handleButtonClick();
+                    onAdjustRound(-1);
+                  }}
                 >
                   <Minus size={14} />
                 </button>
                 <div className="text-2xl font-bold">{gameState.round}</div>
                 <button 
                   className="bg-gray-700 hover:bg-gray-600 rounded-full w-7 h-7 flex items-center justify-center ml-2"
-                  onClick={() => onAdjustRound(1)}
+                  onClick={() => {
+                    handleButtonClick();
+                    onAdjustRound(1);
+                  }}
                 >
                   <Plus size={14} />
                 </button>
@@ -128,14 +221,20 @@ const GameTimer: React.FC<GameTimerProps> = ({
               <div className="flex items-center">
                 <button 
                   className="bg-gray-700 hover:bg-gray-600 rounded-full w-7 h-7 flex items-center justify-center mr-2"
-                  onClick={() => onAdjustTurn(-1)}
+                  onClick={() => {
+                    handleButtonClick();
+                    onAdjustTurn(-1);
+                  }}
                 >
                   <Minus size={14} />
                 </button>
                 <div className="text-2xl font-bold">{gameState.turn}/4</div>
                 <button 
                   className="bg-gray-700 hover:bg-gray-600 rounded-full w-7 h-7 flex items-center justify-center ml-2"
-                  onClick={() => onAdjustTurn(1)}
+                  onClick={() => {
+                    handleButtonClick();
+                    onAdjustTurn(1);
+                  }}
                 >
                   <Plus size={14} />
                 </button>
@@ -149,7 +248,10 @@ const GameTimer: React.FC<GameTimerProps> = ({
                 <div className="flex items-center">
                   <button 
                     className="bg-gray-700 hover:bg-gray-600 rounded-full w-7 h-7 flex items-center justify-center mr-2"
-                    onClick={() => onDecrementWave(Lane.Single)}
+                    onClick={() => {
+                      handleButtonClick();
+                      onDecrementWave(Lane.Single);
+                    }}
                     disabled={
                       !gameState.waves[Lane.Single] || 
                       gameState.waves[Lane.Single].currentWave <= 1
@@ -162,7 +264,10 @@ const GameTimer: React.FC<GameTimerProps> = ({
                   </div>
                   <button 
                     className="bg-gray-700 hover:bg-gray-600 rounded-full w-7 h-7 flex items-center justify-center ml-2"
-                    onClick={() => onIncrementWave(Lane.Single)}
+                    onClick={() => {
+                      handleButtonClick();
+                      onIncrementWave(Lane.Single);
+                    }}
                     disabled={
                       !gameState.waves[Lane.Single] || 
                       gameState.waves[Lane.Single].currentWave >= gameState.waves[Lane.Single].totalWaves
@@ -194,7 +299,10 @@ const GameTimer: React.FC<GameTimerProps> = ({
                   <div className="flex items-center justify-center mt-1">
                     <button 
                       className="bg-gray-600 hover:bg-gray-500 rounded-full w-6 h-6 flex items-center justify-center mr-2"
-                      onClick={() => onDecrementWave(Lane.Top)}
+                      onClick={() => {
+                        handleButtonClick();
+                        onDecrementWave(Lane.Top);
+                      }}
                       disabled={
                         !gameState.waves[Lane.Top] || 
                         gameState.waves[Lane.Top].currentWave <= 1
@@ -207,7 +315,10 @@ const GameTimer: React.FC<GameTimerProps> = ({
                     </div>
                     <button 
                       className="bg-gray-600 hover:bg-gray-500 rounded-full w-6 h-6 flex items-center justify-center ml-2"
-                      onClick={() => onIncrementWave(Lane.Top)}
+                      onClick={() => {
+                        handleButtonClick();
+                        onIncrementWave(Lane.Top);
+                      }}
                       disabled={
                         !gameState.waves[Lane.Top] || 
                         gameState.waves[Lane.Top].currentWave >= gameState.waves[Lane.Top].totalWaves
@@ -222,7 +333,10 @@ const GameTimer: React.FC<GameTimerProps> = ({
                   <div className="flex items-center justify-center mt-1">
                     <button 
                       className="bg-gray-600 hover:bg-gray-500 rounded-full w-6 h-6 flex items-center justify-center mr-2"
-                      onClick={() => onDecrementWave(Lane.Bottom)}
+                      onClick={() => {
+                        handleButtonClick();
+                        onDecrementWave(Lane.Bottom);
+                      }}
                       disabled={
                         !gameState.waves[Lane.Bottom] || 
                         gameState.waves[Lane.Bottom].currentWave <= 1
@@ -235,7 +349,10 @@ const GameTimer: React.FC<GameTimerProps> = ({
                     </div>
                     <button 
                       className="bg-gray-600 hover:bg-gray-500 rounded-full w-6 h-6 flex items-center justify-center ml-2"
-                      onClick={() => onIncrementWave(Lane.Bottom)}
+                      onClick={() => {
+                        handleButtonClick();
+                        onIncrementWave(Lane.Bottom);
+                      }}
                       disabled={
                         !gameState.waves[Lane.Bottom] || 
                         gameState.waves[Lane.Bottom].currentWave >= gameState.waves[Lane.Bottom].totalWaves
@@ -258,7 +375,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
                     ? 'bg-blue-700 hover:bg-blue-600' 
                     : 'bg-orange-600 hover:bg-orange-500'
                 }`}
-                onClick={onFlipCoin}
+                onClick={handleFlipCoin}
               >
                 <span className="mr-2">Tiebreaker:</span>
                 <span className="font-bold">
@@ -275,14 +392,14 @@ const GameTimer: React.FC<GameTimerProps> = ({
           <div className="flex justify-center items-center gap-4">
             <button 
               className="bg-red-700 hover:bg-red-600 rounded-full w-10 h-10 flex items-center justify-center text-2xl font-bold"
-              onClick={() => onAdjustTeamLife(Team.Atlanteans, -1)}
+              onClick={() => handleAdjustTeamLife(Team.Atlanteans, -1)}
             >
               -
             </button>
             <span className="text-4xl font-bold">{gameState.teamLives[Team.Atlanteans]}</span>
             <button 
               className="bg-red-700 hover:bg-red-600 rounded-full w-10 h-10 flex items-center justify-center text-2xl font-bold"
-              onClick={() => onAdjustTeamLife(Team.Atlanteans, 1)}
+              onClick={() => handleAdjustTeamLife(Team.Atlanteans, 1)}
             >
               +
             </button>
@@ -291,7 +408,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
           {/* New: Atlanteans Victory Button */}
           <button
             className="mt-4 w-full bg-red-700 hover:bg-red-600 rounded-lg py-2 px-4 flex items-center justify-center"
-            onClick={() => onDeclareVictory(Team.Atlanteans)}
+            onClick={() => handleDeclareVictory(Team.Atlanteans)}
           >
             <Award size={18} className="mr-2" />
             <span>Declare Atlantean Victory</span>
@@ -306,7 +423,9 @@ const GameTimer: React.FC<GameTimerProps> = ({
             <h2 className="text-2xl font-bold mb-4">Strategy Phase - Turn {gameState.turn}</h2>
             
             {/* Timer display - show infinity symbol if timer is disabled */}
-            <div className="text-6xl font-bold mb-6 flex justify-center items-center">
+            <div className={`text-6xl font-bold mb-6 flex justify-center items-center ${
+              strategyTimerEnabled && strategyTimeRemaining <= 10 ? 'text-red-500 animate-pulse' : ''
+            }`}>
               {strategyTimerEnabled ? (
                 formatTime(strategyTimeRemaining)
               ) : (
@@ -320,14 +439,14 @@ const GameTimer: React.FC<GameTimerProps> = ({
                 strategyTimerActive ? (
                   <button 
                     className="bg-amber-600 hover:bg-amber-500 px-6 py-3 rounded-lg text-white font-medium"
-                    onClick={onPauseStrategyTimer}
+                    onClick={handlePauseStrategyTimer}
                   >
                     Pause
                   </button>
                 ) : (
                   <button 
                     className="bg-green-600 hover:bg-green-500 px-6 py-3 rounded-lg text-white font-medium"
-                    onClick={onStartStrategyTimer}
+                    onClick={handleStartStrategyTimer}
                   >
                     Resume
                   </button>
@@ -337,7 +456,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
               {/* Always show End Strategy Phase button */}
               <button 
                 className="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-lg text-white font-medium"
-                onClick={onEndStrategyPhase}
+                onClick={handleEndStrategyPhase}
               >
                 End Strategy Phase
               </button>
@@ -376,7 +495,9 @@ const GameTimer: React.FC<GameTimerProps> = ({
                   </div>
                   
                   {/* Only show timer when a player is selected */}
-                  <div className="text-6xl font-bold my-6 flex justify-center items-center">
+                  <div className={`text-6xl font-bold my-6 flex justify-center items-center ${
+                    moveTimerEnabled && moveTimeRemaining <= 10 ? 'text-red-500 animate-pulse' : ''
+                  }`}>
                     {moveTimerEnabled ? (
                       formatTime(moveTimeRemaining)
                     ) : (
@@ -390,14 +511,14 @@ const GameTimer: React.FC<GameTimerProps> = ({
                       moveTimerActive ? (
                         <button 
                           className="bg-amber-600 hover:bg-amber-500 px-6 py-3 rounded-lg text-white font-medium"
-                          onClick={onPauseMoveTimer}
+                          onClick={handlePauseMoveTimer}
                         >
                           Pause
                         </button>
                       ) : (
                         <button 
                           className="bg-green-600 hover:bg-green-500 px-6 py-3 rounded-lg text-white font-medium"
-                          onClick={onStartMoveTimer}
+                          onClick={handleStartMoveTimer}
                         >
                           Resume
                         </button>
@@ -407,7 +528,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
                     {/* Always show Complete Turn button */}
                     <button 
                       className="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-lg text-white font-medium flex items-center"
-                      onClick={onCompletePlayerTurn}
+                      onClick={handleCompletePlayerTurn}
                     >
                       <Check size={18} className="mr-2" />
                       Complete Turn
@@ -428,7 +549,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
             <p className="text-lg mb-6">All players have completed their actions</p>
             <button 
               className="bg-green-600 hover:bg-green-500 px-8 py-4 rounded-lg text-white font-medium text-xl flex items-center mx-auto"
-              onClick={onStartNextTurn}
+              onClick={handleStartNextTurn}
             >
               <RotateCcw size={20} className="mr-2" />
               Start Next Turn
@@ -437,7 +558,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
         )}
       </div>
       
-      {/* Player Selection Grid - No changes needed here */}
+      {/* Player Selection Grid - Add sound effects to player selection */}
       {gameState.currentPhase !== 'turn-end' && (
         <div className="mt-6">
           <h3 className="text-xl font-bold mb-3">
@@ -480,6 +601,8 @@ const GameTimer: React.FC<GameTimerProps> = ({
         } ${isSelectable ? 'cursor-pointer' : ''}`}
         onClick={() => {
           if (isSelectable) {
+            // Play selection sound when selecting a player
+            playSound('heroSelect');
             onSelectPlayer(index);
           }
         }}

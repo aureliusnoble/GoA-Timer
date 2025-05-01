@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronUp, ChevronDown, Info } from 'lucide-react';
 import EnhancedTooltip from './common/EnhancedTooltip';
+import { useSound } from '../context/SoundContext';
 
 interface TimerInputProps {
   value: number; // Value in seconds
@@ -22,6 +23,7 @@ const TimerInput: React.FC<TimerInputProps> = ({
   disabled = false // Default to enabled
 }) => {
   const [inputValue, setInputValue] = useState<string>(formatTime(value));
+  const { playSound } = useSound();
 
   // Format seconds to MM:SS
   function formatTime(seconds: number): string {
@@ -59,6 +61,7 @@ const TimerInput: React.FC<TimerInputProps> = ({
   // Increment or decrement value
   const adjustValue = (delta: number) => {
     if (disabled) return; // Don't adjust if disabled
+    playSound('buttonClick');
     const newValue = Math.min(maxValue, Math.max(minValue, value + delta));
     onChange(newValue);
   };
@@ -77,6 +80,7 @@ const TimerInput: React.FC<TimerInputProps> = ({
   // Apply changes when input loses focus
   const handleBlur = () => {
     if (disabled) return; // Don't update if disabled
+    playSound('buttonClick');
     const newValue = parseTime(inputValue);
     onChange(newValue);
     setInputValue(formatTime(newValue));
@@ -86,6 +90,7 @@ const TimerInput: React.FC<TimerInputProps> = ({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (disabled) return; // Don't update if disabled
     if (e.key === 'Enter') {
+      playSound('buttonClick');
       const newValue = parseTime(inputValue);
       onChange(newValue);
       setInputValue(formatTime(newValue));

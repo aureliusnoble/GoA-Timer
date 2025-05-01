@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Team } from '../types';
 import { Trophy, Home } from 'lucide-react';
+import { useSound } from '../context/SoundContext';
 
 interface VictoryScreenProps {
   winningTeam: Team;
@@ -13,15 +14,26 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
   onReturnToSetup 
 }) => {
   const [animationComplete, setAnimationComplete] = useState(false);
+  const { playSound } = useSound();
   
   useEffect(() => {
+    // Play victory sound when component mounts
+    playSound('victory');
+    
     // Start animation sequence
     const timer = setTimeout(() => {
       setAnimationComplete(true);
+      // Play a subtle sound when the button appears
+      playSound('buttonClick');
     }, 3000); // 3 seconds of animation
     
     return () => clearTimeout(timer);
   }, []);
+  
+  const handleReturnClick = () => {
+    playSound('buttonClick');
+    onReturnToSetup();
+  };
   
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center">
@@ -68,7 +80,7 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
         
         {/* Return to setup button */}
         <button
-          onClick={onReturnToSetup}
+          onClick={handleReturnClick}
           className={`px-6 py-3 rounded-lg text-white font-medium flex items-center mx-auto ${
             animationComplete ? 'opacity-100' : 'opacity-0'
           } transition-opacity duration-500 ${
