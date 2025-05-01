@@ -93,9 +93,7 @@ const CoinToss: React.FC<CoinTossProps> = ({ result, onComplete }) => {
           100% { transform: rotateY(180deg) rotateX(10deg); } /* End on Atlanteans side (tails) */
         }
         
-        .coin-shine {
-          animation: coinShine 4s ease-in-out infinite;
-        }
+ 
       `}</style>
     </div>
   );
