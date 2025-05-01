@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MessageSquare, ChevronUp, ChevronDown } from 'lucide-react';
+import { ChevronUp, ChevronDown } from 'lucide-react';
 
 interface CollapsibleFeedbackProps {
   feedbackUrl: string;

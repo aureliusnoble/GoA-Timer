@@ -1,440 +1,410 @@
-import React, { useEffect, useState } from 'react';
-import { Player, Team, GameLength } from '../types';
-import { getAllExpansions } from '../data/heroes';
-import TimerInput from './TimerInput';
-import PlayerNameInput from './PlayerNameInput';
-import { Info } from 'lucide-react';
-import EnhancedTooltip from './common/EnhancedTooltip';
+// src/components/GameTimer.tsx
+import React from 'react';
+import { GameState, Player, Team, Lane } from '../types';
+import { Clock, Plus, Check, RotateCcw } from 'lucide-react';
 
-interface GameSetupProps {
-  strategyTime: number;
-  moveTime: number;
-  gameLength: GameLength;
-  onStrategyTimeChange: (time: number) => void;
-  onMoveTimeChange: (time: number) => void;
-  onGameLengthChange: (length: GameLength) => void;
+interface GameTimerProps {
+  gameState: GameState;
   players: Player[];
-  onAddPlayer: (team: Team) => void;
-  onRemovePlayer: (playerId: number) => void;
-  onDraftHeroes: () => void;
-  selectedExpansions: string[];
-  onToggleExpansion: (expansion: string) => void;
-  onPlayerNameChange: (playerId: number, name: string) => void;
-  duplicateNames: string[];
-  canStartDrafting: boolean;
-  heroCount: number;
-  maxComplexity: number;
-  onMaxComplexityChange: (complexity: number) => void;
+  strategyTimeRemaining: number;
+  moveTimeRemaining: number;
+  strategyTimerActive: boolean;
+  moveTimerActive: boolean;
+  onStartStrategyTimer: () => void;
+  onPauseStrategyTimer: () => void;
+  onEndStrategyPhase: () => void;
+  onStartMoveTimer: () => void;
+  onPauseMoveTimer: () => void;
+  onSelectPlayer: (playerIndex: number) => void;
+  onCompletePlayerTurn: () => void;
+  onStartNextTurn: () => void;
+  onAdjustTeamLife: (team: Team, delta: number) => void;
+  onIncrementWave: (lane: Lane) => void;
+  onFlipCoin: () => void;
 }
 
-const GameSetup: React.FC<GameSetupProps> = ({
-  strategyTime,
-  moveTime,
-  gameLength,
-  onStrategyTimeChange,
-  onMoveTimeChange,
-  onGameLengthChange,
+const GameTimer: React.FC<GameTimerProps> = ({
+  gameState,
   players,
-  onAddPlayer,
-  onRemovePlayer,
-  onDraftHeroes,
-  selectedExpansions,
-  onToggleExpansion,
-  onPlayerNameChange,
-  duplicateNames,
-  canStartDrafting,
-  heroCount,
-  maxComplexity,
-  onMaxComplexityChange
+  strategyTimeRemaining,
+  moveTimeRemaining,
+  strategyTimerActive,
+  moveTimerActive,
+  onStartStrategyTimer,
+  onPauseStrategyTimer,
+  onEndStrategyPhase,
+  onStartMoveTimer,
+  onPauseMoveTimer,
+  onSelectPlayer,
+  onCompletePlayerTurn,
+  onStartNextTurn,
+  onAdjustTeamLife,
+  onIncrementWave,
+  onFlipCoin
 }) => {
-  const [expandedSection, setExpandedSection] = useState<{[key: string]: boolean}>({
-    'timers': true,
-    'game-length': true,
-    'complexity': true,
-    'players': true,
-    'names': true,
-    'expansions': false
-  });
-  
-  const expansions = getAllExpansions();
-  
-  // Set default values when component mounts if they're not already set
-  useEffect(() => {
-    if (strategyTime !== 90) {
-      onStrategyTimeChange(90);
-    }
-    if (moveTime !== 30) {
-      onMoveTimeChange(30);
-    }
-  }, []);
+  const formatTime = (seconds: number): string => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
 
-  // Calculate player count by team
-  const titanCount = players.filter(p => p.team === Team.Titans).length;
-  const atlanteanCount = players.filter(p => p.team === Team.Atlanteans).length;
-  const totalPlayers = titanCount + atlanteanCount;
-  
-  // Count players with names
-  const playersWithNames = players.filter(p => p.name.trim() !== '').length;
-  const allPlayersHaveNames = playersWithNames === totalPlayers && totalPlayers > 0;
-  
-  // Check if player names are unique
-  const hasUniqueNames = duplicateNames.length === 0;
-
-  // Check if quick game is available (6 or fewer players)
-  const isQuickGameAvailable = totalPlayers <= 6;
-  
-  // Check if we can add more players (max 10 players total)
-  const canAddMorePlayers = totalPlayers < 10;
-  
-  // Check if teams have at least 2 players each
-  const teamsHaveMinPlayers = titanCount >= 2 && atlanteanCount >= 2;
-  
-  // Requirements for drafting
-  const isTeamsBalanced = titanCount > 0 && titanCount === atlanteanCount && teamsHaveMinPlayers;
-  const canDraft = isTeamsBalanced && allPlayersHaveNames && hasUniqueNames && canStartDrafting;
+  const activePlayer = gameState.activeHeroIndex >= 0 
+    ? players[gameState.activeHeroIndex] 
+    : null;
 
   return (
-    <div className="bg-gray-800 rounded-lg p-4 sm:p-6 mb-8">
-      <h2 className="text-2xl font-bold mb-4">Game Setup</h2>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6">
-        {/* Timer Settings Column */}
-        <div>
-          <h3 className="text-xl mb-3 cursor-pointer flex items-center" 
-              onClick={() => setExpandedSection({...expandedSection, 'timers': !expandedSection['timers']})}>
-            <span className="mr-2">{expandedSection['timers'] ? '▼' : '▶'}</span>
-            Timer Settings
-          </h3>
-          
-          {expandedSection['timers'] && (
-            <>
-              <div className="mb-6">
-                <label className="block mb-3">Strategy Timer</label>
-                <TimerInput 
-                  value={strategyTime} 
-                  onChange={onStrategyTimeChange}
-                  tooltip="This is the amount of time teams will have to publicly discuss what cards to play"
-                  minValue={30}
-                  maxValue={300}
-                  step={10}
-                />
-              </div>
-              
-              <div className="mb-4">
-                <label className="block mb-3">Action Timer</label>
-                <TimerInput 
-                  value={moveTime} 
-                  onChange={onMoveTimeChange}
-                  tooltip="This is the time each player will have to resolve their cards once revealed"
-                  minValue={10}
-                  maxValue={120}
-                  step={10}
-                />
-              </div>
-            </>
-          )}
+    <div className="game-timer">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        {/* Titans Life Counter */}
+        <div className="bg-blue-900/50 rounded-lg p-4 text-center">
+          <h3 className="text-xl font-bold mb-2">Titans Lives</h3>
+          <div className="flex justify-center items-center gap-4">
+            <button 
+              className="bg-blue-700 hover:bg-blue-600 rounded-full w-10 h-10 flex items-center justify-center text-2xl font-bold"
+              onClick={() => onAdjustTeamLife(Team.Titans, -1)}
+            >
+              -
+            </button>
+            <span className="text-4xl font-bold">{gameState.teamLives[Team.Titans]}</span>
+            <button 
+              className="bg-blue-700 hover:bg-blue-600 rounded-full w-10 h-10 flex items-center justify-center text-2xl font-bold"
+              onClick={() => onAdjustTeamLife(Team.Titans, 1)}
+            >
+              +
+            </button>
+          </div>
         </div>
         
-        {/* Game Length Column */}
-        <div>
-          <h3 className="text-xl mb-3 cursor-pointer flex items-center"
-              onClick={() => setExpandedSection({...expandedSection, 'game-length': !expandedSection['game-length']})}>
-            <span className="mr-2">{expandedSection['game-length'] ? '▼' : '▶'}</span>
-            Game Length
-          </h3>
-          
-          {expandedSection['game-length'] && (
-            <>
-              <div className="flex flex-col gap-3 mb-4">
-                <label className="inline-flex items-center cursor-pointer">
-                  <input
-                    type="radio"
-                    name="gameLength"
-                    value={GameLength.Quick}
-                    checked={gameLength === GameLength.Quick}
-                    onChange={() => onGameLengthChange(GameLength.Quick)}
-                    disabled={!isQuickGameAvailable}
-                    className="form-radio h-5 w-5 text-blue-600"
-                  />
-                  <span className={`ml-2 ${!isQuickGameAvailable ? 'text-gray-500' : ''}`}>
-                    Quick
-                    {!isQuickGameAvailable && <span className="ml-2 text-red-400 text-sm">(Max 6 players)</span>}
-                  </span>
-                </label>
-                
-                <label className="inline-flex items-center cursor-pointer">
-                  <input
-                    type="radio"
-                    name="gameLength"
-                    value={GameLength.Long}
-                    checked={gameLength === GameLength.Long}
-                    onChange={() => onGameLengthChange(GameLength.Long)}
-                    className="form-radio h-5 w-5 text-blue-600"
-                  />
-                  <span className="ml-2">Long</span>
-                </label>
-              </div>
-              
-              {/* Game configuration info */}
-              <div className="mt-4 bg-gray-700 p-3 rounded-md text-sm">
-                <h4 className="font-semibold mb-1">Current Configuration:</h4>
-                <ul className="list-disc list-inside space-y-1 text-gray-300">
-                  <li>
-                    {gameLength === GameLength.Quick 
-                      ? `3 total waves`
-                      : totalPlayers <= 6 
-                        ? `5 total waves` 
-                        : `7 waves per lane (2 lanes)`
+        {/* Game State */}
+        <div className="bg-gray-800 rounded-lg p-4 text-center">
+          <div className="flex justify-between mb-2">
+            <div>
+              <span className="text-sm text-gray-400">Round</span>
+              <div className="text-2xl font-bold">{gameState.round}</div>
+            </div>
+            <div>
+              <span className="text-sm text-gray-400">Turn</span>
+              <div className="text-2xl font-bold">{gameState.turn}/4</div>
+            </div>
+            
+            {/* We'll remove the wave counter from here for multiple lanes */}
+            {!gameState.hasMultipleLanes && (
+              <div className="relative group">
+                <span className="text-sm text-gray-400">Wave</span>
+                <div className="flex items-center justify-center">
+                  <div className="text-2xl font-bold">
+                    {gameState.waves[Lane.Single]?.currentWave || 1}/{gameState.waves[Lane.Single]?.totalWaves || 3}
+                  </div>
+                  {/* Plus button to increment wave */}
+                  <button 
+                    className="ml-1 bg-amber-600 hover:bg-amber-500 rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                    onClick={() => onIncrementWave(Lane.Single)}
+                    disabled={
+                      !gameState.waves[Lane.Single] || 
+                      gameState.waves[Lane.Single].currentWave >= gameState.waves[Lane.Single].totalWaves
                     }
-                  </li>
-                  <li>
-                    {`${calculateTeamLives(gameLength, totalPlayers)} lives per team`}
-                  </li>
-                  {totalPlayers >= 8 && (
-                    <li className="text-amber-300">
-                      Using two separate lanes
-                    </li>
-                  )}
-                </ul>
-              </div>
-            </>
-          )}
-        </div>
-        
-        {/* Max Complexity Column */}
-        <div>
-          <h3 className="text-xl mb-3 cursor-pointer flex items-center"
-              onClick={() => setExpandedSection({...expandedSection, 'complexity': !expandedSection['complexity']})}>
-            <span className="mr-2">{expandedSection['complexity'] ? '▼' : '▶'}</span>
-            Max Complexity
-          </h3>
-          
-          {expandedSection['complexity'] && (
-            <>
-              <div className="flex flex-col gap-3 mb-4">
-                {[1, 2, 3, 4].map(level => (
-                  <label key={level} className="inline-flex items-center cursor-pointer">
-                    <input
-                      type="radio"
-                      name="complexity"
-                      value={level}
-                      checked={maxComplexity === level}
-                      onChange={() => onMaxComplexityChange(level)}
-                      className="form-radio h-5 w-5 text-blue-600"
-                    />
-                    <span className="ml-2">
-                      {level} {level === 1 ? '(Simplest)' : level === 4 ? '(Most Complex)' : ''}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-        
-        {/* Players Column */}
-        <div>
-          <h3 className="text-xl mb-3 cursor-pointer flex items-center"
-              onClick={() => setExpandedSection({...expandedSection, 'players': !expandedSection['players']})}>
-            <span className="mr-2">{expandedSection['players'] ? '▼' : '▶'}</span>
-            Players
-          </h3>
-          
-          {expandedSection['players'] && (
-            <>
-              <div className="mb-4">
-                <div className="flex justify-between mb-2">
-                  <span>Titans: {titanCount} players</span>
-                  <button
-                    className={`px-3 py-1 rounded text-sm ${
-                      canAddMorePlayers 
-                        ? 'bg-blue-700 hover:bg-blue-600' 
-                        : 'bg-gray-600 cursor-not-allowed'
-                    }`}
-                    onClick={() => canAddMorePlayers && onAddPlayer(Team.Titans)}
-                    disabled={!canAddMorePlayers}
                   >
-                    Add Player
-                  </button>
-                </div>
-                
-                <div className="flex justify-between">
-                  <span>Atlanteans: {atlanteanCount} players</span>
-                  <button
-                    className={`px-3 py-1 rounded text-sm ${
-                      canAddMorePlayers 
-                        ? 'bg-red-700 hover:bg-red-600' 
-                        : 'bg-gray-600 cursor-not-allowed'
-                    }`}
-                    onClick={() => canAddMorePlayers && onAddPlayer(Team.Atlanteans)}
-                    disabled={!canAddMorePlayers}
-                  >
-                    Add Player
+                    <Plus size={14} />
                   </button>
                 </div>
               </div>
-              
-              {/* Validation warnings */}
-              {!canAddMorePlayers && (
-                <div className="text-amber-400 text-sm mt-2">
-                  Maximum 10 players allowed
+            )}
+          </div>
+          
+          {/* Phase indicator */}
+          <div className="mt-2 mb-2">
+            <span className="px-3 py-1 rounded-full bg-gray-700 text-sm">
+              {gameState.currentPhase === 'strategy' && 'Strategy Phase'}
+              {gameState.currentPhase === 'move' && 'Action Phase'}
+              {gameState.currentPhase === 'turn-end' && 'Turn Complete'}
+            </span>
+          </div>
+          
+          {/* Wave Counters - Multiple Lanes - Now in its own section below the main game state */}
+          {gameState.hasMultipleLanes && (
+            <div className="mt-4 pt-4 border-t border-gray-700">
+              <h4 className="text-lg font-bold mb-2">Wave Counters</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="relative bg-gray-700/50 p-2 rounded">
+                  <span className="text-sm text-gray-300">Top Lane</span>
+                  <div className="flex items-center justify-center mt-1">
+                    <div className="text-xl font-bold">
+                      {gameState.waves[Lane.Top]?.currentWave || 1}/{gameState.waves[Lane.Top]?.totalWaves || 7}
+                    </div>
+                    {/* Plus button to increment top lane wave */}
+                    <button 
+                      className="ml-1 bg-amber-600 hover:bg-amber-500 rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                      onClick={() => onIncrementWave(Lane.Top)}
+                      disabled={
+                        !gameState.waves[Lane.Top] || 
+                        gameState.waves[Lane.Top].currentWave >= gameState.waves[Lane.Top].totalWaves
+                      }
+                    >
+                      <Plus size={14} />
+                    </button>
+                  </div>
                 </div>
-              )}
-              
-              {titanCount !== atlanteanCount && (
-                <div className="text-amber-400 text-sm mt-2">
-                  Both teams must have equal number of players
+                <div className="relative bg-gray-700/50 p-2 rounded">
+                  <span className="text-sm text-gray-300">Bottom Lane</span>
+                  <div className="flex items-center justify-center mt-1">
+                    <div className="text-xl font-bold">
+                      {gameState.waves[Lane.Bottom]?.currentWave || 1}/{gameState.waves[Lane.Bottom]?.totalWaves || 7}
+                    </div>
+                    {/* Plus button to increment bottom lane wave */}
+                    <button 
+                      className="ml-1 bg-amber-600 hover:bg-amber-500 rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                      onClick={() => onIncrementWave(Lane.Bottom)}
+                      disabled={
+                        !gameState.waves[Lane.Bottom] || 
+                        gameState.waves[Lane.Bottom].currentWave >= gameState.waves[Lane.Bottom].totalWaves
+                      }
+                    >
+                      <Plus size={14} />
+                    </button>
+                  </div>
                 </div>
-              )}
-              
-              {totalPlayers > 0 && !teamsHaveMinPlayers && (
-                <div className="text-amber-400 text-sm mt-2">
-                  Each team must have at least 2 players
-                </div>
-              )}
-              
-              {totalPlayers > 0 && !allPlayersHaveNames && (
-                <div className="text-amber-400 text-sm mt-2">
-                  All players must enter their names
-                </div>
-              )}
-              
-              {/* Display duplicate names warning */}
-              {duplicateNames.length > 0 && (
-                <div className="text-red-400 text-sm mt-2">
-                  Duplicate names found: {duplicateNames.join(', ')}
-                </div>
-              )}
-              
-              {/* Hero count warning */}
-              {totalPlayers > 0 && !canStartDrafting && (
-                <div className="text-red-400 text-sm mt-2">
-                  Not enough heroes ({heroCount}) for {totalPlayers} players. Select more expansions.
-                </div>
-              )}
-              
-              {titanCount > 0 && titanCount === atlanteanCount && allPlayersHaveNames && teamsHaveMinPlayers && duplicateNames.length === 0 && (
-                <div className="text-emerald-400 text-sm mt-2">
-                  Teams are balanced with {titanCount} players each
-                </div>
-              )}
-            </>
+              </div>
+            </div>
           )}
+          
+          <div className="mt-3">
+            <button
+              className={`flex items-center justify-center px-4 py-2 rounded-lg text-white ${
+                gameState.coinSide === Team.Titans 
+                  ? 'bg-blue-700 hover:bg-blue-600' 
+                  : 'bg-orange-600 hover:bg-orange-500'
+              }`}
+              onClick={onFlipCoin}
+            >
+              <span className="mr-2">Tiebreaker:</span>
+              <span className="font-bold">
+                {gameState.coinSide === Team.Titans ? 'Titans' : 'Atlanteans'}
+              </span>
+            </button>
+          </div>
+        </div>
+        
+        {/* Atlanteans Life Counter */}
+        <div className="bg-red-900/50 rounded-lg p-4 text-center">
+          <h3 className="text-xl font-bold mb-2">Atlanteans Lives</h3>
+          <div className="flex justify-center items-center gap-4">
+            <button 
+              className="bg-red-700 hover:bg-red-600 rounded-full w-10 h-10 flex items-center justify-center text-2xl font-bold"
+              onClick={() => onAdjustTeamLife(Team.Atlanteans, -1)}
+            >
+              -
+            </button>
+            <span className="text-4xl font-bold">{gameState.teamLives[Team.Atlanteans]}</span>
+            <button 
+              className="bg-red-700 hover:bg-red-600 rounded-full w-10 h-10 flex items-center justify-center text-2xl font-bold"
+              onClick={() => onAdjustTeamLife(Team.Atlanteans, 1)}
+            >
+              +
+            </button>
+          </div>
         </div>
       </div>
       
-      {/* Expansions Section */}
-      <div className="mb-8">
-        <h3 className="text-xl mb-3 cursor-pointer flex items-center"
-            onClick={() => setExpandedSection({...expandedSection, 'expansions': !expandedSection['expansions']})}>
-          <span className="mr-2">{expandedSection['expansions'] ? '▼' : '▶'}</span>
-          Expansions
-        </h3>
-        
-        {expandedSection['expansions'] && (
-          <>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {expansions.map(expansion => (
-                <label key={expansion} className="flex items-center bg-gray-700 p-3 rounded-lg cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedExpansions.includes(expansion)}
-                    onChange={() => onToggleExpansion(expansion)}
-                    className="mr-2 h-5 w-5"
-                  />
-                  <span>{expansion}</span>
-                </label>
-              ))}
+      {/* Timer Section */}
+      <div className="bg-gray-800 rounded-lg p-6">
+        {gameState.currentPhase === 'strategy' ? (
+          <div className="text-center">
+            <h2 className="text-2xl font-bold mb-4">Strategy Phase - Turn {gameState.turn}</h2>
+            <div className="text-6xl font-bold mb-6">{formatTime(strategyTimeRemaining)}</div>
+            <div className="flex justify-center gap-4">
+              {strategyTimerActive ? (
+                <button 
+                  className="bg-amber-600 hover:bg-amber-500 px-6 py-3 rounded-lg text-white font-medium"
+                  onClick={onPauseStrategyTimer}
+                >
+                  Pause
+                </button>
+              ) : (
+                <button 
+                  className="bg-green-600 hover:bg-green-500 px-6 py-3 rounded-lg text-white font-medium"
+                  onClick={onStartStrategyTimer}
+                >
+                  Resume
+                </button>
+              )}
+              <button 
+                className="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-lg text-white font-medium"
+                onClick={onEndStrategyPhase}
+              >
+                End Strategy Phase
+              </button>
             </div>
-          </>
+          </div>
+        ) : gameState.currentPhase === 'move' ? (
+          <div className="text-center">
+            <h2 className="text-2xl font-bold mb-4">Action Phase</h2>
+            
+            {activePlayer && activePlayer.hero ? (
+              <>
+                <div className="mb-4">
+                  <div 
+                    className={`inline-block py-2 px-4 rounded-lg text-white font-medium ${
+                      activePlayer.team === Team.Titans ? 'bg-blue-700' : 'bg-red-700'
+                    }`}
+                  >
+                    {activePlayer.team === Team.Titans ? 'Titans' : 'Atlanteans'}
+                  </div>
+                  <div className="flex items-center justify-center mt-2">
+                    <div className="w-16 h-16 bg-gray-300 rounded-full overflow-hidden mr-3">
+                      <img 
+                        src={activePlayer.hero.icon} 
+                        alt={activePlayer.hero.name} 
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = 'https://via.placeholder.com/64?text=Hero';
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold">{activePlayer.hero.name}</div>
+                      <div className="text-lg text-gray-300">{activePlayer.name}</div>
+                    </div>
+                  </div>
+                  
+                  {/* Only show timer when a player is selected */}
+                  <div className="text-6xl font-bold my-6">{formatTime(moveTimeRemaining)}</div>
+                  
+                  <div className="flex justify-center gap-4">
+                    {moveTimerActive ? (
+                      <button 
+                        className="bg-amber-600 hover:bg-amber-500 px-6 py-3 rounded-lg text-white font-medium"
+                        onClick={onPauseMoveTimer}
+                      >
+                        Pause
+                      </button>
+                    ) : (
+                      <button 
+                        className="bg-green-600 hover:bg-green-500 px-6 py-3 rounded-lg text-white font-medium"
+                        onClick={onStartMoveTimer}
+                      >
+                        Resume
+                      </button>
+                    )}
+                    <button 
+                      className="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-lg text-white font-medium flex items-center"
+                      onClick={onCompletePlayerTurn}
+                    >
+                      <Check size={18} className="mr-2" />
+                      Complete Turn
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="py-6 text-xl text-amber-300">
+                Select a player to start their action timer
+              </div>
+            )}
+          </div>
+        ) : (
+          // Turn-end phase
+          <div className="text-center">
+            <h2 className="text-2xl font-bold mb-4">Turn {gameState.turn} Complete</h2>
+            <p className="text-lg mb-6">All players have completed their actions</p>
+            <button 
+              className="bg-green-600 hover:bg-green-500 px-8 py-4 rounded-lg text-white font-medium text-xl flex items-center mx-auto"
+              onClick={onStartNextTurn}
+            >
+              <RotateCcw size={20} className="mr-2" />
+              Start Next Turn
+            </button>
+          </div>
         )}
       </div>
       
-      {/* Player Names Section */}
-      {players.length > 0 && (
-        <div className="mb-8">
-          <h3 className="text-xl mb-3 cursor-pointer flex items-center"
-              onClick={() => setExpandedSection({...expandedSection, 'names': !expandedSection['names']})}>
-            <span className="mr-2">{expandedSection['names'] ? '▼' : '▶'}</span>
-            Player Names
+      {/* Player Selection Grid - UPDATED: Now shows player names and has larger tiles */}
+      {gameState.currentPhase !== 'turn-end' && (
+        <div className="mt-6">
+          <h3 className="text-xl font-bold mb-3">
+            {gameState.currentPhase === 'strategy' 
+              ? 'Players (waiting for strategy phase to end)' 
+              : 'Select Player'}
           </h3>
           
-          {expandedSection['names'] && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {players.map((player) => {
-                // Check if this player's name is a duplicate
-                const isDuplicate = player.name.trim() !== '' && duplicateNames.includes(player.name.trim());
-                
-                return (
-                  <PlayerNameInput
-                    key={player.id}
-                    player={player}
-                    onNameChange={(name) => onPlayerNameChange(player.id, name)}
-                    onRemove={() => onRemovePlayer(player.id)}
-                    isDuplicate={isDuplicate}
-                  />
-                );
-              })}
-            </div>
-          )}
+          {/* Display all players in a grid with larger tiles */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {players.map((player, index) => (
+              player.hero && renderPlayerCard(player, index)
+            ))}
+          </div>
         </div>
       )}
-      
-      {/* Action Button - Only Draft Heroes now */}
-      <div className="flex flex-col sm:flex-row items-center justify-center">
-        <div className="relative mb-4 sm:mb-0">
-          <button
-            className={`px-6 py-3 rounded-lg font-medium text-white ${
-              canDraft
-                ? 'bg-blue-600 hover:bg-blue-500'
-                : 'bg-gray-600 cursor-not-allowed'
-            }`}
-            onClick={onDraftHeroes}
-            disabled={!canDraft}
-          >
-            Draft Heroes
-          </button>
-          
-          {/* Replace custom tooltip with EnhancedTooltip */}
-          <EnhancedTooltip 
-            text="Click to select heroes for each player and start the game."
-            position="right"
-          >
-            <div className="ml-2 absolute top-1/2 right-0 transform translate-x-7 -translate-y-1/2 cursor-help">
-              <Info size={18} className="text-gray-400 hover:text-gray-200" />
-            </div>
-          </EnhancedTooltip>
-        </div>
-
-        <div className="text-sm text-center sm:ml-4">
-          <span className="text-blue-300">Available heroes: {heroCount}</span>
-          {totalPlayers > 0 && (
-            <span className="ml-4 text-yellow-300">
-              {canStartDrafting 
-                ? "✓ Enough heroes for drafting" 
-                : "✗ Not enough heroes for drafting"}
-            </span>
-          )}
-        </div>
-      </div>
-      
-      <p className="mt-4 text-xs text-gray-300 text-center translate-y-5">
-        Disclaimer: This is not an official product and has not been approved by Wolff Designa. All game content is the property of Wolff Designa.
-      </p>
     </div>
   );
-};
-
-// Helper function to calculate team lives based on game length and player count
-const calculateTeamLives = (gameLength: GameLength, playerCount: number): number => {
-  if (gameLength === GameLength.Quick) {
-    return playerCount <= 4 ? 4 : 5;
-  } else { // Long game
-    if (playerCount <= 4) return 6;
-    if (playerCount <= 6) return 8;
-    if (playerCount <= 8) return 6;
-    return 7; // 10 players
+  
+  // Helper function to render player cards with status
+  function renderPlayerCard(player: Player, index: number) {
+    const isActive = gameState.activeHeroIndex === index;
+    const hasCompleted = gameState.completedTurns.includes(index);
+    const isSelectable = gameState.currentPhase === 'move' && !hasCompleted && !isActive;
+    
+    return (
+      <div
+        key={player.id}
+        className={`p-4 rounded-lg transition-all relative ${
+          // Different styles based on player status
+          isActive
+            ? player.team === Team.Titans
+              ? 'bg-blue-700 ring-4 ring-white'
+              : 'bg-red-700 ring-4 ring-white'
+            : hasCompleted
+            ? 'bg-gray-700 opacity-60' // Greyed out for completed players
+            : player.team === Team.Titans
+            ? 'bg-blue-900/50 hover:bg-blue-800'
+            : 'bg-red-900/50 hover:bg-red-800'
+        } ${isSelectable ? 'cursor-pointer' : ''}`}
+        onClick={() => {
+          if (isSelectable) {
+            onSelectPlayer(index);
+          }
+        }}
+      >
+        <div className="flex items-center">
+          {player.hero && (
+            <div className="w-16 h-16 bg-gray-300 rounded-full overflow-hidden mr-3 flex-shrink-0">
+              <img 
+                src={player.hero.icon} 
+                alt={player.hero.name} 
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.src = 'https://via.placeholder.com/64?text=Hero';
+                }}
+              />
+            </div>
+          )}
+          <div>
+            <div className="text-lg font-bold mb-1">{player.hero?.name || 'Unknown Hero'}</div>
+            <div className="text-base text-gray-300">{player.name || `Player ${player.id}`}</div>
+            {player.lane && (
+              <div className="text-xs text-gray-400 mt-1">
+                {player.lane === Lane.Top ? 'Top Lane' : 'Bottom Lane'}
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* Status indicators */}
+        {hasCompleted && (
+          <div className="absolute top-2 right-2 bg-green-600 rounded-full p-1" title="Completed">
+            <Check size={18} />
+          </div>
+        )}
+        
+        {isActive && (
+          <div className="absolute top-2 right-2 bg-yellow-500 rounded-full p-1 animate-pulse" title="Active">
+            <Clock size={18} />
+          </div>
+        )}
+      </div>
+    );
   }
 };
 
-export default GameSetup;
+export default GameTimer;
