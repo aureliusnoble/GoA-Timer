@@ -2,6 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { Hero, Player, Team, DraftMode, DraftingState } from '../types';
 import { X, User, Play, RotateCcw, RefreshCw, ArrowLeft } from 'lucide-react';
+import HeroRoleExplanation from './HeroRoleExplanation';
 
 interface DraftingSystemProps {
   players: Player[];
@@ -1082,6 +1083,9 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
           </div>
         </div>
       </div>
+      
+      {/* Hero Role Explanation - Added this component */}
+      <HeroRoleExplanation />
       
       {/* Main drafting UI */}
       <div className="bg-gray-800 rounded-lg p-6">
