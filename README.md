@@ -89,10 +89,9 @@ The application uses Tailwind CSS for styling. Custom styles can be added in:
 # Disclaimer
 This app has not been officially approved by Wolff Designa (the designers of Guards of Atlantis). All game content, e.g. heroes, mechanics, images, etc. is the property of Wolff Designa.
 
-# Bugs
+# To-do
 
-- Select two lanes with six players (automatically selected with 8 or 10)
-
-- Hero tooltip:
--- Add additional roles
--- Add Attack, Initiative, Defence, Movement (and upgraded version)
+- Sound cues. Sound effects. Warning flash for last 5 seconds of timer.
+- End of Round Assistant. Can optionally record Level: Amount of Gold; Kills; Asssists; Minion Kills
+- If we logged level, amount of gold, kills, assists at end of round, we can display on the hero cards.
+- Game State Import/Export
