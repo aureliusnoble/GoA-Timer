@@ -94,4 +94,12 @@ This app has not been officially approved by Wolff Designa (the designers of Gua
 - End of Round Assistant. Can optionally record Level: Amount of Gold; Kills; Asssists; Minion Kills
 - If we logged level, amount of gold, kills, assists at end of round, we can display on the hero cards.
 - Game State Import/Export
-- bug. The clock timer sound should stop immediately when no timer displayed
+- Store locally some files which records match results.
+- Single button for: Game Data
+-- Buttons for:
+-- Player Stats: Wins/Losses; Favourite 3 Heroes; Favourite 3 Roles (don't include secondary); ELO (use Leauge of Legends type system); Games Played
+--- Match History (allows you to delete individual matches)
+--- Match maker: enter names of players and will split into two teams to create most matched pairing possible based on ELO
+--- Delete data
+--- Export/Import Player data (will overwrite local)
+- tooltip. Game data is only saved locally (on this device). It is not accessible from other devices.
