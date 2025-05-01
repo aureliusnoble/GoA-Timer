@@ -30,45 +30,66 @@ interface LaneStateResult {
   hasMultipleLanes: boolean;
 }
 
-// Initial state for different game configurations
-const getInitialLaneState = (gameLength: GameLength, playerCount: number): LaneStateResult => {
-  // Default single lane
-  if (playerCount <= 6) {
+// Initial state for different game configurations - UPDATED
+const getInitialLaneState = (
+  gameLength: GameLength, 
+  playerCount: number, 
+  useDoubleLaneFor6Players: boolean
+): LaneStateResult => {
+  // Double lane for 7+ players or 6 players with double lane option enabled
+  if (playerCount >= 7 || (playerCount === 6 && useDoubleLaneFor6Players && gameLength === GameLength.Long)) {
     return {
-      single: {
+      top: {
         currentWave: 1,
-        totalWaves: gameLength === GameLength.Quick ? 3 : 5
+        totalWaves: 7
       },
-      hasMultipleLanes: false
+      bottom: {
+        currentWave: 1,
+        totalWaves: 7
+      },
+      hasMultipleLanes: true
     };
   } 
   
-  // Multiple lanes for 8-10 players
+  // Default single lane
   return {
-    top: {
+    single: {
       currentWave: 1,
-      totalWaves: 7
+      totalWaves: gameLength === GameLength.Quick ? 3 : 5
     },
-    bottom: {
-      currentWave: 1,
-      totalWaves: 7
-    },
-    hasMultipleLanes: true
+    hasMultipleLanes: false
   };
 };
 
-// Calculate team lives based on game length and player count
-const calculateTeamLives = (gameLength: GameLength, playerCount: number): number => {
+// Calculate team lives based on game length and player count - UPDATED
+const calculateTeamLives = (
+  gameLength: GameLength, 
+  playerCount: number, 
+  useDoubleLaneFor6Players: boolean
+): number => {
   if (gameLength === GameLength.Quick) {
-    return playerCount <= 4 ? 4 : 5; // 4 or 6 players
+    // Quick game: 4 lives for 3-5 players, 5 lives for 6 players
+    return playerCount <= 5 ? 4 : 5;
   } else { // Long game
-    if (playerCount <= 4) return 6;
-    if (playerCount <= 6) return 8;
-    if (playerCount <= 8) return 6;
-    return 7; // 10 players
+    // Special case: 6 players in single lane mode
+    if (playerCount === 6 && !useDoubleLaneFor6Players) {
+      return 8; // 6 players in long single-lane = 8 lives
+    }
+    
+    // 3-5 players in single lane
+    if (playerCount <= 5) {
+      return 6;
+    }
+    
+    // Double lane for 6-8 players
+    if ((playerCount === 6 && useDoubleLaneFor6Players) || playerCount <= 8) {
+      return 6;
+    }
+    
+    // 9-10 players
+    return 7;
   }
 };
-
 
 // Generate pick/ban sequence based on player count
 const generatePickBanSequence = (playerCount: number): PickBanStep[] => {
@@ -365,6 +386,9 @@ function App() {
   const [moveTimerEnabled, setMoveTimerEnabled] = useState<boolean>(true);
   const [gameLength, setGameLength] = useState<GameLength>(GameLength.Quick);
   
+  // NEW: Option for 6-player double lane
+  const [useDoubleLaneFor6Players, setUseDoubleLaneFor6Players] = useState<boolean>(false);
+  
   // Players and heroes state
   const [localPlayers, setLocalPlayers] = useState<Player[]>([]);
   
@@ -454,23 +478,33 @@ function App() {
       return;
     }
     
-    // Determine lane for 8+ player games
+    // Determine lane for 8+ player games or 6 players with double lane enabled
     let lane: Lane | undefined = undefined;
+    const hasDoubleLane = localPlayers.length >= 7 || 
+                          (localPlayers.length === 5 && useDoubleLaneFor6Players && gameLength === GameLength.Long);
     
-    // If we're adding the 7th or 8th player, assign lanes to everyone
-    if (localPlayers.length === 6) {
-      // We need to assign lanes to the first 6 players too
-      const updatedPlayers = localPlayers.map((player, index) => ({
-        ...player,
-        lane: index < 3 ? Lane.Top : Lane.Bottom
-      }));
-      setLocalPlayers(updatedPlayers);
-      lane = Lane.Top; // 7th player goes to top lane
-    } else if (localPlayers.length === 7) {
-      lane = Lane.Bottom; // 8th player goes to bottom lane
-    } else if (localPlayers.length >= 8) {
-      // For 9th and 10th players, alternate lanes
-      lane = localPlayers.length % 2 === 0 ? Lane.Top : Lane.Bottom;
+    if (hasDoubleLane) {
+      // If we're adding the 7th or 8th player, or 6th with double lane enabled, assign lanes to everyone
+      if (localPlayers.length === 6) {
+        // We need to assign lanes to the first 6 players too
+        const updatedPlayers = localPlayers.map((player, index) => ({
+          ...player,
+          lane: index < 3 ? Lane.Top : Lane.Bottom
+        }));
+        setLocalPlayers(updatedPlayers);
+      } 
+      
+      // For the new player, assign to top or bottom lane
+      if (localPlayers.length === 5 && useDoubleLaneFor6Players && gameLength === GameLength.Long) {
+        lane = Lane.Top; // 6th player with double lane goes to top lane
+      } else if (localPlayers.length === 6) {
+        lane = Lane.Top; // 7th player goes to top lane
+      } else if (localPlayers.length === 7) {
+        lane = Lane.Bottom; // 8th player goes to bottom lane
+      } else if (localPlayers.length >= 8) {
+        // For 9th and 10th players, alternate lanes
+        lane = localPlayers.length % 2 === 0 ? Lane.Top : Lane.Bottom;
+      }
     }
     
     const newPlayer: Player = {
@@ -507,20 +541,22 @@ function App() {
     // Update player state
     setLocalPlayers(reindexedPlayers);
     
-    // If we've dropped below 8 players, reset lanes if needed
-    if (reindexedPlayers.length < 8) {
-      // If we're at 6 players or fewer, remove lane assignments
-      if (reindexedPlayers.length <= 6) {
-        const playersWithoutLanes = reindexedPlayers.map(player => ({
-          ...player,
-          lane: undefined
-        }));
-        setLocalPlayers(playersWithoutLanes);
-      }
-      
-      // If we've dropped below 8 players and are in Long game mode,
-      // we don't automatically switch back to Quick to avoid confusion
+    // If we've dropped below 8 players (or 6 with double lane option enabled), reset lanes if needed
+    const shouldHaveDoubleLane = 
+      reindexedPlayers.length >= 7 || 
+      (reindexedPlayers.length === 6 && useDoubleLaneFor6Players && gameLength === GameLength.Long);
+    
+    if (!shouldHaveDoubleLane) {
+      // If we no longer need double lanes, remove lane assignments
+      const playersWithoutLanes = reindexedPlayers.map(player => ({
+        ...player,
+        lane: undefined
+      }));
+      setLocalPlayers(playersWithoutLanes);
     }
+    
+    // If we dropped below 7 players and were in long game mode,
+    // we keep the same game length to avoid confusion
   };
 
   // Game length change handler
@@ -530,6 +566,18 @@ function App() {
       alert('Quick game is only available for 6 or fewer players');
       return;
     }
+    
+    // When changing to Long, reset double lane for 6 players to false
+    if (newLength === GameLength.Long && localPlayers.length === 6 && useDoubleLaneFor6Players) {
+      // Remove lane assignments if we had them
+      const playersWithoutLanes = localPlayers.map(player => ({
+        ...player,
+        lane: undefined
+      }));
+      setLocalPlayers(playersWithoutLanes);
+      setUseDoubleLaneFor6Players(false);
+    }
+    
     setGameLength(newLength);
   };
 
@@ -1110,8 +1158,8 @@ const handleDraftHeroSelect = (hero: Hero, playerId: number) => {
     const playerCount = playersToUse.length;
     
     // Set initial lives and wave counters
-    const laneState = getInitialLaneState(gameLength, playerCount);
-    const teamLives = calculateTeamLives(gameLength, playerCount);
+    const laneState = getInitialLaneState(gameLength, playerCount, useDoubleLaneFor6Players);
+    const teamLives = calculateTeamLives(gameLength, playerCount, useDoubleLaneFor6Players);
     
     // Create initial game state
     const initialState: GameState = {
@@ -1355,6 +1403,8 @@ const handleDraftHeroSelect = (hero: Hero, playerId: number) => {
     heroCount={filteredHeroes.length}
     maxComplexity={maxComplexity}
     onMaxComplexityChange={setMaxComplexity}
+    useDoubleLaneFor6Players={useDoubleLaneFor6Players}
+    onUseDoubleLaneFor6PlayersChange={setUseDoubleLaneFor6Players}
   />
 )}
           

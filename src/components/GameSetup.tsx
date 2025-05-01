@@ -25,11 +25,14 @@ interface GameSetupProps {
   heroCount: number;
   maxComplexity: number;
   onMaxComplexityChange: (complexity: number) => void;
-  // New props for timer toggling
+  // Timer enabling props
   strategyTimerEnabled: boolean;
   moveTimerEnabled: boolean;
   onStrategyTimerEnabledChange: (enabled: boolean) => void;
   onMoveTimerEnabledChange: (enabled: boolean) => void;
+  // NEW: Double lane option for 6 players
+  useDoubleLaneFor6Players: boolean;
+  onUseDoubleLaneFor6PlayersChange: (useDouble: boolean) => void;
 }
 
 const GameSetup: React.FC<GameSetupProps> = ({
@@ -51,11 +54,14 @@ const GameSetup: React.FC<GameSetupProps> = ({
   heroCount,
   maxComplexity,
   onMaxComplexityChange,
-  // New props
+  // Timer props
   strategyTimerEnabled,
   moveTimerEnabled,
   onStrategyTimerEnabledChange,
-  onMoveTimerEnabledChange
+  onMoveTimerEnabledChange,
+  // Double lane props
+  useDoubleLaneFor6Players,
+  onUseDoubleLaneFor6PlayersChange
 }) => {
   const [expandedSection, setExpandedSection] = useState<{[key: string]: boolean}>({
     'timers': true,
@@ -96,7 +102,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
   // Check if we can add more players (max 10 players total)
   const canAddMorePlayers = totalPlayers < 10;
   
-  // NEW: Check if each team can add more players (max 5 per team)
+  // Check if each team can add more players (max 5 per team)
   const canAddMoreTitans = titanCount < 5;
   const canAddMoreAtlanteans = atlanteanCount < 5;
   
@@ -108,6 +114,9 @@ const GameSetup: React.FC<GameSetupProps> = ({
                          atlanteanCount > 0 && 
                          Math.abs(titanCount - atlanteanCount) <= 1 && 
                          teamsHaveMinPlayers;
+  
+  // NEW: Show double lane option only for 6 players in long game
+  const showDoubleLaneOption = totalPlayers === 6 && gameLength === GameLength.Long;
   
   // Requirements for drafting
   const canDraft = isTeamsBalanced && allPlayersHaveNames && hasUniqueNames && canStartDrafting;
@@ -242,28 +251,57 @@ const GameSetup: React.FC<GameSetupProps> = ({
                 </label>
               </div>
               
-              {/* Game configuration info */}
-              <div className="mt-4 bg-gray-700 p-3 rounded-md text-sm">
-                <h4 className="font-semibold mb-1">Current Configuration:</h4>
-                <ul className="list-disc list-inside space-y-1 text-gray-300">
-                  <li>
-                    {gameLength === GameLength.Quick 
-                      ? `3 total waves`
-                      : totalPlayers <= 6 
-                        ? `5 total waves` 
-                        : `7 waves per lane (2 lanes)`
-                    }
-                  </li>
-                  <li>
-                    {`${calculateTeamLives(gameLength, totalPlayers)} lives per team`}
-                  </li>
-                  {totalPlayers >= 8 && (
-                    <li className="text-amber-300">
-                      Using two separate lanes
-                    </li>
-                  )}
-                </ul>
-              </div>
+              {/* NEW: Double Lane Option for 6 Players */}
+              {showDoubleLaneOption && (
+                <div className="mt-4 mb-4 bg-blue-900/30 p-3 rounded">
+                  <label className="flex items-center cursor-pointer mb-1">
+                    <input
+                      type="checkbox"
+                      checked={useDoubleLaneFor6Players}
+                      onChange={() => onUseDoubleLaneFor6PlayersChange(!useDoubleLaneFor6Players)}
+                      className="form-checkbox h-5 w-5 text-blue-600 mr-2"
+                    />
+                    <span className="font-medium">Use Double Lane Map</span>
+                  </label>
+                  <p className="text-sm text-gray-300 mt-1">
+                    Enable this option to use two lanes (top and bottom) for 6 player games
+                  </p>
+                </div>
+              )}
+              
+              {/* Game configuration info - UPDATED with new values */}
+<div className="mt-4 bg-gray-700 p-3 rounded-md text-sm">
+  <h4 className="font-semibold mb-1">Current Configuration:</h4>
+  <ul className="list-disc list-inside space-y-1 text-gray-300">
+    <li>
+      {gameLength === GameLength.Quick 
+        ? `3 waves, single lane`
+        : totalPlayers <= 5
+          ? `5 waves, single lane`
+          : (totalPlayers === 6 && !useDoubleLaneFor6Players) 
+            ? `5 waves, single lane`
+            : `7 waves per lane, two lanes`
+      }
+    </li>
+    <li>
+      {gameLength === GameLength.Quick
+        ? totalPlayers <= 5 
+          ? "4 lives per team" 
+          : "5 lives per team"
+        : totalPlayers === 6 && !useDoubleLaneFor6Players
+          ? "8 lives per team" // Special case: 6 players long game single lane
+          : totalPlayers <= 8 
+            ? "6 lives per team" // 3-5 players or 6-8 players with double lane
+            : "7 lives per team" // 9-10 players
+      }
+    </li>
+    {(totalPlayers >= 7 || (totalPlayers === 6 && useDoubleLaneFor6Players && gameLength === GameLength.Long)) && (
+      <li className="text-amber-300">
+        Using two separate lanes (top and bottom)
+      </li>
+    )}
+  </ul>
+</div>
             </>
           )}
         </div>
@@ -519,18 +557,6 @@ const GameSetup: React.FC<GameSetupProps> = ({
       </p>
     </div>
   );
-};
-
-// Helper function to calculate team lives based on game length and player count
-const calculateTeamLives = (gameLength: GameLength, playerCount: number): number => {
-  if (gameLength === GameLength.Quick) {
-    return playerCount <= 4 ? 4 : 5;
-  } else { // Long game
-    if (playerCount <= 4) return 6;
-    if (playerCount <= 6) return 8;
-    if (playerCount <= 8) return 6;
-    return 7; // 10 players
-  }
 };
 
 export default GameSetup;
