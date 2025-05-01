@@ -169,7 +169,6 @@ const GameTimer: React.FC<GameTimerProps> = ({
           
           <div className="mt-3">
             <button
-             
               className={`flex items-center justify-center px-4 py-2 rounded-lg text-white ${
                 gameState.coinSide === Team.Titans 
                   ? 'bg-blue-700 hover:bg-blue-600' 
@@ -241,59 +240,67 @@ const GameTimer: React.FC<GameTimerProps> = ({
             <h2 className="text-2xl font-bold mb-4">Action Phase</h2>
             
             {activePlayer && activePlayer.hero ? (
-              <div className="mb-4">
-                <div 
-                  className={`inline-block py-2 px-4 rounded-lg text-white font-medium ${
-                    activePlayer.team === Team.Titans ? 'bg-blue-700' : 'bg-red-700'
-                  }`}
-                >
-                  {activePlayer.team === Team.Titans ? 'Titans' : 'Atlanteans'}
-                </div>
-                <div className="flex items-center justify-center mt-2">
-                  <div className="w-12 h-12 bg-gray-300 rounded-full overflow-hidden mr-3">
-                    <img 
-                      src={activePlayer.hero.icon} 
-                      alt={activePlayer.hero.name} 
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.src = 'https://via.placeholder.com/48?text=Hero';
-                      }}
-                    />
+              <>
+                <div className="mb-4">
+                  <div 
+                    className={`inline-block py-2 px-4 rounded-lg text-white font-medium ${
+                      activePlayer.team === Team.Titans ? 'bg-blue-700' : 'bg-red-700'
+                    }`}
+                  >
+                    {activePlayer.team === Team.Titans ? 'Titans' : 'Atlanteans'}
                   </div>
-                  <div className="text-xl font-bold">{activePlayer.hero.name}</div>
+                  <div className="flex items-center justify-center mt-2">
+                    <div className="w-16 h-16 bg-gray-300 rounded-full overflow-hidden mr-3">
+                      <img 
+                        src={activePlayer.hero.icon} 
+                        alt={activePlayer.hero.name} 
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = 'https://via.placeholder.com/64?text=Hero';
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold">{activePlayer.hero.name}</div>
+                      <div className="text-lg text-gray-300">{activePlayer.name}</div>
+                    </div>
+                  </div>
+                  
+                  {/* Only show timer when a player is selected */}
+                  <div className="text-6xl font-bold my-6">{formatTime(moveTimeRemaining)}</div>
+                  
+                  <div className="flex justify-center gap-4">
+                    {moveTimerActive ? (
+                      <button 
+                        className="bg-amber-600 hover:bg-amber-500 px-6 py-3 rounded-lg text-white font-medium"
+                        onClick={onPauseMoveTimer}
+                      >
+                        Pause
+                      </button>
+                    ) : (
+                      <button 
+                        className="bg-green-600 hover:bg-green-500 px-6 py-3 rounded-lg text-white font-medium"
+                        onClick={onStartMoveTimer}
+                      >
+                        Resume
+                      </button>
+                    )}
+                    <button 
+                      className="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-lg text-white font-medium flex items-center"
+                      onClick={onCompletePlayerTurn}
+                    >
+                      <Check size={18} className="mr-2" />
+                      Complete Turn
+                    </button>
+                  </div>
                 </div>
-              </div>
+              </>
             ) : (
-              <div className="mb-4 text-amber-300">No active player</div>
+              <div className="py-6 text-xl text-amber-300">
+                Select a player to start their action timer
+              </div>
             )}
-            
-            <div className="text-6xl font-bold mb-6">{formatTime(moveTimeRemaining)}</div>
-            
-            <div className="flex justify-center gap-4">
-              {moveTimerActive ? (
-                <button 
-                  className="bg-amber-600 hover:bg-amber-500 px-6 py-3 rounded-lg text-white font-medium"
-                  onClick={onPauseMoveTimer}
-                >
-                  Pause
-                </button>
-              ) : (
-                <button 
-                  className="bg-green-600 hover:bg-green-500 px-6 py-3 rounded-lg text-white font-medium"
-                  onClick={onStartMoveTimer}
-                >
-                  Resume
-                </button>
-              )}
-              <button 
-                className="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-lg text-white font-medium flex items-center"
-                onClick={onCompletePlayerTurn}
-              >
-                <Check size={18} className="mr-2" />
-                Complete Turn
-              </button>
-            </div>
           </div>
         ) : (
           // Turn-end phase
@@ -311,7 +318,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
         )}
       </div>
       
-      {/* Player Selection Grid - FIXED: Shows all players with no lane tags */}
+      {/* Player Selection Grid - UPDATED: Now shows player names and has larger tiles */}
       {gameState.currentPhase !== 'turn-end' && (
         <div className="mt-6">
           <h3 className="text-xl font-bold mb-3">
@@ -320,8 +327,8 @@ const GameTimer: React.FC<GameTimerProps> = ({
               : 'Select Player'}
           </h3>
           
-          {/* Display all players in a single grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          {/* Display all players in a grid with larger tiles */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {players.map((player, index) => (
               player.hero && renderPlayerCard(player, index)
             ))}
@@ -340,7 +347,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
     return (
       <div
         key={player.id}
-        className={`p-3 rounded-lg transition-all relative ${
+        className={`p-4 rounded-lg transition-all relative ${
           // Different styles based on player status
           isActive
             ? player.team === Team.Titans
@@ -360,37 +367,39 @@ const GameTimer: React.FC<GameTimerProps> = ({
       >
         <div className="flex items-center">
           {player.hero && (
-            <div className="w-10 h-10 bg-gray-300 rounded-full overflow-hidden mr-2">
+            <div className="w-16 h-16 bg-gray-300 rounded-full overflow-hidden mr-3 flex-shrink-0">
               <img 
                 src={player.hero.icon} 
                 alt={player.hero.name} 
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
-                  target.src = 'https://via.placeholder.com/40?text=Hero';
+                  target.src = 'https://via.placeholder.com/64?text=Hero';
                 }}
               />
             </div>
           )}
           <div>
-            <div className="font-medium">{player.hero?.name || 'Unknown Hero'}</div>
-            <div className="text-xs text-gray-300">
-              Player {player.id}
-              {/* Removed lane tag display */}
-            </div>
+            <div className="text-lg font-bold mb-1">{player.hero?.name || 'Unknown Hero'}</div>
+            <div className="text-base text-gray-300">{player.name || `Player ${player.id}`}</div>
+            {player.lane && (
+              <div className="text-xs text-gray-400 mt-1">
+                {player.lane === Lane.Top ? 'Top Lane' : 'Bottom Lane'}
+              </div>
+            )}
           </div>
         </div>
         
         {/* Status indicators */}
         {hasCompleted && (
-          <div className="absolute top-1 right-1 bg-green-600 rounded-full p-0.5" title="Completed">
-            <Check size={14} />
+          <div className="absolute top-2 right-2 bg-green-600 rounded-full p-1" title="Completed">
+            <Check size={18} />
           </div>
         )}
         
         {isActive && (
-          <div className="absolute top-1 right-1 bg-yellow-500 rounded-full p-0.5 animate-pulse" title="Active">
-            <Clock size={14} />
+          <div className="absolute top-2 right-2 bg-yellow-500 rounded-full p-1 animate-pulse" title="Active">
+            <Clock size={18} />
           </div>
         )}
       </div>

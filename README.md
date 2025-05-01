@@ -91,9 +91,9 @@ This app has not been officially approved by Wolff Designa (the designers of Gua
 
 # Bugs
 - Tooltips on mobile Sometimes we need to access content behind them.
-- display player names on game timer screen. 
+- feedback bar obscuring things
+- disable timers
 - Add tooltip for hero types
-- Do not show count down in Action Phase unless there is an active player
 - Select two lanes with six players (automatically selected with 8 or 10)
 - Manually decrease wave counter; round; turn.
 - Tooltips sometimes covering things up
