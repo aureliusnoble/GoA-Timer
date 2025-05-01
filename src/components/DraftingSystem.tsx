@@ -100,10 +100,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
   };
   
   // Button click handlers with sound
-  const handleButtonClick = () => {
-    playSound('buttonClick');
-  };
-  
+
   const handleHeroSelect = (hero: Hero, playerId: number) => {
     playSound('heroSelect');
     onHeroSelect(hero, playerId);

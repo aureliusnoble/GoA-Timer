@@ -80,7 +80,7 @@ export const SoundProvider: React.FC<{children: React.ReactNode}> = ({ children 
           volume: 0.01
         });
         silentSound.play();
-      }).catch(err => {
+      }).catch((err:any) => {
         console.error("Failed to resume AudioContext:", err);
       });
     } else {
@@ -104,7 +104,7 @@ export const SoundProvider: React.FC<{children: React.ReactNode}> = ({ children 
             preload: true,
             volume: soundName === 'timerTick' ? 0.2 : 0.5,
             onload: () => console.log(`Successfully loaded: ${soundName}`),
-            onloaderror: (id, error) => console.error(`Error loading ${soundName}:`, error)
+            onloaderror: (error: any) => console.error(`Error loading ${soundName}:`, error)
           });
         }
       });
@@ -156,9 +156,9 @@ export const SoundProvider: React.FC<{children: React.ReactNode}> = ({ children 
         src: [SOUND_FILES[soundName]],
         volume: soundName === 'timerTick' ? 0.2 : 0.5,
         onload: () => console.log(`Successfully loaded: ${soundName}`),
-        onloaderror: (id, error) => console.error(`Error loading ${soundName}:`, error),
+        onloaderror: (error: any) => console.error(`Error loading ${soundName}:`, error),
         onplay: () => console.log(`Started playing: ${soundName}`),
-        onplayerror: (id, error) => console.error(`Error playing ${soundName}:`, error)
+        onplayerror: (error: any) => console.error(`Error playing ${soundName}:`, error)
       });
       
       soundCache[soundName] = sound;

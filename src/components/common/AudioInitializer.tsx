@@ -10,7 +10,7 @@ const AudioInitializer: React.FC = () => {
       if (Howler.ctx && Howler.ctx.state !== 'running') {
         Howler.ctx.resume().then(() => {
           console.log("AudioContext resumed successfully on user interaction");
-        }).catch(err => {
+        }).catch((err: any) => {
           console.error("Failed to resume AudioContext:", err);
         });
       }
