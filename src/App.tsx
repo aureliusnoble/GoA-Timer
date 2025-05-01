@@ -5,6 +5,7 @@ import GameTimer from './components/GameTimer';
 import DraftingSystem from './components/DraftingSystem';
 import CoinToss from './components/CoinToss';
 import DraftModeSelection from './components/DraftModeSelection';
+import CollapsibleFeedback from './components/common/CollapsibleFeedback';
 import { 
   Hero, 
   GameState, 
@@ -332,6 +333,7 @@ function App() {
   const [moveTimerActive, setMoveTimerActive] = useState<boolean>(false);
   const [strategyTimeRemaining, setStrategyTimeRemaining] = useState<number>(strategyTime);
   const [moveTimeRemaining, setMoveTimeRemaining] = useState<number>(moveTime);
+
 
   // Check for duplicate player names
   const findDuplicateNames = (): string[] => {
@@ -1106,6 +1108,7 @@ function App() {
     return shuffled;
   };
 
+
   return (
     <div className="App min-h-screen bg-gradient-to-b from-blue-400 to-orange-300 text-white p-6">
       <header className="App-header mb-8">
@@ -1197,18 +1200,8 @@ function App() {
         />
       )}
 
-{/* Footer with Feedback link */}
-<footer className="fixed bottom-0 left-0 w-full z-10 bg-white bg-opacity-15 text-center text-base text-white py-2">
-  <a
-    href="https://forms.gle/dsjjDSbqhTn3hATt6"
-    target="_blank"
-    rel="noopener noreferrer"
-    className="underline hover:text-blue"
-  >
-    Feedback
-  </a>
-</footer>
-
+      {/* Replace static footer with CollapsibleFeedback */}
+      <CollapsibleFeedback feedbackUrl="https://forms.gle/dsjjDSbqhTn3hATt6" />
     </div>
   );
 }

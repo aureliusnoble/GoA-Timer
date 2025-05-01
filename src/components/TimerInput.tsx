@@ -1,6 +1,6 @@
-// src/components/TimerInput.tsx
 import React, { useState, useEffect } from 'react';
 import { ChevronUp, ChevronDown, Info } from 'lucide-react';
+import EnhancedTooltip from './common/EnhancedTooltip';
 
 interface TimerInputProps {
   value: number; // Value in seconds
@@ -19,7 +19,6 @@ const TimerInput: React.FC<TimerInputProps> = ({
   maxValue = 600,
   step = 10
 }) => {
-  const [isTooltipVisible, setIsTooltipVisible] = useState(false);
   const [inputValue, setInputValue] = useState<string>(formatTime(value));
 
   // Format seconds to MM:SS
@@ -117,19 +116,16 @@ const TimerInput: React.FC<TimerInputProps> = ({
           </button>
         </div>
         
-        <div 
-          className="ml-2 cursor-help relative"
-          onMouseEnter={() => setIsTooltipVisible(true)}
-          onMouseLeave={() => setIsTooltipVisible(false)}
+        {/* Replace custom tooltip with EnhancedTooltip */}
+        <EnhancedTooltip 
+          text={tooltip}
+          position="right"
+          maxWidth="max-w-xs"
         >
-          <Info size={18} className="text-gray-400 hover:text-gray-200" />
-          
-          {isTooltipVisible && (
-            <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 bg-gray-900 text-white p-2 rounded shadow-lg w-64 z-10">
-              {tooltip}
-            </div>
-          )}
-        </div>
+          <div className="ml-2 cursor-help">
+            <Info size={18} className="text-gray-400 hover:text-gray-200" />
+          </div>
+        </EnhancedTooltip>
       </div>
     </div>
   );
