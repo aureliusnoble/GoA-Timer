@@ -92,7 +92,7 @@ This app has not been officially approved by Wolff Designa (the designers of Gua
 # To-do
 
 - End of Round Assistant. Can optionally record Level: Amount of Gold; Kills; Asssists; Minion Kills
-- If we logged level, amount of gold, kills, assists at end of round, we can display on the hero cards.
+- If we logged level, amount of gold, kills, assists at end of round, we can display on the hero cards (with icons)
 - Game State Import/Export
 - Store locally some files which records match results.
 - Single button for: Game Data
