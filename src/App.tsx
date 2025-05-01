@@ -1,4 +1,4 @@
-import { useState, useEffect, useReducer, useRef } from 'react';
+import { useState, useEffect, useReducer, useRef, useCallback } from 'react';
 import './App.css';
 import GameSetup from './components/GameSetup';
 import GameTimer from './components/GameTimer';
@@ -9,8 +9,10 @@ import CollapsibleFeedback from './components/common/CollapsibleFeedback';
 import SoundToggle from './components/common/SoundToggle';
 import AudioInitializer from './components/common/AudioInitializer';
 import VictoryScreen from './components/VictoryScreen';
+import ResumeGamePrompt from './components/common/ResumeGamePrompt'; // New import
 import { SoundProvider, useSound } from './context/SoundContext';
 import { PlayerRoundStats } from './components/EndOfRoundAssistant';
+import { gameStorageService } from './services/GameStorageService'; // New import
 import { 
   Hero, 
   GameState, 
@@ -178,12 +180,17 @@ type GameAction =
   | { type: 'ADJUST_TURN', delta: number }  // New action for adjusting turn
   | { type: 'DECLARE_VICTORY', team: Team } // New action for declaring victory
   | { type: 'RESET_GAME' }                  // New action for resetting game
+  | { type: 'RESUME_GAME', payload: GameState } // New action for resuming a saved game
   | { type: 'FLIP_COIN' };
 
 const gameReducer = (state: GameState, action: GameAction): GameState => {
   switch (action.type) {
     case 'START_GAME':
       // Use the full payload to initialize game state
+      return action.payload;
+      
+    case 'RESUME_GAME':
+      // Use the full payload to resume a saved game state
       return action.payload;
       
     case 'START_STRATEGY':
@@ -454,6 +461,144 @@ function AppContent() {
   const [moveTimerActive, setMoveTimerActive] = useState<boolean>(false);
   const [strategyTimeRemaining, setStrategyTimeRemaining] = useState<number>(strategyTime);
   const [moveTimeRemaining, setMoveTimeRemaining] = useState<number>(moveTime);
+
+  // NEW: State for resume game prompt
+  const [showResumePrompt, setShowResumePrompt] = useState<boolean>(false);
+  const [savedGameData, setSavedGameData] = useState<{
+    gameState: GameState;
+    players: Player[];
+    timestamp: number;
+    strategyTimeRemaining: number;
+    moveTimeRemaining: number;
+    strategyTimerActive: boolean;
+    moveTimerActive: boolean;
+    strategyTimerEnabled: boolean;
+    moveTimerEnabled: boolean;
+  } | null>(null);
+
+  // Function to save game state
+  const saveGameState = useCallback(() => {
+    if (gameStarted && gameState.currentPhase !== 'victory') {
+      console.log('Saving game state to IndexedDB');
+      gameStorageService.saveGame({
+        gameState,
+        players: localPlayers,
+        strategyTimeRemaining,
+        moveTimeRemaining,
+        strategyTimerActive,
+        moveTimerActive,
+        strategyTimerEnabled,
+        moveTimerEnabled
+      }).catch(err => {
+        console.error('Failed to save game:', err);
+      });
+    }
+  }, [
+    gameStarted,
+    gameState,
+    localPlayers,
+    strategyTimeRemaining,
+    moveTimeRemaining,
+    strategyTimerActive,
+    moveTimerActive,
+    strategyTimerEnabled,
+    moveTimerEnabled
+  ]);
+
+  // Check for saved game on component mount
+  useEffect(() => {
+    const checkSavedGame = async () => {
+      if (!gameStorageService.isSupported()) {
+        console.warn('IndexedDB is not supported in this browser');
+        return;
+      }
+
+      try {
+        const savedData = await gameStorageService.loadGame();
+        
+        if (savedData) {
+          // Check if the saved game is still valid (not in victory phase)
+          const isValidSavedGame = savedData.gameState.currentPhase !== 'victory';
+          
+          if (isValidSavedGame) {
+            console.log('Found saved game, showing resume prompt');
+            setSavedGameData(savedData);
+            setShowResumePrompt(true);
+          } else {
+            // If game already ended in victory, clear it
+            console.log('Found completed game, clearing saved data');
+            gameStorageService.clearGame();
+          }
+        }
+      } catch (err) {
+        console.error('Error checking for saved game:', err);
+      }
+    };
+    
+    checkSavedGame();
+  }, []);
+
+  // Save game state on certain state changes
+  useEffect(() => {
+    if (gameStarted && gameState.currentPhase !== 'setup') {
+      saveGameState();
+    }
+  }, [
+    saveGameState,
+    gameState.round,
+    gameState.turn,
+    gameState.teamLives,
+    gameState.currentPhase,
+    gameState.activeHeroIndex,
+    gameState.completedTurns,
+  ]);
+
+  // Handle resume game
+  const handleResumeGame = () => {
+    if (savedGameData) {
+      // Restore game state
+      dispatch({ type: 'RESUME_GAME', payload: savedGameData.gameState });
+      
+      // Restore players
+      setLocalPlayers(savedGameData.players);
+      players = savedGameData.players;
+      
+      // Restore timers
+      setStrategyTimeRemaining(savedGameData.strategyTimeRemaining);
+      setMoveTimeRemaining(savedGameData.moveTimeRemaining);
+      setStrategyTimerActive(savedGameData.strategyTimerActive);
+      setMoveTimerActive(savedGameData.moveTimerActive);
+      setStrategyTimerEnabled(savedGameData.strategyTimerEnabled);
+      setMoveTimerEnabled(savedGameData.moveTimerEnabled);
+      
+      // Set game as started
+      setGameStarted(true);
+      
+      // Hide the prompt
+      setShowResumePrompt(false);
+      
+      // Play sound
+      playSound('phaseChange');
+    }
+  };
+
+  // Handle discard saved game
+  const handleDiscardSavedGame = () => {
+    // Clear the saved game
+    gameStorageService.clearGame();
+    
+    // Hide the prompt
+    setShowResumePrompt(false);
+    
+    // Play sound
+    playSound('buttonClick');
+  };
+
+  // Format saved timestamp to readable string
+  const formatSavedTime = (timestamp: number): string => {
+    const date = new Date(timestamp);
+    return date.toLocaleString();
+  };
 
   // Attempt to unlock audio on first user interaction
   useEffect(() => {
@@ -1259,6 +1404,9 @@ function AppContent() {
     setIsDraftingMode(false);
     
     playSound('turnStart');
+    
+    // Save initial game state
+    setTimeout(() => saveGameState(), 100);
   };
 
   // Cancel drafting and return to setup
@@ -1288,6 +1436,9 @@ function AppContent() {
       
       setMoveTimerActive(false);
       dispatch({ type: 'MARK_PLAYER_COMPLETE', playerIndex: gameState.activeHeroIndex });
+      
+      // Save state after turn completion
+      setTimeout(() => saveGameState(), 100);
     }
   };
 
@@ -1298,6 +1449,9 @@ function AppContent() {
     dispatch({ type: 'START_NEXT_TURN' });
     setStrategyTimerActive(true);
     setStrategyTimeRemaining(strategyTime);
+    
+    // Save state after starting next turn
+    setTimeout(() => saveGameState(), 100);
   };
 
   // End the strategy phase
@@ -1306,6 +1460,9 @@ function AppContent() {
     
     setStrategyTimerActive(false);
     dispatch({ type: 'END_STRATEGY' });
+    
+    // Save state after ending strategy phase
+    setTimeout(() => saveGameState(), 100);
   };
 
   // Adjust team life counter
@@ -1313,6 +1470,9 @@ function AppContent() {
     playSound('lifeChange');
     
     dispatch({ type: 'ADJUST_TEAM_LIFE', team, delta });
+    
+    // Save state after life change
+    setTimeout(() => saveGameState(), 100);
   };
 
   // Increment wave counter for a specific lane
@@ -1320,6 +1480,9 @@ function AppContent() {
     playSound('buttonClick');
     
     dispatch({ type: 'INCREMENT_WAVE', lane });
+    
+    // Save state after wave increment
+    setTimeout(() => saveGameState(), 100);
   };
   
   // Decrement wave counter for a specific lane
@@ -1327,6 +1490,9 @@ function AppContent() {
     playSound('buttonClick');
     
     dispatch({ type: 'DECREMENT_WAVE', lane });
+    
+    // Save state after wave decrement
+    setTimeout(() => saveGameState(), 100);
   };
   
   // Adjust round counter
@@ -1334,6 +1500,9 @@ function AppContent() {
     playSound('buttonClick');
     
     dispatch({ type: 'ADJUST_ROUND', delta });
+    
+    // Save state after round adjustment
+    setTimeout(() => saveGameState(), 100);
   };
   
   // Adjust turn counter
@@ -1341,12 +1510,19 @@ function AppContent() {
     playSound('buttonClick');
     
     dispatch({ type: 'ADJUST_TURN', delta });
+    
+    // Save state after turn adjustment
+    setTimeout(() => saveGameState(), 100);
   };
   
   // Declare victory for a team
   const declareVictory = (team: Team) => {
     playSound('victory');
     
+    // Clear saved game when victory is declared
+    gameStorageService.clearGame();
+    
+    dispatch({ type: 'DECLARE_VICTORY', team });
     setVictorTeam(team);
     setShowVictoryScreen(true);
   };
@@ -1361,6 +1537,9 @@ function AppContent() {
     setIsDraftingMode(false);
     setShowDraftModeSelection(false);
     dispatch({ type: 'RESET_GAME' });
+    
+    // Make sure saved game is cleared
+    gameStorageService.clearGame();
   };
 
   // Flip the tiebreaker coin
@@ -1368,6 +1547,11 @@ function AppContent() {
     playSound('coinFlip');
     
     dispatch({ type: 'FLIP_COIN' });
+    
+    // Save state after coin flip
+    if (gameStarted) {
+      setTimeout(() => saveGameState(), 100);
+    }
   };
 
   // NEW: Handle saving player round stats
@@ -1397,6 +1581,9 @@ function AppContent() {
     
     setLocalPlayers(updatedPlayers);
     players = updatedPlayers;
+    
+    // Save state after stats update
+    setTimeout(() => saveGameState(), 100);
   };
 
   // Handle strategy timer
@@ -1488,6 +1675,17 @@ function AppContent() {
       <header className="App-header mb-8">
         <h1 className="text-3xl font-bold mb-2">Guards of Atlantis II Timer</h1>
       </header>
+
+      {/* Resume Game Prompt */}
+      {showResumePrompt && savedGameData && (
+        <ResumeGamePrompt
+          gameState={savedGameData.gameState}
+          players={savedGameData.players}
+          onResume={handleResumeGame}
+          onDiscard={handleDiscardSavedGame}
+          savedTime={formatSavedTime(savedGameData.timestamp)}
+        />
+      )}
 
       {/* Coin flip animation */}
       {showCoinAnimation && (
