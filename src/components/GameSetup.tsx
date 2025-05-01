@@ -309,7 +309,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
               {/* Hero count warning */}
               {totalPlayers > 0 && !canStartDrafting && (
                 <div className="text-red-400 text-sm mt-2">
-                  Not enough heroes ({heroCount}) for {totalPlayers} players. Select more expansions.
+                  Not enough heroes ({heroCount}) for {totalPlayers} players. Select more expansions or increase complexity.
                 </div>
               )}
               

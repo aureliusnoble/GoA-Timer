@@ -603,7 +603,7 @@ function App() {
     
     // Check if we have enough heroes in selected expansions
     if (!canUseDraftMode(DraftMode.AllPick)) {
-      alert('Not enough heroes in selected expansions. Please select more expansions or reduce player count.');
+      alert('Not enough heroes in selected expansions. Please select more expansions, increase complexity, or reduce player count.');
       return;
     }
     
