@@ -610,7 +610,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
   </div>
 </div>
       
-      <p className="mt-4 text-xs text-gray-300 text-center translate-y-5">
+     <p className="mt-4 text-xs text-gray-300 text-center mb-2">
         Disclaimer: This is not an official product and has not been approved by Wolff Designa. All game content is the property of Wolff Designa.
       </p>
     </div>

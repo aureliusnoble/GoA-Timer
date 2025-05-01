@@ -36,21 +36,33 @@ const SoundContext = createContext<SoundContextType>({
   isAudioReady: false
 });
 
-// Sound files mapping
+// Get the base URL for the current environment
+// This ensures paths work correctly in both development and production
+const getBaseUrl = () => {
+  // If we're in a Vite environment, use import.meta.env.BASE_URL
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    return import.meta.env.BASE_URL || '';
+  }
+  // Fallback to empty string (relative path from current location)
+  return '';
+};
+
+// Sound files mapping with base URL prefixed
+const BASE_URL = getBaseUrl();
 const SOUND_FILES: Record<SoundName, string> = {
-  buttonClick: '/sounds/ui/button-click.mp3',
-  timerWarning: '/sounds/timer/timer-warning.mp3',
-  timerComplete: '/sounds/timer/timer-complete.mp3',
-  timerTick: '/sounds/timer/timer-tick.mp3',
-  heroSelect: '/sounds/game/hero-select.mp3',
-  heroBan: '/sounds/game/hero-ban.mp3',
-  coinFlip: '/sounds/game/coin-flip.mp3',
-  victory: '/sounds/victory/victory.mp3',
-  phaseChange: '/sounds/game/phase-change.mp3',
-  turnStart: '/sounds/game/turn-start.mp3',
-  turnComplete: '/sounds/game/turn-complete.mp3',
-  lifeChange: '/sounds/game/life-change.mp3',
-  toggleSwitch: '/sounds/ui/toggle-switch.mp3',
+  buttonClick: `${BASE_URL}sounds/ui/button-click.mp3`,
+  timerWarning: `${BASE_URL}sounds/timer/timer-warning.mp3`,
+  timerComplete: `${BASE_URL}sounds/timer/timer-complete.mp3`,
+  timerTick: `${BASE_URL}sounds/timer/timer-tick.mp3`,
+  heroSelect: `${BASE_URL}sounds/game/hero-select.mp3`,
+  heroBan: `${BASE_URL}sounds/game/hero-ban.mp3`,
+  coinFlip: `${BASE_URL}sounds/game/coin-flip.mp3`,
+  victory: `${BASE_URL}sounds/victory/victory.mp3`,
+  phaseChange: `${BASE_URL}sounds/game/phase-change.mp3`,
+  turnStart: `${BASE_URL}sounds/game/turn-start.mp3`,
+  turnComplete: `${BASE_URL}sounds/game/turn-complete.mp3`,
+  lifeChange: `${BASE_URL}sounds/game/life-change.mp3`,
+  toggleSwitch: `${BASE_URL}sounds/ui/toggle-switch.mp3`,
 };
 
 // Cache for loaded sound files

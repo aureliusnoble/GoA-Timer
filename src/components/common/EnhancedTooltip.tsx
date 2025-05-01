@@ -19,7 +19,8 @@ const EnhancedTooltip: React.FC<EnhancedTooltipProps> = ({
   const { isMobile } = useDevice();
   const [isVisible, setIsVisible] = useState(false);
   const [adjustedPosition, setAdjustedPosition] = useState(position);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const tooltipRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
