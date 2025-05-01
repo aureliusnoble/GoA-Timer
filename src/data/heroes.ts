@@ -1,7 +1,7 @@
-// src/dataheroes.ts
+// src/data/heroes.ts
 import { Hero } from '../types';
 
-// Sample hero data with expanded properties
+// Updated hero data with expanded properties including stats and additional roles
 export const heroes: Hero[] = [
   {
     id: 0,
@@ -9,8 +9,15 @@ export const heroes: Hero[] = [
     icon: 'heroes/arien.png',
     complexity: 1,
     roles: ['Tactician', 'Disabler'],
+    additionalRoles: ['Durable', 'Pusher'],
     expansion: 'Core',
-    description: 'Arien is a master duelist who boasts the strongest attacks and disruption on the roster.'
+    description: 'Arien is a master duelist who boasts the strongest attacks and disruption on the roster.',
+    attack: 8,
+    initiative: 4,
+    defence: 5,
+    defence_upgraded: 6,
+    movement: 5,
+    movement_upgraded: 6
   },
   {
     id: 1,
@@ -18,8 +25,14 @@ export const heroes: Hero[] = [
     icon: 'heroes/brogan.png',
     complexity: 1,
     roles: ['Durable', 'Disabler'],
+    additionalRoles: ['Pusher', 'Farming'],
     expansion: 'Core',
-    description: 'Brogan is the tank of Guards of Atlantis, nigh-unkillable and great at applying pressure in an area.'
+    description: 'Brogan is the tank of Guards of Atlantis, nigh-unkillable and great at applying pressure in an area.',
+    attack: 7,
+    initiative: 1,
+    defence: 8,
+    movement: 2,
+    movement_upgraded: 4
   },
   {
     id: 2,
@@ -27,8 +40,16 @@ export const heroes: Hero[] = [
     icon: 'heroes/tigerclaw.png',
     complexity: 1,
     roles: ['Melee', 'Disabler'],
+    additionalRoles: ['Farming'],
     expansion: 'Core',
-    description: 'Tigerclaw is an evasive hero capable of dodging attacks and debilitating enemy heroes.'
+    description: 'Tigerclaw is an evasive hero capable of dodging attacks and debilitating enemy heroes.',
+    attack: 4,
+    attack_upgraded: 8,
+    initiative: 8,
+    defence: 1,
+    defence_upgraded: 4,
+    movement: 7,
+    movement_upgraded: 8
   },
   {
     id: 3,
@@ -36,8 +57,14 @@ export const heroes: Hero[] = [
     icon: 'heroes/wasp.png',
     complexity: 1,
     roles: ['Disabler', 'Tactician'],
+    additionalRoles: ['Sniper'],
     expansion: 'Core',
-    description: 'Wasp is a crowd control specialist, with area control abilities.'
+    description: 'Wasp is a crowd control specialist, with area control abilities.',
+    attack: 5,
+    initiative: 6,
+    defence: 4,
+    defence_upgraded: 5,
+    movement: 5
   },
   {
     id: 4,
@@ -46,7 +73,13 @@ export const heroes: Hero[] = [
     complexity: 1,
     roles: ['Tactician', 'Pusher'],
     expansion: 'Core',
-    description: 'Sabina is a pusher who works best surrounded by friendly minions.'
+    description: 'Sabina is a pusher who works best surrounded by friendly minions.',
+    attack: 1,
+    attack_upgraded: 8,
+    initiative: 5,
+    defence: 3,
+    movement: 5,
+    movement_upgraded: 6
   },
   {
     id: 5,
@@ -54,8 +87,14 @@ export const heroes: Hero[] = [
     icon: 'heroes/xargatha.png',
     complexity: 1,
     roles: ['Tactician', 'Pusher'],
+    additionalRoles: ['Disabler', 'Durable', 'Sniper'],
     expansion: 'Core',
-    description: 'Xargartha is a powerful brawler and zoner.'
+    description: 'Xargartha is a powerful brawler and zoner.',
+    attack: 5,
+    attack_upgraded: 8,
+    initiative: 3,
+    defence: 6,
+    movement: 6
   },
   {
     id: 6,
@@ -63,233 +102,404 @@ export const heroes: Hero[] = [
     icon: 'heroes/dodger.png',
     complexity: 1,
     roles: ['Damager', 'Sniper'],
+    additionalRoles: ['Pusher', 'Farming', 'Disabler'],
     expansion: 'Core',
-    description: 'Dodger is damaging hero who becomes more powerful as her enemies become weaker.'
+    description: 'Dodger is damaging hero who becomes more powerful as her enemies become weaker.',
+    attack: 3,
+    initiative: 7,
+    defence: 2,
+    defence_upgraded: 5,
+    movement: 5
   },
- {
+  {
     id: 7,
     name: 'Rowenna',
     icon: 'heroes/rowenna.png',
     complexity: 2,
     roles: ['Melee', 'Durable'],
+    additionalRoles: ['Healer', 'Farming', 'Pusher', 'Tactician'],
     expansion: 'Arcane',
-    description: 'Rowenna is a front-line tank and battlefield support who excels at surviving in contested areas.'
+    description: 'Rowenna is a front-line tank and battlefield support who excels at surviving in contested areas.',
+    attack: 8,
+    initiative: 4,
+    defence: 7,
+    movement: 3,
+    movement_upgraded: 5
   },
- {
+  {
     id: 8,
     name: 'Garrus',
     icon: 'heroes/garrus.png',
     complexity: 2,
     roles: ['Disabler', 'Durable'],
+    additionalRoles: ['Tactician'],
     expansion: 'Defiant',
-    description: 'Garrus dominates the battlefield as a melee brawler who thrives on intimidation and control. '
+    description: 'Garrus dominates the battlefield as a melee brawler who thrives on intimidation and control.',
+    attack: 8,
+    initiative: 3,
+    defence: 7,
+    movement: 5,
+    movement_upgraded: 6
   },
- {
+  {
     id: 9,
     name: 'Bain',
     icon: 'heroes/bain.png',
     complexity: 2,
     roles: ['Tactician', 'Sniper'],
+    additionalRoles: ['Healer', 'Farming', 'Durable'],
     expansion: 'Defiant',
-    description: 'Bain is a ranged initiator who specializes in marking targets, forcing discards, and setting up kills.'
+    description: 'Bain is a ranged initiator who specializes in marking targets, forcing discards, and setting up kills.',
+    attack: 5,
+    initiative: 4,
+    defence: 4,
+    defence_upgraded: 6,
+    movement: 5,
+    movement_upgraded: 6
   },
- {
+  {
     id: 10,
     name: 'Whisper',
     icon: 'heroes/whisper.png',
     complexity: 2,
     roles: ['Damager', 'Durable'],
+    additionalRoles: ['Tactician', 'Pusher'],
     expansion: 'Devoted',
-    description: 'Whisper is an adaptive support fighter whose power scales with battlefield clearing, gaining strength as minion spawns empty.'
+    description: 'Whisper is an adaptive support fighter whose power scales with battlefield clearing, gaining strength as minion spawns empty.',
+    attack: 7,
+    initiative: 7,
+    defence: 4,
+    movement: 3,
+    movement_upgraded: 5
   },
- {
+  {
     id: 11,
     name: 'Misa',
     icon: 'heroes/misa.png',
     complexity: 2,
     roles: ['Tactician', 'Durable'],
+    additionalRoles: ['Damager'],
     expansion: 'Devoted',
-    description: 'Misa is an elite mobility assassin and disruptor who controls engagements through superior positioning and unpredictable movement.'
+    description: 'Misa is an elite mobility assassin and disruptor who controls engagements through superior positioning and unpredictable movement.',
+    attack: 6,
+    initiative: 7,
+    defence: 5,
+    movement: 1,
+    movement_upgraded: 8
   },
- {
+  {
     id: 12,
     name: 'Ursafar',
     icon: 'heroes/ursafar.png',
     complexity: 2,
     roles: ['Durable', 'Pusher'],
+    additionalRoles: ['Farming', 'Melee'],
     expansion: 'Devoted',
-    description: 'Ursafar is a momentum-based melee brawler who transforms from adequate to overwhelming once his "enraged" state activates.'
+    description: 'Ursafar is a momentum-based melee brawler who transforms from adequate to overwhelming once his "enraged" state activates.',
+    attack: 6,
+    initiative: 5,
+    defence: 6,
+    movement: 1,
+    movement_upgraded: 5
   },
- {
+  {
     id: 13,
     name: 'Silverarrow',
     icon: 'heroes/silverarrow.png',
     complexity: 2,
     roles: ['Sniper', 'Damager'],
+    additionalRoles: ['Disabler', 'Healer', 'Farming'],
     expansion: 'Devoted',
-    description: 'Silverarrow is a long-range zone controller and initiator who dominates through superior positioning and distance management.'
+    description: 'Silverarrow is a long-range zone controller and initiator who dominates through superior positioning and distance management.',
+    attack: 2,
+    initiative: 7,
+    defence: 1,
+    movement: 6,
+    movement_upgraded: 7
   },
- {
+  {
     id: 14,
     name: 'Min',
     icon: 'heroes/min.png',
     complexity: 2,
     roles: ['Tokens', 'Disabler'],
+    additionalRoles: ['Damager', 'Melee'],
     expansion: 'Renowned',
-    description: "Min strikes with lightning speed as one of the game's fastest initiators, wielding ancient dragon-inspired martial arts"
+    description: "Min strikes with lightning speed as one of the game's fastest initiators, wielding ancient dragon-inspired martial arts",
+    attack: 4,
+    attack_upgraded: 8,
+    initiative: 8,
+    defence: 3,
+    defence_upgraded: 8,
+    movement: 6
   },
- {
+  {
     id: 15,
     name: 'Mrak',
     icon: 'heroes/mrak.png',
     complexity: 3,
     roles: ['Melee', 'Tokens'],
+    additionalRoles: ['Durable', 'Disabler', 'Tactician'],
     expansion: 'Arcane',
-    description: 'Mrak is a heavyweight disrupter, commanding powers of rock and stone. Slow and immobile, he is at his best when the action comes to him.'
+    description: 'Mrak is a heavyweight disrupter, commanding powers of rock and stone. Slow and immobile, he is at his best when the action comes to him.',
+    attack: 8,
+    initiative: 1,
+    defence: 8,
+    movement: 2,
+    movement_upgraded: 4
   },
- {
+  {
     id: 16,
     name: 'Cutter',
     icon: 'heroes/cutter.png',
     complexity: 3,
     roles: ['Tactician', 'Disabler'],
+    additionalRoles: ['Farming'],
     expansion: 'Defiant',
-    description: 'Cutter dances across the battlefield, striking precisely when opportunity presents itself. Her grappling hook allows last-second positioning, while her fork-creating attacks force impossible decisions upon enemies.'
+    description: 'Cutter dances across the battlefield, striking precisely when opportunity presents itself. Her grappling hook allows last-second positioning, while her fork-creating attacks force impossible decisions upon enemies.',
+    attack: 4,
+    attack_upgraded: 8,
+    initiative: 6,
+    defence: 4,
+    movement: 4,
+    movement_upgraded: 8
   },
- {
+  {
     id: 17,
     name: 'Trinkets',
     icon: 'heroes/trinkets.png',
     complexity: 3,
     roles: ['Sniper', 'Damager'],
+    additionalRoles: ['Pusher'],
     expansion: 'Defiant',
-    description: 'Trinkets is a light-weight (literally, probably), fast, highly-mobile, ranged killer who presents an enormous danger zone in the Venn Diagram between himself and his Turret.'
+    description: 'Trinkets is a light-weight (literally, probably), fast, highly-mobile, ranged killer who presents an enormous danger zone in the Venn Diagram between himself and his Turret.',
+    attack: 3,
+    attack_upgraded: 5,
+    initiative: 6,
+    defence: 2,
+    defence_upgraded: 4,
+    movement: 7,
+    movement_upgraded: 8
   },
- {
+  {
     id: 18,
     name: 'Tali',
     icon: 'heroes/tali.png',
     complexity: 3,
     roles: ['Damager', 'Pusher'],
+    additionalRoles: ['Healer', 'Durable', 'Tokens'],
     expansion: 'Devoted',
-    description: "Tali commands the spirit world as a premier support hero, manipulating the battlefield with ice tokens and healing totems while wielding unparalleled discard potential."
+    description: "Tali commands the spirit world as a premier support hero, manipulating the battlefield with ice tokens and healing totems while wielding unparalleled discard potential.",
+    attack: 4,
+    attack_upgraded: 6,
+    initiative: 5,
+    initiative_upgraded: 8,
+    defence: 4,
+    movement: 5
   },
- {
+  {
     id: 19,
     name: 'Swift',
     icon: 'heroes/swift.png',
     complexity: 3,
     roles: ['Sniper', 'Farming'],
+    additionalRoles: ['Tactician'],
     expansion: 'Renowned',
-    description: 'Swift dominates from the shadows with the extremely long attack range, forcing enemies to respect vast areas of the battlefield or face deadly consequences.'
+    description: 'Swift dominates from the shadows with the extremely long attack range, forcing enemies to respect vast areas of the battlefield or face deadly consequences.',
+    attack: 5,
+    initiative: 4,
+    defence: 2,
+    movement: 7
   },
- {
+  {
     id: 20,
     name: 'Wuk',
     icon: 'heroes/wuk.png',
     complexity: 3,
     roles: ['Tokens', 'Pusher'],
+    additionalRoles: ['Durable', 'Sniper', 'Tactician', 'Healer'],
     expansion: 'Renowned',
-    description: "With Wuk at the table, nobody needs to be reminded about the thousand pound gorilla in the room. Everyone's watching to see where Wuk puts down his trees and defines his turf."
+    description: "With Wuk at the table, nobody needs to be reminded about the thousand pound gorilla in the room. Everyone's watching to see where Wuk puts down his trees and defines his turf.",
+    attack: 5,
+    initiative: 1,
+    defence: 8,
+    movement: 3,
+    movement_upgraded: 4
   },
- {
+  {
     id: 21,
     name: 'Hanu',
     icon: 'heroes/hanu.png',
     complexity: 3,
     roles: ['Tactician', 'Sniper'],
+    additionalRoles: ['Pusher'],
     expansion: 'Renowned',
-    description: 'Hanu the Trickster is the pinnacle support hero. His repertoire of cards allow for copious amounts of shenanigans, bamboozling, knavery, and outright mischief.'
+    description: 'Hanu the Trickster is the pinnacle support hero. His repertoire of cards allow for copious amounts of shenanigans, bamboozling, knavery, and outright mischief.',
+    attack: 4,
+    initiative: 8,
+    defence: 1,
+    movement: 7,
+    movement_upgraded: 8
   },
- {
+  {
     id: 22,
     name: 'Brynn',
     icon: 'heroes/brynn.png',
     complexity: 3,
     roles: ['Tactician', 'Damager'],
+    additionalRoles: ['Durable'],
     expansion: 'Wayward',
-    description: 'Brynn is a tactical battlefield manipulator who creates and exploits positioning traps, gaining powerful bonuses when enemies are surrounded by three or more obstacles.'
+    description: 'Brynn is a tactical battlefield manipulator who creates and exploits positioning traps, gaining powerful bonuses when enemies are surrounded by three or more obstacles.',
+    attack: 4,
+    attack_upgraded: 8,
+    initiative: 7,
+    defence: 4,
+    movement: 5,
+    movement_upgraded: 6
   },
- {
+  {
     id: 23,
     name: 'Mortimer',
     icon: 'heroes/mortimer.png',
     complexity: 3,
     roles: ['Melee', 'Tokens'],
+    additionalRoles: ['Farming', 'Durable', 'Pusher'],
     expansion: 'Wayward',
-    description: 'Mortimer is a battlefield controller who compensates for his limited mobility by commanding persistent zombie tokens that remain on the board between rounds.'
+    description: 'Mortimer is a battlefield controller who compensates for his limited mobility by commanding persistent zombie tokens that remain on the board between rounds.',
+    attack: 8,
+    initiative: 2,
+    defence: 7,
+    movement: 4
   },
- {
+  {
     id: 24,
     name: 'Widget and Pyro',
     icon: 'heroes/widget.png',
     complexity: 3,
     roles: ['Melee', 'Tokens'],
+    additionalRoles: ['Damager'],
     expansion: 'Wayward',
-    description: 'Widget is a kobold tactician who operates as a dual-unit fighter alongside her emotional support dragon, Pyro, allowing her to control two points on the battlefield simultaneously.'
+    description: 'Widget is a kobold tactician who operates as a dual-unit fighter alongside her emotional support dragon, Pyro, allowing her to control two points on the battlefield simultaneously.',
+    attack: 5,
+    initiative: 4,
+    defence: 4,
+    movement: 5,
+    movement_upgraded: 6
   },
- {
+  {
     id: 25,
     name: 'Snorri',
     icon: 'heroes/snorri.png',
     complexity: 4,
     roles: ['Sniper', 'Farming'],
+    additionalRoles: ['Durable', 'Damager', 'Pusher', 'Healer'],
     expansion: 'Arcane',
-    description: 'Snorri is a traditional dwarf who wields the power of four distinct runes to transform how each of his cards functions.'
+    description: 'Snorri is a traditional dwarf who wields the power of four distinct runes to transform how each of his cards functions.',
+    attack: 5,
+    attack_upgraded: 6,
+    initiative: 2,
+    defence: 5,
+    defence_upgraded: 6,
+    movement: 4,
+    movement_upgraded: 5
   },
- {
+  {
     id: 26,
     name: 'Razzle',
     icon: 'heroes/razzle.png',
     complexity: 4,
     roles: ['Tactician', 'Melee'],
     expansion: 'Arcane',
-    description: 'Razzle is a fractured fey who multiplies across the battlefield, controlling up to four separate copies of herself simultaneously.'
+    description: 'Razzle is a fractured fey who multiplies across the battlefield, controlling up to four separate copies of herself simultaneously.',
+    attack: 3,
+    initiative: 8,
+    defence: 1,
+    defence_upgraded: 4,
+    movement: 5,
+    movement_upgraded: 6
   },
- {
+  {
     id: 27,
     name: 'Gydion',
     icon: 'heroes/gydion.png',
     complexity: 4,
     roles: ['Sniper', 'Tactician'],
+    additionalRoles: ['Farming', 'Damager', 'Pusher', 'Tokens'],
     expansion: 'Arcane',
-    description: 'Gydion is an absent-minded archwizard who manages two separate hands—his action cards and a unique spellbook deck. He prepares spells that are consumed upon casting, requiring careful resource management to maximize his arcane potential.'
+    description: 'Gydion is an absent-minded archwizard who manages two separate hands—his action cards and a unique spellbook deck. He prepares spells that are consumed upon casting, requiring careful resource management to maximize his arcane potential.',
+    attack: 5,
+    attack_upgraded: 6,
+    initiative: 3,
+    defence: 3,
+    defence_upgraded: 5,
+    movement: 1,
+    movement_upgraded: 4
   },
- {
+  {
     id: 28,
     name: 'Nebkher',
     icon: 'heroes/nebkher.png',
     complexity: 4,
     roles: ['Disabler', 'Tokens'],
+    additionalRoles: ['Sniper'],
     expansion: 'Defiant',
-    description: 'NebKher is a space-bending undead mastermind who manipulates both the battlefield and enemy minds with equal malevolence. His ability to copy enemy actions, create illusion tokens for strategic teleportation, and control minions transforms him into a terrifying disruptor.'
+    description: 'NebKher is a space-bending undead mastermind who manipulates both the battlefield and enemy minds with equal malevolence. His ability to copy enemy actions, create illusion tokens for strategic teleportation, and control minions transforms him into a terrifying disruptor.',
+    attack: 2,
+    attack_upgraded: 3,
+    initiative: 1,
+    defence: 5,
+    defence_upgraded: 6,
+    movement: 2,
+    movement_upgraded: 5
   },
- {
+  {
     id: 29,
     name: 'Ignatia',
     icon: 'heroes/ignatia.png',
     complexity: 4,
     roles: ['Sniper', 'Damager'],
+    additionalRoles: ['Tokens', 'Tactician', 'Pusher'],
     expansion: 'Renowned',
-    description: 'Ignatia is a dual-natured elementalist whose abilities shift dramatically based on which team controls the tiebreaker coin.'
+    description: 'Ignatia is a dual-natured elementalist whose abilities shift dramatically based on which team controls the tiebreaker coin.',
+    attack: 5,
+    initiative: 2,
+    defence: 6,
+    movement: 4,
+    movement_upgraded: 5
   },
- {
+  {
     id: 30,
     name: 'Takahide',
     icon: 'heroes/takahide.png',
     complexity: 4,
     roles: ['Durable', 'Sniper'],
+    additionalRoles: ['Tactician', 'Damager', 'Farming'],
     expansion: 'Wayward',
-    description: 'Takahide is a masterful battlefield commander who cycles between three distinct combat styles.'
+    description: 'Takahide is a masterful battlefield commander who cycles between three distinct combat styles.',
+    attack: 5,
+    attack_upgraded: 7,
+    initiative: 3,
+    initiative_upgraded: 5,
+    defence: 4,
+    defence_upgraded: 7,
+    movement: 1,
+    movement_upgraded: 4
   },
- {
+  {
     id: 31,
     name: 'Emmitt',
     icon: 'heroes/emmitt.png',
     complexity: 4,
     roles: ['Melee', 'Tactician'],
+    additionalRoles: ['Durable', 'Disabler', 'Tokens'],
     expansion: 'Wayward',
-    description: "Emmitt is a chronological disruptor who bends the very rules of initiative, causing heroes with lower values to act before those with higher in a complete reversal of time's normal flow."
+    description: "Emmitt is a chronological disruptor who bends the very rules of initiative, causing heroes with lower values to act before those with higher in a complete reversal of time's normal flow.",
+    attack: 5,
+    attack_upgraded: 8,
+    initiative: 1,
+    defence: 6,
+    movement: 2,
+    movement_upgraded: 4
   },
 ];
 

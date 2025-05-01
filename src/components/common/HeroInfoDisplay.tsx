@@ -36,58 +36,58 @@ const HeroInfoDisplay: React.FC<HeroInfoDisplayProps> = ({
   const tooltipRef = useRef<HTMLDivElement>(null);
   
   // State to track calculated position
-const [tooltipPosition, setTooltipPosition] = useState<TooltipPosition>({
-  left:   8,
-  bottom: 8,
-  right:  'auto',
-  top:    'auto',
-});
+  const [tooltipPosition, setTooltipPosition] = useState<TooltipPosition>({
+    left:   8,
+    bottom: 8,
+    right:  'auto',
+    top:    'auto',
+  });
 
   
   // Calculate optimal tooltip position to avoid overlapping with the hero card
   useEffect(() => {
-  if (!isMobile && isVisible && tooltipRef.current && cardPosition) {
-    const tooltipRect   = tooltipRef.current.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight= window.innerHeight;
+    if (!isMobile && isVisible && tooltipRef.current && cardPosition) {
+      const tooltipRect   = tooltipRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight= window.innerHeight;
 
-    // start with a valid TooltipPosition
-    let newPosition: TooltipPosition = {
-      left:   8,
-      bottom: 8,
-      right:  'auto',
-      top:    'auto',
-    };
-
-    if (cardPosition.x < viewportWidth / 2) {
-      newPosition = {
-        left:   Math.min(cardPosition.x + cardPosition.width + 20,
-                        viewportWidth - tooltipRect.width - 8),
-        top:    Math.min(cardPosition.y,
-                        viewportHeight - tooltipRect.height - 8),
+      // start with a valid TooltipPosition
+      let newPosition: TooltipPosition = {
+        left:   8,
+        bottom: 8,
         right:  'auto',
-        bottom: 'auto',
+        top:    'auto',
       };
-    } else {
-      newPosition = {
-        right:  Math.min(viewportWidth - cardPosition.x + 20,
-                         viewportWidth - 8),
-        top:    Math.min(cardPosition.y,
-                        viewportHeight - tooltipRect.height - 8),
-        left:   'auto',
-        bottom: 'auto',
-      };
-    }
 
-    // if it would overflow the bottom
-    if (cardPosition.y + tooltipRect.height > viewportHeight - 20) {
-      newPosition.top = Math.max(8,
-                                 viewportHeight - tooltipRect.height - 20);
-    }
+      if (cardPosition.x < viewportWidth / 2) {
+        newPosition = {
+          left:   Math.min(cardPosition.x + cardPosition.width + 20,
+                          viewportWidth - tooltipRect.width - 8),
+          top:    Math.min(cardPosition.y,
+                          viewportHeight - tooltipRect.height - 8),
+          right:  'auto',
+          bottom: 'auto',
+        };
+      } else {
+        newPosition = {
+          right:  Math.min(viewportWidth - cardPosition.x + 20,
+                           viewportWidth - 8),
+          top:    Math.min(cardPosition.y,
+                          viewportHeight - tooltipRect.height - 8),
+          left:   'auto',
+          bottom: 'auto',
+        };
+      }
 
-    setTooltipPosition(newPosition);
-  }
-}, [isMobile, isVisible, cardPosition]);
+      // if it would overflow the bottom
+      if (cardPosition.y + tooltipRect.height > viewportHeight - 20) {
+        newPosition.top = Math.max(8,
+                                   viewportHeight - tooltipRect.height - 20);
+      }
+
+      setTooltipPosition(newPosition);
+    }
+  }, [isMobile, isVisible, cardPosition]);
 
   
   if (!hero || !isVisible) return null;
@@ -97,6 +97,30 @@ const [tooltipPosition, setTooltipPosition] = useState<TooltipPosition>({
     if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
       onClose();
     }
+  };
+  
+  // NEW: Function to render a stat bar with slanted boxes
+  const renderStatBar = (label: string, value: number = 0, maxValue: number = 0) => {
+    return (
+      <div className="mb-2">
+        <div className="text-sm font-medium mb-1">{label}</div>
+        <div className="flex">
+          {/* Render 8 slanted boxes for the stat bar */}
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div 
+              key={i} 
+              className={`h-5 w-5 transform skew-x-12 mr-0.5 flex-shrink-0 ${
+                i < value 
+                  ? 'bg-blue-600' // Blue for base stats
+                  : i < maxValue 
+                    ? 'bg-blue-200' // Light blue for upgrade potential
+                    : 'bg-gray-700' // Gray for empty slots
+              }`}
+            ></div>
+          ))}
+        </div>
+      </div>
+    );
   };
   
   // Mobile version (modal)
@@ -132,7 +156,16 @@ const [tooltipPosition, setTooltipPosition] = useState<TooltipPosition>({
             </div>
             
             <h3 className="text-xl font-bold mb-1">{hero.name}</h3>
-            <div className="text-sm text-gray-300 mb-2">{hero.roles.join(' • ')}</div>
+            
+            {/* Primary roles */}
+            <div className="text-sm text-gray-300 mb-1">{hero.roles.join(' • ')}</div>
+            
+            {/* NEW: Additional roles - displayed smaller */}
+            {hero.additionalRoles && hero.additionalRoles.length > 0 && (
+              <div className="text-xs text-gray-400 mb-2">
+                {hero.additionalRoles.join(' • ')}
+              </div>
+            )}
             
             <div className="flex mb-3">
               {[...Array(hero.complexity)].map((_, i) => (
@@ -141,6 +174,14 @@ const [tooltipPosition, setTooltipPosition] = useState<TooltipPosition>({
               {[...Array(4 - hero.complexity)].map((_, i) => (
                 <span key={i + hero.complexity} className="text-gray-600 text-lg">★</span>
               ))}
+            </div>
+            
+            {/* NEW: 2x2 grid of stat bars */}
+            <div className="w-full mb-4 grid grid-cols-2 gap-3">
+              {renderStatBar('Attack', hero.attack, hero.attack_upgraded)}
+              {renderStatBar('Initiative', hero.initiative, hero.initiative_upgraded)}
+              {renderStatBar('Defence', hero.defence, hero.defence_upgraded)}
+              {renderStatBar('Movement', hero.movement, hero.movement_upgraded)}
             </div>
             
             <p className="text-sm leading-relaxed">
@@ -177,7 +218,17 @@ const [tooltipPosition, setTooltipPosition] = useState<TooltipPosition>({
         </div>
         <div>
           <h3 className="text-2xl font-bold mb-2">{hero.name}</h3>
-          <div className="text-lg text-gray-300 mb-2">{hero.roles.join(' • ')}</div>
+          
+          {/* Primary roles */}
+          <div className="text-lg text-gray-300 mb-1">{hero.roles.join(' • ')}</div>
+          
+          {/* NEW: Additional roles - displayed smaller */}
+          {hero.additionalRoles && hero.additionalRoles.length > 0 && (
+            <div className="text-sm text-gray-400 mb-2">
+              {hero.additionalRoles.join(' • ')}
+            </div>
+          )}
+          
           <div className="flex mb-3">
             {[...Array(hero.complexity)].map((_, i) => (
               <span key={i} className="text-yellow-400 text-xl">★</span>
@@ -186,6 +237,15 @@ const [tooltipPosition, setTooltipPosition] = useState<TooltipPosition>({
               <span key={i + hero.complexity} className="text-gray-600 text-xl">★</span>
             ))}
           </div>
+          
+          {/* NEW: 2x2 grid of stat bars */}
+          <div className="w-full mb-4 grid grid-cols-2 gap-4">
+            {renderStatBar('Attack', hero.attack, hero.attack_upgraded)}
+            {renderStatBar('Initiative', hero.initiative, hero.initiative_upgraded)}
+            {renderStatBar('Defence', hero.defence, hero.defence_upgraded)}
+            {renderStatBar('Movement', hero.movement, hero.movement_upgraded)}
+          </div>
+          
           <p className="text-base leading-relaxed">
             {hero.description || "This hero's abilities and playstyle are shrouded in mystery."}
           </p>

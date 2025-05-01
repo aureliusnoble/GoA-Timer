@@ -22,9 +22,22 @@ export interface Hero {
   name: string;
   icon: string; // URL or path to icon image
   complexity: number; // 1-4 rating
-  roles: string[]; // Array of hero roles
+  roles: string[]; // Array of primary hero roles
+  additionalRoles?: string[]; // NEW: Secondary/additional roles
   expansion: string; // Which expansion set the hero belongs to
   description: string;
+  
+  // NEW: Base stat values (1-8 scale)
+  attack?: number;
+  initiative?: number;
+  defence?: number;
+  movement?: number;
+  
+  // NEW: Maximum upgraded stat values (1-8 scale)
+  attack_upgraded?: number;
+  initiative_upgraded?: number;
+  defence_upgraded?: number;
+  movement_upgraded?: number;
 }
 
 export interface Player {
