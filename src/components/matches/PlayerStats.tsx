@@ -17,9 +17,10 @@ interface PlayerWithStats extends DBPlayer {
   kills: number;
   deaths: number;
   assists: number;
-  kda: number;
+  kdRatio: number; // Changed from kda to kdRatio
   averageGold: number;
   averageMinionKills: number;
+  hasCombatStats: boolean; // New field to track if player has any combat stats
 }
 
 const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
@@ -51,11 +52,15 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
             const gold = matchesPlayed.reduce((sum, match) => sum + (match.goldEarned || 0), 0);
             const minionKills = matchesPlayed.reduce((sum, match) => sum + (match.minionKills || 0), 0);
             
-            // Calculate KDA ratio: (Kills + Assists) / Deaths, or (Kills + Assists) if Deaths is 0
-            const kda = deaths === 0 ? kills + assists : (kills + assists) / deaths;
+            // Calculate KD ratio: Kills / Deaths, or just Kills if Deaths is 0
+            // Changed to remove assists from calculation
+            const kdRatio = deaths === 0 ? kills : kills / deaths;
             
             // Calculate win rate percentage
             const winRate = player.totalGames > 0 ? (player.wins / player.totalGames) * 100 : 0;
+            
+            // Determine if player has any combat stats logged
+            const hasCombatStats = kills > 0 || deaths > 0 || assists > 0 || gold > 0;
             
             return {
               ...player,
@@ -65,9 +70,10 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
               kills,
               deaths,
               assists,
-              kda: parseFloat(kda.toFixed(2)),
+              kdRatio: parseFloat(kdRatio.toFixed(2)),
               averageGold: player.totalGames > 0 ? Math.round(gold / player.totalGames) : 0,
-              averageMinionKills: player.totalGames > 0 ? Math.round(minionKills / player.totalGames) : 0
+              averageMinionKills: player.totalGames > 0 ? Math.round(minionKills / player.totalGames) : 0,
+              hasCombatStats
             };
           })
         );
@@ -112,8 +118,8 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
       case 'winRate':
         comparison = a.winRate - b.winRate;
         break;
-      case 'kda':
-        comparison = a.kda - b.kda;
+      case 'kdRatio': // Changed from kda to kdRatio
+        comparison = a.kdRatio - b.kdRatio;
         break;
       default:
         comparison = 0;
@@ -209,14 +215,14 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
               Win Rate {sortBy === 'winRate' && (sortOrder === 'asc' ? '↑' : '↓')}
             </button>
             <button
-              onClick={() => handleSort('kda')}
+              onClick={() => handleSort('kdRatio')}
               className={`px-3 py-1 rounded ${
-                sortBy === 'kda' 
+                sortBy === 'kdRatio' 
                   ? 'bg-blue-600 hover:bg-blue-500' 
                   : 'bg-gray-600 hover:bg-gray-500'
               }`}
             >
-              KDA {sortBy === 'kda' && (sortOrder === 'asc' ? '↑' : '↓')}
+              KD Ratio {sortBy === 'kdRatio' && (sortOrder === 'asc' ? '↑' : '↓')}
             </button>
             <button
               onClick={() => handleSort('name')}
@@ -268,7 +274,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
                           <div className="text-sm text-gray-400">Win Rate</div>
                           <div className="font-medium">{player.winRate.toFixed(1)}%</div>
                         </div>
-                        <div className="h-2 bg-gray-600 rounded-full overflow-hidden">
+                        <div className="h-2 bg-red-600 rounded-full overflow-hidden">
                           <div 
                             className="h-full bg-green-500" 
                             style={{ width: `${player.winRate}%` }}
@@ -281,32 +287,34 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
                         </div>
                       </div>
                       
-                      {/* Combat Stats */}
-                      <div className="grid grid-cols-3 gap-2 mb-4">
-                        <div className="bg-gray-800 p-2 rounded">
-                          <div className="flex items-center text-blue-400 text-sm mb-1">
-                            <Swords size={14} className="mr-1" />
-                            <span>K/D/A</span>
+                      {/* Combat Stats - Only show if player has combat stats */}
+                      {player.hasCombatStats && (
+                        <div className="grid grid-cols-3 gap-2 mb-4">
+                          <div className="bg-gray-800 p-2 rounded">
+                            <div className="flex items-center text-blue-400 text-sm mb-1">
+                              <Swords size={14} className="mr-1" />
+                              <span>K/D/A</span>
+                            </div>
+                            <div className="font-medium text-center">
+                              {player.kills}/{player.deaths}/{player.assists}
+                            </div>
                           </div>
-                          <div className="font-medium text-center">
-                            {player.kills}/{player.deaths}/{player.assists}
+                          <div className="bg-gray-800 p-2 rounded">
+                            <div className="flex items-center text-yellow-400 text-sm mb-1">
+                              <TrendingUp size={14} className="mr-1" />
+                              <span>KD Ratio</span>
+                            </div>
+                            <div className="font-medium text-center">{player.kdRatio}</div>
+                          </div>
+                          <div className="bg-gray-800 p-2 rounded">
+                            <div className="flex items-center text-green-400 text-sm mb-1">
+                              <Coins size={14} className="mr-1" />
+                              <span>Avg Gold</span>
+                            </div>
+                            <div className="font-medium text-center">{player.averageGold}</div>
                           </div>
                         </div>
-                        <div className="bg-gray-800 p-2 rounded">
-                          <div className="flex items-center text-yellow-400 text-sm mb-1">
-                            <TrendingUp size={14} className="mr-1" />
-                            <span>KDA Ratio</span>
-                          </div>
-                          <div className="font-medium text-center">{player.kda}</div>
-                        </div>
-                        <div className="bg-gray-800 p-2 rounded">
-                          <div className="flex items-center text-green-400 text-sm mb-1">
-                            <Coins size={14} className="mr-1" />
-                            <span>Avg Gold</span>
-                          </div>
-                          <div className="font-medium text-center">{player.averageGold}</div>
-                        </div>
-                      </div>
+                      )}
                       
                       {/* Favorite Heroes */}
                       <div className="mb-4">
