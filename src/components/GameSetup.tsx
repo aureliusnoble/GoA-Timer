@@ -3,9 +3,10 @@ import { Player, Team, GameLength } from '../types';
 import { getAllExpansions } from '../data/heroes';
 import TimerInput from './TimerInput';
 import PlayerNameInput from './PlayerNameInput';
-import { Info, Clock, Infinity } from 'lucide-react';
+import { Info, Clock, Infinity, BarChart } from 'lucide-react';
 import EnhancedTooltip from './common/EnhancedTooltip';
 import { useSound } from '../context/SoundContext';
+import dbService from '../services/DatabaseService';
 
 interface GameSetupProps {
   strategyTime: number;
@@ -34,6 +35,8 @@ interface GameSetupProps {
   // NEW: Double lane option for 6 players
   useDoubleLaneFor6Players: boolean;
   onUseDoubleLaneFor6PlayersChange: (useDouble: boolean) => void;
+  // NEW: View matches button handler
+  onViewMatches: () => void;
 }
 
 const GameSetup: React.FC<GameSetupProps> = ({
@@ -62,9 +65,12 @@ const GameSetup: React.FC<GameSetupProps> = ({
   onMoveTimerEnabledChange,
   // Double lane props
   useDoubleLaneFor6Players,
-  onUseDoubleLaneFor6PlayersChange
+  onUseDoubleLaneFor6PlayersChange,
+  // Match statistics props
+  onViewMatches
 }) => {
   const { playSound } = useSound();
+  const [hasMatchData, setHasMatchData] = useState<boolean>(false);
 
   const [expandedSection, setExpandedSection] = useState<{[key: string]: boolean}>({
     'timers': true,
@@ -85,6 +91,14 @@ const GameSetup: React.FC<GameSetupProps> = ({
     if (moveTime !== 30) {
       onMoveTimeChange(30);
     }
+    
+    // Check if we have match data to enable View Matches button
+    const checkMatchData = async () => {
+      const hasData = await dbService.hasMatchData();
+      setHasMatchData(hasData);
+    };
+    
+    checkMatchData();
   }, []);
 
   // Calculate player count by team
@@ -124,7 +138,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
   // Requirements for drafting
   const canDraft = isTeamsBalanced && allPlayersHaveNames && hasUniqueNames && canStartDrafting;
 
-  // Function handlers with sound effects
+  // Function handlers with sound
   const handleToggleSection = (section: string) => {
     playSound('buttonClick');
     setExpandedSection({...expandedSection, [section]: !expandedSection[section]});
@@ -174,6 +188,12 @@ const GameSetup: React.FC<GameSetupProps> = ({
       playSound('buttonClick');
       onDraftHeroes();
     }
+  };
+  
+  // NEW: Handle View Matches button click
+  const handleViewMatches = () => {
+    playSound('buttonClick');
+    onViewMatches();
   };
 
   return (
@@ -569,31 +589,53 @@ const GameSetup: React.FC<GameSetupProps> = ({
         </div>
       )}
       
-{/* Action Button - Only Draft Heroes now */}
-<div className="flex flex-col items-center justify-center">
-  <div className="relative mb-6 sm:mb-0">
-    <button
-      className={`px-6 py-3 rounded-lg font-medium text-white ${
-        canDraft
-          ? 'bg-blue-600 hover:bg-blue-500'
-          : 'bg-gray-600 cursor-not-allowed'
-      }`}
-      onClick={handleDraftHeroes}
-      disabled={!canDraft}
-    >
-      Draft Heroes
-    </button>
-    
-    {/* Tooltip */}
+{/* Action Buttons - UPDATED to include View Matches */}
+<div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+  {/* View Matches Button */}
+  <div className="relative">
     <EnhancedTooltip 
-      text="Click to select heroes for each player and start the game."
-      position="right"
+      text={hasMatchData 
+        ? "View match statistics and player records"
+        : "No match data available yet. Play a game first!"}
+      position="top"
     >
-      <div className="ml-2 absolute top-1/2 right-0 transform translate-x-7 -translate-y-1/2 cursor-help">
-        <Info size={18} className="text-gray-400 hover:text-gray-200" />
-      </div>
+      <button
+        className={`px-6 py-3 rounded-lg font-medium text-white ${
+          hasMatchData
+            ? 'bg-green-600 hover:bg-green-500'
+            : 'bg-gray-600 cursor-not-allowed'
+        }`}
+        onClick={handleViewMatches}
+        disabled={!hasMatchData}
+      >
+        <div className="flex items-center">
+          <BarChart size={20} className="mr-2" />
+          View Matches
+        </div>
+      </button>
     </EnhancedTooltip>
   </div>
+
+  {/* Draft Heroes Button */}
+  <div className="relative">
+    <EnhancedTooltip 
+      text="Click to select heroes for each player and start the game."
+      position="top"
+    >
+      <button
+        className={`px-6 py-3 rounded-lg font-medium text-white ${
+          canDraft
+            ? 'bg-blue-600 hover:bg-blue-500'
+            : 'bg-gray-600 cursor-not-allowed'
+        }`}
+        onClick={handleDraftHeroes}
+        disabled={!canDraft}
+      >
+        Draft Heroes
+      </button>
+    </EnhancedTooltip>
+  </div>
+</div>
 
   {/* Hero count info - Repositioned */}
   <div className="text-sm text-center w-full mt-4">
@@ -608,7 +650,6 @@ const GameSetup: React.FC<GameSetupProps> = ({
       )}
     </div>
   </div>
-</div>
       
      <p className="mt-4 text-xs text-gray-300 text-center mb-2">
         Disclaimer: This is not an official product and has not been approved by Wolff Designa. All game content is the sole property of Wolff Designa.

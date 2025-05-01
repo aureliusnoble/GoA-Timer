@@ -1,19 +1,30 @@
 // src/components/VictoryScreen.tsx
 import React, { useEffect, useState } from 'react';
-import { Team } from '../types';
-import { Trophy, Home } from 'lucide-react';
+import { Team, GameLength } from '../types';
+import { Trophy, Home, Database, AlertTriangle } from 'lucide-react';
 import { useSound } from '../context/SoundContext';
+import dbService from '../services/DatabaseService';
+import EnhancedTooltip from './common/EnhancedTooltip';
 
 interface VictoryScreenProps {
   winningTeam: Team;
   onReturnToSetup: () => void;
+  players: Player[]; // Need players to save match data
+  gameLength: GameLength;
+  doubleLanes: boolean;
 }
 
 const VictoryScreen: React.FC<VictoryScreenProps> = ({ 
   winningTeam, 
-  onReturnToSetup 
+  onReturnToSetup,
+  players,
+  gameLength,
+  doubleLanes
 }) => {
   const [animationComplete, setAnimationComplete] = useState(false);
+  const [isSavingMatchData, setSavingMatchData] = useState(false);
+  const [matchDataSaved, setMatchDataSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const { playSound } = useSound();
   
   useEffect(() => {
@@ -33,6 +44,50 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
   const handleReturnClick = () => {
     playSound('buttonClick');
     onReturnToSetup();
+  };
+  
+  // Save match data to database
+  const handleSaveMatchData = async () => {
+    setSavingMatchData(true);
+    setSaveError(null);
+    
+    try {
+      playSound('buttonClick');
+      
+      // Prepare match data
+      const matchData = {
+        date: new Date(),
+        winningTeam,
+        gameLength,
+        doubleLanes
+      };
+      
+      // Prepare player data
+      const playerData = players.map(player => ({
+        id: player.name, // Use name as player ID
+        team: player.team,
+        heroId: player.hero?.id || 0,
+        heroName: player.hero?.name || 'Unknown Hero',
+        heroRoles: player.hero?.roles || [],
+        kills: player.stats?.totalKills,
+        deaths: player.stats?.totalDeaths,
+        assists: player.stats?.totalAssists,
+        goldEarned: player.stats?.totalGoldEarned,
+        minionKills: player.stats?.totalMinionKills
+      }));
+      
+      // Save match data
+      await dbService.recordMatch(matchData, playerData);
+      
+      // Update state
+      setMatchDataSaved(true);
+      playSound('phaseChange');
+    } catch (error) {
+      console.error('Error saving match data:', error);
+      setSaveError('Failed to save match data. Please try again.');
+    } finally {
+      setSavingMatchData(false);
+    }
   };
   
   return (
@@ -78,20 +133,70 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
           ))}
         </div>
         
-        {/* Return to setup button */}
-        <button
-          onClick={handleReturnClick}
-          className={`px-6 py-3 rounded-lg text-white font-medium flex items-center mx-auto ${
-            animationComplete ? 'opacity-100' : 'opacity-0'
-          } transition-opacity duration-500 ${
-            winningTeam === Team.Titans 
-              ? 'bg-blue-600 hover:bg-blue-500' 
-              : 'bg-red-600 hover:bg-red-500'
-          }`}
-        >
-          <Home size={20} className="mr-2" />
-          Return to Setup
-        </button>
+        {/* Action Buttons */}
+        <div className="flex flex-col md:flex-row gap-4 justify-center mt-4">
+          {/* Return to setup button */}
+          <button
+            onClick={handleReturnClick}
+            className={`px-6 py-3 rounded-lg text-white font-medium flex items-center mx-auto ${
+              animationComplete ? 'opacity-100' : 'opacity-0'
+            } transition-opacity duration-500 ${
+              winningTeam === Team.Titans 
+                ? 'bg-blue-600 hover:bg-blue-500' 
+                : 'bg-red-600 hover:bg-red-500'
+            }`}
+          >
+            <Home size={20} className="mr-2" />
+            Return to Setup
+          </button>
+          
+          {/* Save Match Data button */}
+          {animationComplete && !matchDataSaved && (
+            <EnhancedTooltip text="Save match results to your statistics">
+              <button
+                onClick={handleSaveMatchData}
+                disabled={isSavingMatchData}
+                className={`px-6 py-3 rounded-lg text-white font-medium flex items-center mx-auto ${
+                  winningTeam === Team.Titans 
+                    ? 'bg-blue-700 hover:bg-blue-600' 
+                    : 'bg-red-700 hover:bg-red-600'
+                } ${isSavingMatchData ? 'opacity-70 cursor-wait' : 'opacity-100'}`}
+              >
+                {isSavingMatchData ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Database size={20} className="mr-2" />
+                    Save Match Data
+                  </>
+                )}
+              </button>
+            </EnhancedTooltip>
+          )}
+        </div>
+        
+        {/* Match Data Saved Confirmation */}
+        {matchDataSaved && (
+          <div className="mt-4 px-5 py-3 bg-green-800/70 rounded-lg inline-block">
+            <p className="flex items-center text-green-200">
+              <Database size={16} className="mr-2" />
+              Match data saved successfully!
+            </p>
+          </div>
+        )}
+        
+        {/* Error Message */}
+        {saveError && (
+          <div className="mt-4 px-5 py-3 bg-red-800/70 rounded-lg inline-block">
+            <p className="flex items-center text-red-200">
+              <AlertTriangle size={16} className="mr-2" />
+              {saveError}
+            </p>
+          </div>
+        )}
       </div>
       
       {/* Add CSS animation */}
