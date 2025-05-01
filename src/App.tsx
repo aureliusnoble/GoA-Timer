@@ -1190,17 +1190,18 @@ function App() {
         />
       )}
 
-    {/* Footer with Feedback link */}
-    <footer className="fixed bottom-0 left-0 w-full z-10 bg-white bg-opacity-15 text-center text-m text-white/100 py-2">
-      
-        href="https://forms.gle/dsjjDSbqhTn3hATt6"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="underline hover:text-blue"
-      <a>
-        Feedback
-      </a>
-    </footer>
+{/* Footer with Feedback link */}
+<footer className="fixed bottom-0 left-0 w-full z-10 bg-white bg-opacity-15 text-center text-base text-white py-2">
+  <a
+    href="https://forms.gle/dsjjDSbqhTn3hATt6"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="underline hover:text-blue"
+  >
+    Feedback
+  </a>
+</footer>
+
     </div>
   );
 }
