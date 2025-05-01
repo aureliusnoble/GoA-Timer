@@ -23,6 +23,9 @@ interface GameSetupProps {
   duplicateNames: string[]; // Array of duplicate player names for validation
   canStartDrafting: boolean; // Flag indicating if drafting can begin based on heroes count
   heroCount: number; // Number of available heroes with current expansion selection
+  // New props for Max Complexity
+  maxComplexity: number;
+  onMaxComplexityChange: (complexity: number) => void;
 }
 
 const GameSetup: React.FC<GameSetupProps> = ({
@@ -41,11 +44,15 @@ const GameSetup: React.FC<GameSetupProps> = ({
   onPlayerNameChange,
   duplicateNames,
   canStartDrafting,
-  heroCount
+  heroCount,
+  // New props
+  maxComplexity,
+  onMaxComplexityChange
 }) => {
   const [expandedSection, setExpandedSection] = useState<{[key: string]: boolean}>({
     'timers': true,
     'game-length': true,
+    'complexity': true, // New section
     'players': true,
     'names': true,
     'expansions': false
@@ -92,7 +99,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
     <div className="bg-gray-800 rounded-lg p-6 mb-8">
       <h2 className="text-2xl font-bold mb-4">Game Setup</h2>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
         {/* Timer Settings Column */}
         <div>
           <h3 className="text-xl mb-3 cursor-pointer flex items-center" 
@@ -192,6 +199,39 @@ const GameSetup: React.FC<GameSetupProps> = ({
                   )}
                 </ul>
               </div>
+            </>
+          )}
+        </div>
+        
+        {/* NEW: Max Complexity Column */}
+        <div>
+          <h3 className="text-xl mb-3 cursor-pointer flex items-center"
+              onClick={() => setExpandedSection({...expandedSection, 'complexity': !expandedSection['complexity']})}>
+            <span className="mr-2">{expandedSection['complexity'] ? '▼' : '▶'}</span>
+            Max Complexity
+          </h3>
+          
+          {expandedSection['complexity'] && (
+            <>
+              <div className="flex flex-col gap-3 mb-4">
+                {[1, 2, 3, 4].map(level => (
+                  <label key={level} className="inline-flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      name="complexity"
+                      value={level}
+                      checked={maxComplexity === level}
+                      onChange={() => onMaxComplexityChange(level)}
+                      className="form-radio h-5 w-5 text-blue-600"
+                    />
+                    <span className="ml-2">
+                      {level} {level === 1 ? '(Simplest)' : level === 4 ? '(Most Complex)' : ''}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              
+
             </>
           )}
         </div>
@@ -310,16 +350,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                 </label>
               ))}
             </div>
-            <div className="mt-3 text-sm">
-              <span className="text-blue-300">Available heroes: {heroCount}</span>
-              {totalPlayers > 0 && (
-                <span className="ml-4 text-yellow-300">
-                  {canStartDrafting 
-                    ? "✓ Enough heroes for drafting" 
-                    : "✗ Not enough heroes for drafting"}
-                </span>
-              )}
-            </div>
+
           </>
         )}
       </div>
@@ -383,14 +414,28 @@ const GameSetup: React.FC<GameSetupProps> = ({
             )}
           </div>
         </div>
+
+
    
       </div>
+                      <div className="mt-3 text-sm">
+              <span className="text-blue-300">Available heroes: {heroCount}</span>
+              {totalPlayers > 0 && (
+                <span className="ml-4 text-yellow-300">
+                  {canStartDrafting 
+                    ? "✓ Enough heroes for drafting" 
+                    : "✗ Not enough heroes for drafting"}
+                </span>
+              )}
+            </div>
          <p className="mt-4 text-xs text-gray-300 text-center translate-y-5">
           Disclaimer: This is not an official product and has not been approved by Wolff Designa. All game content is the property of Wolff Designa.
         </p>
     </div>
   );
 };
+
+
 
 // Helper function to calculate team lives based on game length and player count
 const calculateTeamLives = (gameLength: GameLength, playerCount: number): number => {

@@ -269,6 +269,9 @@ function App() {
   // Expansion selection state
   const [selectedExpansions, setSelectedExpansions] = useState<string[]>(getAllExpansions());
   
+  // Max complexity state
+  const [maxComplexity, setMaxComplexity] = useState<number>(4); // Default to 4 (maximum)
+  
   // Drafting states
   const [isDraftingMode, setIsDraftingMode] = useState<boolean>(false);
   const [showDraftModeSelection, setShowDraftModeSelection] = useState<boolean>(false);
@@ -290,8 +293,10 @@ function App() {
   // Coin flip animation state
   const [showCoinAnimation, setShowCoinAnimation] = useState<boolean>(false);
   
-  // Available heroes (filtered by expansions)
-  const filteredHeroes = filterHeroesByExpansions(selectedExpansions);
+  // Available heroes (filtered by expansions and complexity)
+  const filteredHeroes = filterHeroesByExpansions(selectedExpansions).filter(
+    hero => hero.complexity <= maxComplexity
+  );
   
   // Update the shared players reference
   players = localPlayers;
@@ -1165,6 +1170,8 @@ function App() {
               duplicateNames={findDuplicateNames()}
               canStartDrafting={canUseDraftMode(DraftMode.AllPick)}
               heroCount={filteredHeroes.length}
+              maxComplexity={maxComplexity}
+              onMaxComplexityChange={setMaxComplexity}
             />
           )}
         </div>
