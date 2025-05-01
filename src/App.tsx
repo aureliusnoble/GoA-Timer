@@ -110,6 +110,28 @@ const generatePickBanSequence = (playerCount: number): PickBanStep[] => {
   return sequence;
 };
 
+// Create the initial game state
+const createInitialGameState = (): GameState => {
+  return {
+    round: 1,
+    turn: 1,
+    gameLength: GameLength.Quick,
+    waves: {
+      [Lane.Single]: { currentWave: 1, totalWaves: 3 }
+    },
+    teamLives: {
+      [Team.Titans]: 4,
+      [Team.Atlanteans]: 4
+    },
+    currentPhase: 'setup',
+    activeHeroIndex: -1,
+    coinSide: Math.random() > 0.5 ? Team.Titans : Team.Atlanteans, // Random initial team
+    hasMultipleLanes: false,
+    completedTurns: [], // New field to track which players have moved
+    allPlayersMoved: false // New field to track when all players have moved
+  };
+};
+
 // Game state reducer
 type GameAction = 
   | { type: 'START_GAME', payload: GameState }
@@ -310,9 +332,9 @@ const gameReducer = (state: GameState, action: GameAction): GameState => {
       };
     }
     
-    // New case for resetting game
+    // Fixed case for resetting game
     case 'RESET_GAME': {
-      return initialGameState;
+      return createInitialGameState();
     }
       
     case 'FLIP_COIN':
@@ -382,24 +404,7 @@ function App() {
   const nameCheckRef = useRef<boolean>(false);
   
   // Initial game state
-  const initialGameState: GameState = {
-    round: 1,
-    turn: 1,
-    gameLength: GameLength.Quick,
-    waves: {
-      [Lane.Single]: { currentWave: 1, totalWaves: 3 }
-    },
-    teamLives: {
-      [Team.Titans]: 4,
-      [Team.Atlanteans]: 4
-    },
-    currentPhase: 'setup',
-    activeHeroIndex: -1,
-    coinSide: Math.random() > 0.5 ? Team.Titans : Team.Atlanteans, // Random initial team
-    hasMultipleLanes: false,
-    completedTurns: [], // New field to track which players have moved
-    allPlayersMoved: false // New field to track when all players have moved
-  };
+  const initialGameState = createInitialGameState();
   
   // Game state with reducer
   const [gameState, dispatch] = useReducer(gameReducer, initialGameState);
@@ -1149,6 +1154,8 @@ function App() {
     setShowVictoryScreen(false);
     setVictorTeam(null);
     setGameStarted(false);
+    setIsDraftingMode(false);
+    setShowDraftModeSelection(false);
     dispatch({ type: 'RESET_GAME' });
   };
 

@@ -43,11 +43,11 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
         </div>
         
         <h1 className="text-6xl font-bold mb-4 animate-in fade-in">
-          {winningTeam === Team.Titans ? 'Titans' : 'Atlanteans'} Victory!
+          {winningTeam === Team.Titans ? 'Titan' : 'Atlantean'} Victory!
         </h1>
         
         <p className="text-2xl mb-12 opacity-75">
-          The {winningTeam === Team.Titans ? 'Titans' : 'Atlanteans'} have emerged victorious!
+          The {winningTeam === Team.Titans ? 'Titan' : 'Atlantean'}s have emerged victorious!
         </p>
         
         {/* Animated stars */}
