@@ -119,6 +119,11 @@ type GameAction =
   | { type: 'START_NEXT_TURN' }
   | { type: 'ADJUST_TEAM_LIFE', team: Team, delta: number }
   | { type: 'INCREMENT_WAVE', lane: Lane }
+  | { type: 'DECREMENT_WAVE', lane: Lane } // New action for decrementing wave
+  | { type: 'ADJUST_ROUND', delta: number } // New action for adjusting round
+  | { type: 'ADJUST_TURN', delta: number }  // New action for adjusting turn
+  | { type: 'DECLARE_VICTORY', team: Team } // New action for declaring victory
+  | { type: 'RESET_GAME' }                  // New action for resetting game
   | { type: 'FLIP_COIN' };
 
 const gameReducer = (state: GameState, action: GameAction): GameState => {
@@ -241,6 +246,72 @@ const gameReducer = (state: GameState, action: GameAction): GameState => {
         }
       }
       return state;
+    }
+    
+    // New case for decrementing wave
+    case 'DECREMENT_WAVE': {
+      if (action.lane === Lane.Single && !state.hasMultipleLanes) {
+        const laneState = state.waves[Lane.Single];
+        if (laneState) {
+          return {
+            ...state,
+            waves: {
+              ...state.waves,
+              [Lane.Single]: {
+                ...laneState,
+                currentWave: Math.max(1, laneState.currentWave - 1)
+              }
+            }
+          };
+        }
+      } else if (state.hasMultipleLanes && (action.lane === Lane.Top || action.lane === Lane.Bottom)) {
+        const laneState = state.waves[action.lane];
+        if (laneState) {
+          return {
+            ...state,
+            waves: {
+              ...state.waves,
+              [action.lane]: {
+                ...laneState,
+                currentWave: Math.max(1, laneState.currentWave - 1)
+              }
+            }
+          };
+        }
+      }
+      return state;
+    }
+    
+    // New case for adjusting round
+    case 'ADJUST_ROUND': {
+      const newRound = Math.max(1, state.round + action.delta);
+      return {
+        ...state,
+        round: newRound
+      };
+    }
+    
+    // New case for adjusting turn
+    case 'ADJUST_TURN': {
+      const newTurn = Math.max(1, Math.min(4, state.turn + action.delta));
+      return {
+        ...state,
+        turn: newTurn
+      };
+    }
+    
+    // New case for declaring victory
+    case 'DECLARE_VICTORY': {
+      return {
+        ...state,
+        currentPhase: 'victory',
+        victorTeam: action.team
+      };
+    }
+    
+    // New case for resetting game
+    case 'RESET_GAME': {
+      return initialGameState;
     }
       
     case 'FLIP_COIN':

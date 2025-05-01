@@ -1,7 +1,8 @@
 // src/components/GameTimer.tsx
 import React from 'react';
 import { GameState, Player, Team, Lane } from '../types';
-import { Clock, Plus, Check, RotateCcw } from 'lucide-react';
+import { Clock, Plus, Minus, Check, RotateCcw, Info, Award } from 'lucide-react';
+import EnhancedTooltip from './common/EnhancedTooltip';
 
 interface GameTimerProps {
   gameState: GameState;
@@ -20,6 +21,10 @@ interface GameTimerProps {
   onStartNextTurn: () => void;
   onAdjustTeamLife: (team: Team, delta: number) => void;
   onIncrementWave: (lane: Lane) => void;
+  onDecrementWave: (lane: Lane) => void; // New prop
+  onAdjustRound: (delta: number) => void; // New prop
+  onAdjustTurn: (delta: number) => void;  // New prop
+  onDeclareVictory: (team: Team) => void; // New prop
   onFlipCoin: () => void;
 }
 
@@ -40,6 +45,10 @@ const GameTimer: React.FC<GameTimerProps> = ({
   onStartNextTurn,
   onAdjustTeamLife,
   onIncrementWave,
+  onDecrementWave, // New prop
+  onAdjustRound,   // New prop
+  onAdjustTurn,    // New prop
+  onDeclareVictory, // New prop
   onFlipCoin
 }) => {
   const formatTime = (seconds: number): string => {
@@ -73,31 +82,80 @@ const GameTimer: React.FC<GameTimerProps> = ({
               +
             </button>
           </div>
+          
+          {/* New: Titans Victory Button */}
+          <button
+            className="mt-4 w-full bg-blue-700 hover:bg-blue-600 rounded-lg py-2 px-4 flex items-center justify-center"
+            onClick={() => onDeclareVictory(Team.Titans)}
+          >
+            <Award size={18} className="mr-2" />
+            <span>Declare Titans Victory</span>
+          </button>
         </div>
         
         {/* Game State */}
         <div className="bg-gray-800 rounded-lg p-4 text-center">
-          <div className="flex justify-between mb-2">
-            <div>
-              <span className="text-sm text-gray-400">Round</span>
-              <div className="text-2xl font-bold">{gameState.round}</div>
-            </div>
-            <div>
-              <span className="text-sm text-gray-400">Turn</span>
-              <div className="text-2xl font-bold">{gameState.turn}/4</div>
+          <div className="flex justify-between mb-4">
+            {/* Round counter with +/- buttons */}
+            <div className="flex flex-col items-center">
+              <span className="text-sm text-gray-400 mb-1">Round</span>
+              <div className="flex items-center">
+                <button 
+                  className="bg-gray-700 hover:bg-gray-600 rounded-full w-7 h-7 flex items-center justify-center mr-2"
+                  onClick={() => onAdjustRound(-1)}
+                >
+                  <Minus size={14} />
+                </button>
+                <div className="text-2xl font-bold">{gameState.round}</div>
+                <button 
+                  className="bg-gray-700 hover:bg-gray-600 rounded-full w-7 h-7 flex items-center justify-center ml-2"
+                  onClick={() => onAdjustRound(1)}
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
             </div>
             
-            {/* We'll remove the wave counter from here for multiple lanes */}
+            {/* Turn counter with +/- buttons */}
+            <div className="flex flex-col items-center">
+              <span className="text-sm text-gray-400 mb-1">Turn</span>
+              <div className="flex items-center">
+                <button 
+                  className="bg-gray-700 hover:bg-gray-600 rounded-full w-7 h-7 flex items-center justify-center mr-2"
+                  onClick={() => onAdjustTurn(-1)}
+                >
+                  <Minus size={14} />
+                </button>
+                <div className="text-2xl font-bold">{gameState.turn}/4</div>
+                <button 
+                  className="bg-gray-700 hover:bg-gray-600 rounded-full w-7 h-7 flex items-center justify-center ml-2"
+                  onClick={() => onAdjustTurn(1)}
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
+            </div>
+            
+            {/* We'll keep the wave counter here for single lane */}
             {!gameState.hasMultipleLanes && (
-              <div className="relative group">
-                <span className="text-sm text-gray-400">Wave</span>
-                <div className="flex items-center justify-center">
+              <div className="flex flex-col items-center">
+                <span className="text-sm text-gray-400 mb-1">Wave</span>
+                <div className="flex items-center">
+                  <button 
+                    className="bg-gray-700 hover:bg-gray-600 rounded-full w-7 h-7 flex items-center justify-center mr-2"
+                    onClick={() => onDecrementWave(Lane.Single)}
+                    disabled={
+                      !gameState.waves[Lane.Single] || 
+                      gameState.waves[Lane.Single].currentWave <= 1
+                    }
+                  >
+                    <Minus size={14} />
+                  </button>
                   <div className="text-2xl font-bold">
                     {gameState.waves[Lane.Single]?.currentWave || 1}/{gameState.waves[Lane.Single]?.totalWaves || 3}
                   </div>
-                  {/* Plus button to increment wave */}
                   <button 
-                    className="ml-1 bg-amber-600 hover:bg-amber-500 rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                    className="bg-gray-700 hover:bg-gray-600 rounded-full w-7 h-7 flex items-center justify-center ml-2"
                     onClick={() => onIncrementWave(Lane.Single)}
                     disabled={
                       !gameState.waves[Lane.Single] || 
@@ -112,7 +170,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
           </div>
           
           {/* Phase indicator */}
-          <div className="mt-2 mb-2">
+          <div className="mt-2 mb-4">
             <span className="px-3 py-1 rounded-full bg-gray-700 text-sm">
               {gameState.currentPhase === 'strategy' && 'Strategy Phase'}
               {gameState.currentPhase === 'move' && 'Action Phase'}
@@ -120,7 +178,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
             </span>
           </div>
           
-          {/* Wave Counters - Multiple Lanes - Now in its own section below the main game state */}
+          {/* Wave Counters - Multiple Lanes - Now with minus buttons */}
           {gameState.hasMultipleLanes && (
             <div className="mt-4 pt-4 border-t border-gray-700">
               <h4 className="text-lg font-bold mb-2">Wave Counters</h4>
@@ -128,38 +186,56 @@ const GameTimer: React.FC<GameTimerProps> = ({
                 <div className="relative bg-gray-700/50 p-2 rounded">
                   <span className="text-sm text-gray-300">Top Lane</span>
                   <div className="flex items-center justify-center mt-1">
+                    <button 
+                      className="bg-gray-600 hover:bg-gray-500 rounded-full w-6 h-6 flex items-center justify-center mr-2"
+                      onClick={() => onDecrementWave(Lane.Top)}
+                      disabled={
+                        !gameState.waves[Lane.Top] || 
+                        gameState.waves[Lane.Top].currentWave <= 1
+                      }
+                    >
+                      <Minus size={12} />
+                    </button>
                     <div className="text-xl font-bold">
                       {gameState.waves[Lane.Top]?.currentWave || 1}/{gameState.waves[Lane.Top]?.totalWaves || 7}
                     </div>
-                    {/* Plus button to increment top lane wave */}
                     <button 
-                      className="ml-1 bg-amber-600 hover:bg-amber-500 rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                      className="bg-gray-600 hover:bg-gray-500 rounded-full w-6 h-6 flex items-center justify-center ml-2"
                       onClick={() => onIncrementWave(Lane.Top)}
                       disabled={
                         !gameState.waves[Lane.Top] || 
                         gameState.waves[Lane.Top].currentWave >= gameState.waves[Lane.Top].totalWaves
                       }
                     >
-                      <Plus size={14} />
+                      <Plus size={12} />
                     </button>
                   </div>
                 </div>
                 <div className="relative bg-gray-700/50 p-2 rounded">
                   <span className="text-sm text-gray-300">Bottom Lane</span>
                   <div className="flex items-center justify-center mt-1">
+                    <button 
+                      className="bg-gray-600 hover:bg-gray-500 rounded-full w-6 h-6 flex items-center justify-center mr-2"
+                      onClick={() => onDecrementWave(Lane.Bottom)}
+                      disabled={
+                        !gameState.waves[Lane.Bottom] || 
+                        gameState.waves[Lane.Bottom].currentWave <= 1
+                      }
+                    >
+                      <Minus size={12} />
+                    </button>
                     <div className="text-xl font-bold">
                       {gameState.waves[Lane.Bottom]?.currentWave || 1}/{gameState.waves[Lane.Bottom]?.totalWaves || 7}
                     </div>
-                    {/* Plus button to increment bottom lane wave */}
                     <button 
-                      className="ml-1 bg-amber-600 hover:bg-amber-500 rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                      className="bg-gray-600 hover:bg-gray-500 rounded-full w-6 h-6 flex items-center justify-center ml-2"
                       onClick={() => onIncrementWave(Lane.Bottom)}
                       disabled={
                         !gameState.waves[Lane.Bottom] || 
                         gameState.waves[Lane.Bottom].currentWave >= gameState.waves[Lane.Bottom].totalWaves
                       }
                     >
-                      <Plus size={14} />
+                      <Plus size={12} />
                     </button>
                   </div>
                 </div>
@@ -168,19 +244,22 @@ const GameTimer: React.FC<GameTimerProps> = ({
           )}
           
           <div className="mt-3">
-            <button
-              className={`flex items-center justify-center px-4 py-2 rounded-lg text-white ${
-                gameState.coinSide === Team.Titans 
-                  ? 'bg-blue-700 hover:bg-blue-600' 
-                  : 'bg-orange-600 hover:bg-orange-500'
-              }`}
-              onClick={onFlipCoin}
-            >
-              <span className="mr-2">Tiebreaker:</span>
-              <span className="font-bold">
-                {gameState.coinSide === Team.Titans ? 'Titans' : 'Atlanteans'}
-              </span>
-            </button>
+            {/* Added tooltip to tiebreaker button */}
+            <EnhancedTooltip text="Click to flip the tie-breaker coin">
+              <button
+                className={`flex items-center justify-center px-4 py-2 rounded-lg text-white ${
+                  gameState.coinSide === Team.Titans 
+                    ? 'bg-blue-700 hover:bg-blue-600' 
+                    : 'bg-orange-600 hover:bg-orange-500'
+                }`}
+                onClick={onFlipCoin}
+              >
+                <span className="mr-2">Tiebreaker:</span>
+                <span className="font-bold">
+                  {gameState.coinSide === Team.Titans ? 'Titans' : 'Atlanteans'}
+                </span>
+              </button>
+            </EnhancedTooltip>
           </div>
         </div>
         
@@ -202,10 +281,19 @@ const GameTimer: React.FC<GameTimerProps> = ({
               +
             </button>
           </div>
+          
+          {/* New: Atlanteans Victory Button */}
+          <button
+            className="mt-4 w-full bg-red-700 hover:bg-red-600 rounded-lg py-2 px-4 flex items-center justify-center"
+            onClick={() => onDeclareVictory(Team.Atlanteans)}
+          >
+            <Award size={18} className="mr-2" />
+            <span>Declare Atlanteans Victory</span>
+          </button>
         </div>
       </div>
       
-      {/* Timer Section */}
+      {/* Timer Section - No changes needed here */}
       <div className="bg-gray-800 rounded-lg p-6">
         {gameState.currentPhase === 'strategy' ? (
           <div className="text-center">
@@ -318,7 +406,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
         )}
       </div>
       
-      {/* Player Selection Grid - UPDATED: Now shows player names and has larger tiles */}
+      {/* Player Selection Grid - No changes needed here */}
       {gameState.currentPhase !== 'turn-end' && (
         <div className="mt-6">
           <h3 className="text-xl font-bold mb-3">
