@@ -1354,24 +1354,34 @@ function AppContent() {
   };
   
   // Declare victory for a team
-  const declareVictory = (team: Team) => {
-    playSound('victory');
-    
-    setVictorTeam(team);
-    setShowVictoryScreen(true);
-  };
+const declareVictory = (team: Team) => {
+  playSound('victory');
+  
+  // Stop any active timers when declaring victory
+  setStrategyTimerActive(false);
+  setMoveTimerActive(false);
+  
+  setVictorTeam(team);
+  setShowVictoryScreen(true);
+};
   
   // Reset game to setup
-  const resetToSetup = () => {
-    playSound('buttonClick');
-    
-    setShowVictoryScreen(false);
-    setVictorTeam(null);
-    setGameStarted(false);
-    setIsDraftingMode(false);
-    setShowDraftModeSelection(false);
-    dispatch({ type: 'RESET_GAME' });
-  };
+const resetToSetup = () => {
+  playSound('buttonClick');
+  
+  // Ensure all timers are stopped when returning to setup
+  setStrategyTimerActive(false);
+  setMoveTimerActive(false);
+  setStrategyTimeRemaining(strategyTime);
+  setMoveTimeRemaining(moveTime);
+  
+  setShowVictoryScreen(false);
+  setVictorTeam(null);
+  setGameStarted(false);
+  setIsDraftingMode(false);
+  setShowDraftModeSelection(false);
+  dispatch({ type: 'RESET_GAME' });
+};
 
   // Flip the tiebreaker coin
   const flipCoin = () => {

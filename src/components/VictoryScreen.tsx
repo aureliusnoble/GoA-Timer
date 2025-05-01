@@ -150,22 +150,29 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
             Return to Setup
           </button>
           
-          {/* Save Match Data button */}
-          {animationComplete && !matchDataSaved && (
-            <EnhancedTooltip text="Save match results to your statistics">
+          {/* Save Match Data button - always visible, but color changes when saved */}
+          {animationComplete && (
+            <EnhancedTooltip text={matchDataSaved ? "Match data saved successfully" : "Save match results to your statistics"}>
               <button
                 onClick={handleSaveMatchData}
-                disabled={isSavingMatchData}
-                className={`px-6 py-3 rounded-lg text-white font-medium flex items-center mx-auto ${
-                  winningTeam === Team.Titans 
-                    ? 'bg-blue-700 hover:bg-blue-600' 
-                    : 'bg-red-700 hover:bg-red-600'
-                } ${isSavingMatchData ? 'opacity-70 cursor-wait' : 'opacity-100'}`}
+                disabled={isSavingMatchData || matchDataSaved}
+                className={`px-6 py-3 rounded-lg text-white font-medium flex items-center mx-auto
+                  ${matchDataSaved 
+                    ? 'bg-green-600 cursor-default' 
+                    : winningTeam === Team.Titans 
+                      ? 'bg-blue-700 hover:bg-blue-600' 
+                      : 'bg-red-700 hover:bg-red-600'
+                  } ${isSavingMatchData ? 'opacity-70 cursor-wait' : 'opacity-100'}`}
               >
                 {isSavingMatchData ? (
                   <>
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
                     Saving...
+                  </>
+                ) : matchDataSaved ? (
+                  <>
+                    <Database size={20} className="mr-2" />
+                    Saved Successfully
                   </>
                 ) : (
                   <>
@@ -178,15 +185,8 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
           )}
         </div>
         
-        {/* Match Data Saved Confirmation */}
-        {matchDataSaved && (
-          <div className="mt-4 px-5 py-3 bg-green-800/70 rounded-lg inline-block">
-            <p className="flex items-center text-green-200">
-              <Database size={16} className="mr-2" />
-              Match data saved successfully!
-            </p>
-          </div>
-        )}
+        {/* Match Data Saved Confirmation - shown below the buttons */}
+
         
         {/* Error Message */}
         {saveError && (
