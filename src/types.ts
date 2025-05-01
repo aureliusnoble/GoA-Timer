@@ -35,7 +35,8 @@ export interface Player {
   name: string; // New field for player name
 }
 
-export type GamePhase = 'setup' | 'strategy' | 'move' | 'turn-end';
+// Updated to include 'victory' phase
+export type GamePhase = 'setup' | 'strategy' | 'move' | 'turn-end' | 'victory';
 
 export interface LaneState {
   currentWave: number;
@@ -64,6 +65,9 @@ export interface GameState {
   // Fields to track player turns
   completedTurns: number[]; // Array of player indices who have completed their turn
   allPlayersMoved: boolean; // Flag to indicate when all players have completed their moves
+  
+  // Optional field for storing the victor team
+  victorTeam?: Team;
 }
 
 // Updated enum for draft modes with All Pick

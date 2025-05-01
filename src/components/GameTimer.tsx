@@ -1,7 +1,7 @@
 // src/components/GameTimer.tsx
 import React from 'react';
 import { GameState, Player, Team, Lane } from '../types';
-import { Clock, Plus, Minus, Check, RotateCcw, Info, Award } from 'lucide-react';
+import { Clock, Plus, Minus, Check, RotateCcw, Award } from 'lucide-react';
 import EnhancedTooltip from './common/EnhancedTooltip';
 
 interface GameTimerProps {

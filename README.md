@@ -94,7 +94,4 @@ This app has not been officially approved by Wolff Designa (the designers of Gua
 
 - option to disable timers
 - Select two lanes with six players (automatically selected with 8 or 10)
-- Manually decrease wave counter; round; turn.
-- Uneven teams
-
-- If the tooltip for a hero is displayed on top of the hero card for the same hero (then when we mouse over the tooltip (which is obscuring the hero card it flickers). Perhaps an easy way to fix this is that for heroes who are displayed on the left half of the screen we show the tooltip on the right, and on the right side of t he screen on the left, only for the web version)
+- Uneven teams (if uneven player count allow one team to have 1 more player. Display warning and notify about handicap cards.)
