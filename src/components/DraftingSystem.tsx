@@ -99,7 +99,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
   
   // Show hero info on mobile
   const handleHeroInfoClick = (hero: Hero) => {
-    if (isMobile) {
+    if (isMobile && !allPlayersHaveSelectedHeroes) {
       setHoveredHero(hero);
       setHeroInfoVisible(true);
     }
@@ -1104,12 +1104,12 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
       {renderSelectedHeroes()}
       
       {/* Hero info display - will render as a modal on mobile, tooltip on desktop */}
-      <HeroInfoDisplay 
-        hero={hoveredHero} 
-        onClose={handleCloseHeroInfo} 
-        isVisible={isMobile ? heroInfoVisible : !!hoveredHero} 
-        cardPosition={hoveredCardPosition}
-      />
+  <HeroInfoDisplay 
+    hero={hoveredHero} 
+    onClose={handleCloseHeroInfo} 
+    isVisible={(isMobile ? heroInfoVisible : !!hoveredHero) && !allPlayersHaveSelectedHeroes} 
+    cardPosition={hoveredCardPosition}
+  />
 
       {/* Add custom scrollbar styles */}
       <style>{`
