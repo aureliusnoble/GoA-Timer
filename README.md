@@ -87,21 +87,4 @@ The application uses Tailwind CSS for styling. Custom styles can be added in:
 - `tailwind.config.js` - For Tailwind theme customization
 
 # Disclaimer
-This app has not been officially approved by Wolff Designa (the designers of Guards of Atlantis). All game content, e.g. heroes, mechanics, images, etc. is the property of Wolff Designa.
-
-# To-do
-
-- End of Round Assistant. Can optionally record Level: Amount of Gold; Kills; Asssists; Minion Kills
-- If we logged level, amount of gold, kills, assists at end of round, we can display on the hero cards (with icons)
-
-- If we still have an ongoing game and refresh the page it should take us to main screen but notify us that we have an ongoing game and ask if we want to resume. Or just if we return to the page at a later point, it should always check if we have an ongoing game we want to resume.
-
-- Store locally some files which records match results.
-- Single button for: Game Data
--- Buttons for:
--- Player Stats: Wins/Losses; Favourite 3 Heroes; Favourite 3 Roles (don't include secondary); ELO (use Leauge of Legends type system); Games Played
---- Match History (allows you to delete individual matches)
---- Match maker: enter names of players and will split into two teams to create most matched pairing possible based on ELO
---- Delete data
---- Export/Import Player data (will overwrite local)
-- tooltip. Game data is only saved locally (on this device). It is not accessible from other devices.
+This app has not been officially approved by Wolff Designa (the designers of Guards of Atlantis). All game content, e.g. heroes, mechanics, images, etc. is the sole property of Wolff Designa.

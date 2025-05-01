@@ -71,6 +71,8 @@ const GameSetup: React.FC<GameSetupProps> = ({
 }) => {
   const { playSound } = useSound();
   const [hasMatchData, setHasMatchData] = useState<boolean>(false);
+  // NEW: State for suggested player names
+  const [suggestedPlayerNames, setSuggestedPlayerNames] = useState<string[]>([]);
 
   const [expandedSection, setExpandedSection] = useState<{[key: string]: boolean}>({
     'timers': true,
@@ -99,6 +101,23 @@ const GameSetup: React.FC<GameSetupProps> = ({
     };
     
     checkMatchData();
+    
+    // NEW: Load player names from database
+    const loadPlayerNames = async () => {
+      try {
+        const allPlayers = await dbService.getAllPlayers();
+        // Extract unique player names and sort them alphabetically
+        const playerNames = allPlayers.map(player => player.name)
+          .filter((name, index, self) => self.indexOf(name) === index)
+          .sort();
+        
+        setSuggestedPlayerNames(playerNames);
+      } catch (error) {
+        console.error('Error loading player names:', error);
+      }
+    };
+    
+    loadPlayerNames();
   }, []);
 
   // Calculate player count by team
@@ -581,6 +600,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                       onRemovePlayer(player.id);
                     }}
                     isDuplicate={isDuplicate}
+                    suggestedNames={suggestedPlayerNames}
                   />
                 );
               })}

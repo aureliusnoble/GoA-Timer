@@ -13,7 +13,8 @@ import {
   CircleMinus,
   ChevronRight,
   ChevronLeft,
-  Star
+  Star,
+  CheckSquare
 } from 'lucide-react';
 import { useSound } from '../context/SoundContext';
 
@@ -125,6 +126,19 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
     }));
   };
 
+  // NEW: Handle checking all checklist items at once
+  const checkAllItems = () => {
+    playSound('phaseChange');
+    setChecklistItems({
+      minionBattle: true,
+      pushLane: true,
+      removeTokens: true,
+      retrieveCards: true,
+      levelUp: true,
+      pityCoins: true
+    });
+  };
+
   // Handle completion
   const handleComplete = () => {
     playSound('phaseChange');
@@ -187,7 +201,19 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
         
         {/* Checklist of actions */}
         <div className="mb-6">
-          <h3 className="text-xl mb-3 font-semibold">End of Round Checklist</h3>
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-xl font-semibold">End of Round Checklist</h3>
+            
+            {/* NEW: Check All button */}
+            <button
+              onClick={checkAllItems}
+              className="px-4 py-1 bg-green-600 hover:bg-green-500 rounded-lg flex items-center text-sm"
+            >
+              <CheckSquare size={16} className="mr-2" />
+              Check All Items
+            </button>
+          </div>
+          
           <div className="bg-gray-700/50 p-4 rounded-lg space-y-3">
             <div 
               className={`flex items-start p-3 rounded cursor-pointer ${
