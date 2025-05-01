@@ -89,7 +89,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
             onClick={() => onDeclareVictory(Team.Titans)}
           >
             <Award size={18} className="mr-2" />
-            <span>Declare Titans Victory</span>
+            <span>Declare Titan Victory</span>
           </button>
         </div>
         
@@ -288,7 +288,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
             onClick={() => onDeclareVictory(Team.Atlanteans)}
           >
             <Award size={18} className="mr-2" />
-            <span>Declare Atlanteans Victory</span>
+            <span>Declare Atlantean Victory</span>
           </button>
         </div>
       </div>

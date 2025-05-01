@@ -6,6 +6,7 @@ import DraftingSystem from './components/DraftingSystem';
 import CoinToss from './components/CoinToss';
 import DraftModeSelection from './components/DraftModeSelection';
 import CollapsibleFeedback from './components/common/CollapsibleFeedback';
+import VictoryScreen from './components/VictoryScreen';
 import { 
   Hero, 
   GameState, 
@@ -364,6 +365,10 @@ function App() {
   
   // Coin flip animation state
   const [showCoinAnimation, setShowCoinAnimation] = useState<boolean>(false);
+  
+  // Victory screen state
+  const [showVictoryScreen, setShowVictoryScreen] = useState<boolean>(false);
+  const [victorTeam, setVictorTeam] = useState<Team | null>(null);
   
   // Available heroes (filtered by expansions and complexity)
   const filteredHeroes = filterHeroesByExpansions(selectedExpansions).filter(
@@ -1117,6 +1122,35 @@ function App() {
   const incrementWave = (lane: Lane) => {
     dispatch({ type: 'INCREMENT_WAVE', lane });
   };
+  
+  // Decrement wave counter for a specific lane
+  const decrementWave = (lane: Lane) => {
+    dispatch({ type: 'DECREMENT_WAVE', lane });
+  };
+  
+  // Adjust round counter
+  const adjustRound = (delta: number) => {
+    dispatch({ type: 'ADJUST_ROUND', delta });
+  };
+  
+  // Adjust turn counter
+  const adjustTurn = (delta: number) => {
+    dispatch({ type: 'ADJUST_TURN', delta });
+  };
+  
+  // Declare victory for a team
+  const declareVictory = (team: Team) => {
+    setVictorTeam(team);
+    setShowVictoryScreen(true);
+  };
+  
+  // Reset game to setup
+  const resetToSetup = () => {
+    setShowVictoryScreen(false);
+    setVictorTeam(null);
+    setGameStarted(false);
+    dispatch({ type: 'RESET_GAME' });
+  };
 
   // Flip the tiebreaker coin
   const flipCoin = () => {
@@ -1267,7 +1301,19 @@ function App() {
           onStartNextTurn={startNextTurn}
           onAdjustTeamLife={adjustTeamLife}
           onIncrementWave={incrementWave}
+          onDecrementWave={decrementWave}
+          onAdjustRound={adjustRound}
+          onAdjustTurn={adjustTurn}
+          onDeclareVictory={declareVictory}
           onFlipCoin={flipCoin}
+        />
+      )}
+
+      {/* Victory Screen */}
+      {showVictoryScreen && victorTeam && (
+        <VictoryScreen 
+          winningTeam={victorTeam} 
+          onReturnToSetup={resetToSetup} 
         />
       )}
 
