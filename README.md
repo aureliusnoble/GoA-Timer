@@ -92,8 +92,7 @@ This app has not been officially approved by Wolff Designa (the designers of Gua
 # Bugs
 
 - Select two lanes with six players (automatically selected with 8 or 10)
-- Uneven teams (if uneven player count allow one team to have 1 more player. Display warning and notify about handicap cards.)
-- max 5 players per team then gray out that team
+
 - Hero tooltip:
 -- Add additional roles
 -- Add Attack, Initiative, Defence, Movement (and upgraded version)

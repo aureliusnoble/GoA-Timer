@@ -1,6 +1,6 @@
 // src/components/DraftModeSelection.tsx
 import React from 'react';
-import { DraftMode } from '../types';
+import { DraftMode, Team } from '../types';
 import { AlertCircle } from 'lucide-react';
 
 interface DraftModeSelectionProps {
@@ -11,6 +11,8 @@ interface DraftModeSelectionProps {
     [key in DraftMode]?: boolean;
   };
   heroCount: number;
+  // NEW: Add handicapTeam prop to indicate which team has more players
+  handicapTeam: Team | null;
 }
 
 const DraftModeSelection: React.FC<DraftModeSelectionProps> = ({
@@ -18,7 +20,8 @@ const DraftModeSelection: React.FC<DraftModeSelectionProps> = ({
   onCancel,
   playerCount,
   availableDraftModes,
-  heroCount
+  heroCount,
+  handicapTeam
 }) => {
   // Descriptions for each draft mode
   const modeDescriptions = {
@@ -51,6 +54,22 @@ const DraftModeSelection: React.FC<DraftModeSelectionProps> = ({
   return (
     <div className="bg-gray-800 rounded-lg p-6">
       <h2 className="text-2xl font-bold mb-6">Select Draft Mode</h2>
+      
+      {/* NEW: Add handicap warning when teams are uneven */}
+      {handicapTeam && (
+        <div className="bg-amber-900/30 border border-amber-600 p-4 rounded-lg mb-6">
+          <div className="flex items-start">
+            <AlertCircle size={20} className="text-amber-400 mr-2 mt-0.5 flex-shrink-0" />
+            <div>
+              <h4 className="font-bold text-amber-400">Warning: Uneven Teams</h4>
+              <p className="text-sm text-gray-300">
+                All players on the {handicapTeam === Team.Titans ? 'Titans' : 'Atlanteans'} team 
+                must replace one of their basic cards with a handicap card.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         {/* All Pick Draft Option (NEW) */}

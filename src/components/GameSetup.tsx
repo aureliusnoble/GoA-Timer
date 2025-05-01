@@ -103,8 +103,13 @@ const GameSetup: React.FC<GameSetupProps> = ({
   // Check if teams have at least 2 players each
   const teamsHaveMinPlayers = titanCount >= 2 && atlanteanCount >= 2;
   
+  // UPDATED: Allow teams with at most 1 player difference
+  const isTeamsBalanced = titanCount > 0 && 
+                         atlanteanCount > 0 && 
+                         Math.abs(titanCount - atlanteanCount) <= 1 && 
+                         teamsHaveMinPlayers;
+  
   // Requirements for drafting
-  const isTeamsBalanced = titanCount > 0 && titanCount === atlanteanCount && teamsHaveMinPlayers;
   const canDraft = isTeamsBalanced && allPlayersHaveNames && hasUniqueNames && canStartDrafting;
 
   return (
@@ -355,9 +360,13 @@ const GameSetup: React.FC<GameSetupProps> = ({
                 </div>
               )}
               
+              {/* UPDATED: Changed team balance warning to handle both completely unbalanced teams
+                  and teams with a 1-player difference */}
               {titanCount !== atlanteanCount && (
-                <div className="text-amber-400 text-sm mt-2">
-                  Both teams must have equal number of players
+                <div className={`text-amber-400 text-sm mt-2 ${Math.abs(titanCount - atlanteanCount) > 1 ? "text-red-400" : ""}`}>
+                  {Math.abs(titanCount - atlanteanCount) > 1 
+                    ? "Teams must have equal player counts or differ by only 1 player" 
+                    : "Teams are uneven. The team with more players will need to use handicap cards."}
                 </div>
               )}
               
@@ -387,9 +396,19 @@ const GameSetup: React.FC<GameSetupProps> = ({
                 </div>
               )}
               
+              {/* Success messages - both for even and uneven but valid team configurations */}
               {titanCount > 0 && titanCount === atlanteanCount && allPlayersHaveNames && teamsHaveMinPlayers && duplicateNames.length === 0 && (
                 <div className="text-emerald-400 text-sm mt-2">
                   Teams are balanced with {titanCount} players each
+                </div>
+              )}
+              
+              {/* NEW: Success message for valid uneven teams */}
+              {titanCount > 0 && atlanteanCount > 0 && titanCount !== atlanteanCount && 
+               Math.abs(titanCount - atlanteanCount) === 1 &&
+               allPlayersHaveNames && teamsHaveMinPlayers && duplicateNames.length === 0 && (
+                <div className="text-emerald-400 text-sm mt-2">
+                  Teams are valid: {titanCount} Titans vs {atlanteanCount} Atlanteans
                 </div>
               )}
             </>
