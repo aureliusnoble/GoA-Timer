@@ -1112,14 +1112,14 @@ const handleDraftHeroSelect = (hero: Hero, playerId: number) => {
   // NEW: Handle reset draft
   const handleResetDraft = () => {
     // Ask for confirmation before resetting
-    if (window.confirm('Reset draft? This will clear all selections.')) {
+    
       // Create a fresh initial state with the same draft mode
       const freshState = createInitialStateForDraftMode(draftingState.mode);
       
       // Reset drafting state and history
       setDraftingState(freshState);
       setDraftHistory([]);
-    }
+    
   };
 
   // NEW: Handle back to draft selection
