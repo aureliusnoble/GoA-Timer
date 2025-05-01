@@ -96,6 +96,10 @@ const GameSetup: React.FC<GameSetupProps> = ({
   // Check if we can add more players (max 10 players total)
   const canAddMorePlayers = totalPlayers < 10;
   
+  // NEW: Check if each team can add more players (max 5 per team)
+  const canAddMoreTitans = titanCount < 5;
+  const canAddMoreAtlanteans = atlanteanCount < 5;
+  
   // Check if teams have at least 2 players each
   const teamsHaveMinPlayers = titanCount >= 2 && atlanteanCount >= 2;
   
@@ -305,12 +309,12 @@ const GameSetup: React.FC<GameSetupProps> = ({
                   <span>Titans: {titanCount} players</span>
                   <button
                     className={`px-3 py-1 rounded text-sm ${
-                      canAddMorePlayers 
+                      canAddMorePlayers && canAddMoreTitans
                         ? 'bg-blue-700 hover:bg-blue-600' 
                         : 'bg-gray-600 cursor-not-allowed'
                     }`}
-                    onClick={() => canAddMorePlayers && onAddPlayer(Team.Titans)}
-                    disabled={!canAddMorePlayers}
+                    onClick={() => canAddMorePlayers && canAddMoreTitans && onAddPlayer(Team.Titans)}
+                    disabled={!canAddMorePlayers || !canAddMoreTitans}
                   >
                     Add Player
                   </button>
@@ -320,12 +324,12 @@ const GameSetup: React.FC<GameSetupProps> = ({
                   <span>Atlanteans: {atlanteanCount} players</span>
                   <button
                     className={`px-3 py-1 rounded text-sm ${
-                      canAddMorePlayers 
+                      canAddMorePlayers && canAddMoreAtlanteans
                         ? 'bg-red-700 hover:bg-red-600' 
                         : 'bg-gray-600 cursor-not-allowed'
                     }`}
-                    onClick={() => canAddMorePlayers && onAddPlayer(Team.Atlanteans)}
-                    disabled={!canAddMorePlayers}
+                    onClick={() => canAddMorePlayers && canAddMoreAtlanteans && onAddPlayer(Team.Atlanteans)}
+                    disabled={!canAddMorePlayers || !canAddMoreAtlanteans}
                   >
                     Add Player
                   </button>
@@ -336,6 +340,18 @@ const GameSetup: React.FC<GameSetupProps> = ({
               {!canAddMorePlayers && (
                 <div className="text-amber-400 text-sm mt-2">
                   Maximum 10 players allowed
+                </div>
+              )}
+              
+              {!canAddMoreTitans && titanCount >= 5 && (
+                <div className="text-amber-400 text-sm mt-2">
+                  Maximum 5 Titans players allowed
+                </div>
+              )}
+              
+              {!canAddMoreAtlanteans && atlanteanCount >= 5 && (
+                <div className="text-amber-400 text-sm mt-2">
+                  Maximum 5 Atlanteans players allowed
                 </div>
               )}
               
