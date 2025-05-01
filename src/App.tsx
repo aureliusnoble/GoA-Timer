@@ -356,6 +356,8 @@ function App() {
   const [gameStarted, setGameStarted] = useState<boolean>(false);
   const [strategyTime, setStrategyTime] = useState<number>(90); // 90 seconds default
   const [moveTime, setMoveTime] = useState<number>(30); // 30 seconds default
+  const [strategyTimerEnabled, setStrategyTimerEnabled] = useState<boolean>(true);
+  const [moveTimerEnabled, setMoveTimerEnabled] = useState<boolean>(true);
   const [gameLength, setGameLength] = useState<GameLength>(GameLength.Quick);
   
   // Players and heroes state
@@ -1272,8 +1274,10 @@ function App() {
               strategyTime={strategyTime}
               moveTime={moveTime}
               gameLength={gameLength}
-              onStrategyTimeChange={setStrategyTime}
-              onMoveTimeChange={setMoveTime}
+              strategyTimerEnabled={strategyTimerEnabled}
+moveTimerEnabled={moveTimerEnabled}
+onStrategyTimerEnabledChange={setStrategyTimerEnabled}
+onMoveTimerEnabledChange={setMoveTimerEnabled}
               onGameLengthChange={handleGameLengthChange}
               players={localPlayers}
               onAddPlayer={addPlayer}
@@ -1296,6 +1300,8 @@ function App() {
           players={localPlayers}
           strategyTimeRemaining={strategyTimeRemaining}
           moveTimeRemaining={moveTimeRemaining}
+          strategyTimerEnabled={strategyTimerEnabled}
+moveTimerEnabled={moveTimerEnabled}
           strategyTimerActive={strategyTimerActive}
           moveTimerActive={moveTimerActive}
           onStartStrategyTimer={() => setStrategyTimerActive(true)}

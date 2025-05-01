@@ -1,7 +1,7 @@
 // src/components/GameTimer.tsx
 import React from 'react';
 import { GameState, Player, Team, Lane } from '../types';
-import { Clock, Plus, Minus, Check, RotateCcw, Award } from 'lucide-react';
+import { Clock, Plus, Minus, Check, RotateCcw, Award, Infinity } from 'lucide-react';
 import EnhancedTooltip from './common/EnhancedTooltip';
 
 interface GameTimerProps {
@@ -21,11 +21,14 @@ interface GameTimerProps {
   onStartNextTurn: () => void;
   onAdjustTeamLife: (team: Team, delta: number) => void;
   onIncrementWave: (lane: Lane) => void;
-  onDecrementWave: (lane: Lane) => void; // New prop
-  onAdjustRound: (delta: number) => void; // New prop
-  onAdjustTurn: (delta: number) => void;  // New prop
-  onDeclareVictory: (team: Team) => void; // New prop
+  onDecrementWave: (lane: Lane) => void;
+  onAdjustRound: (delta: number) => void;
+  onAdjustTurn: (delta: number) => void;
+  onDeclareVictory: (team: Team) => void;
   onFlipCoin: () => void;
+  // New props for timer toggling
+  strategyTimerEnabled: boolean;
+  moveTimerEnabled: boolean;
 }
 
 const GameTimer: React.FC<GameTimerProps> = ({
@@ -45,11 +48,14 @@ const GameTimer: React.FC<GameTimerProps> = ({
   onStartNextTurn,
   onAdjustTeamLife,
   onIncrementWave,
-  onDecrementWave, // New prop
-  onAdjustRound,   // New prop
-  onAdjustTurn,    // New prop
-  onDeclareVictory, // New prop
-  onFlipCoin
+  onDecrementWave,
+  onAdjustRound,
+  onAdjustTurn,
+  onDeclareVictory,
+  onFlipCoin,
+  // New props
+  strategyTimerEnabled,
+  moveTimerEnabled
 }) => {
   const formatTime = (seconds: number): string => {
     const minutes = Math.floor(seconds / 60);
@@ -293,28 +299,42 @@ const GameTimer: React.FC<GameTimerProps> = ({
         </div>
       </div>
       
-      {/* Timer Section - No changes needed here */}
+      {/* Timer Section - Updated to handle disabled timers */}
       <div className="bg-gray-800 rounded-lg p-6">
         {gameState.currentPhase === 'strategy' ? (
           <div className="text-center">
             <h2 className="text-2xl font-bold mb-4">Strategy Phase - Turn {gameState.turn}</h2>
-            <div className="text-6xl font-bold mb-6">{formatTime(strategyTimeRemaining)}</div>
-            <div className="flex justify-center gap-4">
-              {strategyTimerActive ? (
-                <button 
-                  className="bg-amber-600 hover:bg-amber-500 px-6 py-3 rounded-lg text-white font-medium"
-                  onClick={onPauseStrategyTimer}
-                >
-                  Pause
-                </button>
+            
+            {/* Timer display - show infinity symbol if timer is disabled */}
+            <div className="text-6xl font-bold mb-6 flex justify-center items-center">
+              {strategyTimerEnabled ? (
+                formatTime(strategyTimeRemaining)
               ) : (
-                <button 
-                  className="bg-green-600 hover:bg-green-500 px-6 py-3 rounded-lg text-white font-medium"
-                  onClick={onStartStrategyTimer}
-                >
-                  Resume
-                </button>
+                <Infinity size={64} className="text-gray-300" />
               )}
+            </div>
+            
+            <div className="flex justify-center gap-4">
+              {/* Only show pause/resume buttons if timer is enabled */}
+              {strategyTimerEnabled && (
+                strategyTimerActive ? (
+                  <button 
+                    className="bg-amber-600 hover:bg-amber-500 px-6 py-3 rounded-lg text-white font-medium"
+                    onClick={onPauseStrategyTimer}
+                  >
+                    Pause
+                  </button>
+                ) : (
+                  <button 
+                    className="bg-green-600 hover:bg-green-500 px-6 py-3 rounded-lg text-white font-medium"
+                    onClick={onStartStrategyTimer}
+                  >
+                    Resume
+                  </button>
+                )
+              )}
+              
+              {/* Always show End Strategy Phase button */}
               <button 
                 className="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-lg text-white font-medium"
                 onClick={onEndStrategyPhase}
@@ -356,24 +376,35 @@ const GameTimer: React.FC<GameTimerProps> = ({
                   </div>
                   
                   {/* Only show timer when a player is selected */}
-                  <div className="text-6xl font-bold my-6">{formatTime(moveTimeRemaining)}</div>
+                  <div className="text-6xl font-bold my-6 flex justify-center items-center">
+                    {moveTimerEnabled ? (
+                      formatTime(moveTimeRemaining)
+                    ) : (
+                      <Infinity size={64} className="text-gray-300" />
+                    )}
+                  </div>
                   
                   <div className="flex justify-center gap-4">
-                    {moveTimerActive ? (
-                      <button 
-                        className="bg-amber-600 hover:bg-amber-500 px-6 py-3 rounded-lg text-white font-medium"
-                        onClick={onPauseMoveTimer}
-                      >
-                        Pause
-                      </button>
-                    ) : (
-                      <button 
-                        className="bg-green-600 hover:bg-green-500 px-6 py-3 rounded-lg text-white font-medium"
-                        onClick={onStartMoveTimer}
-                      >
-                        Resume
-                      </button>
+                    {/* Only show pause/resume buttons if timer is enabled */}
+                    {moveTimerEnabled && (
+                      moveTimerActive ? (
+                        <button 
+                          className="bg-amber-600 hover:bg-amber-500 px-6 py-3 rounded-lg text-white font-medium"
+                          onClick={onPauseMoveTimer}
+                        >
+                          Pause
+                        </button>
+                      ) : (
+                        <button 
+                          className="bg-green-600 hover:bg-green-500 px-6 py-3 rounded-lg text-white font-medium"
+                          onClick={onStartMoveTimer}
+                        >
+                          Resume
+                        </button>
+                      )
                     )}
+                    
+                    {/* Always show Complete Turn button */}
                     <button 
                       className="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-lg text-white font-medium flex items-center"
                       onClick={onCompletePlayerTurn}

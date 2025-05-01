@@ -3,7 +3,7 @@ import { Player, Team, GameLength } from '../types';
 import { getAllExpansions } from '../data/heroes';
 import TimerInput from './TimerInput';
 import PlayerNameInput from './PlayerNameInput';
-import { Info } from 'lucide-react';
+import { Info, Clock, Infinity } from 'lucide-react';
 import EnhancedTooltip from './common/EnhancedTooltip';
 
 interface GameSetupProps {
@@ -25,6 +25,11 @@ interface GameSetupProps {
   heroCount: number;
   maxComplexity: number;
   onMaxComplexityChange: (complexity: number) => void;
+  // New props for timer toggling
+  strategyTimerEnabled: boolean;
+  moveTimerEnabled: boolean;
+  onStrategyTimerEnabledChange: (enabled: boolean) => void;
+  onMoveTimerEnabledChange: (enabled: boolean) => void;
 }
 
 const GameSetup: React.FC<GameSetupProps> = ({
@@ -45,7 +50,12 @@ const GameSetup: React.FC<GameSetupProps> = ({
   canStartDrafting,
   heroCount,
   maxComplexity,
-  onMaxComplexityChange
+  onMaxComplexityChange,
+  // New props
+  strategyTimerEnabled,
+  moveTimerEnabled,
+  onStrategyTimerEnabledChange,
+  onMoveTimerEnabledChange
 }) => {
   const [expandedSection, setExpandedSection] = useState<{[key: string]: boolean}>({
     'timers': true,
@@ -109,27 +119,75 @@ const GameSetup: React.FC<GameSetupProps> = ({
           {expandedSection['timers'] && (
             <>
               <div className="mb-6">
-                <label className="block mb-3">Strategy Timer</label>
-                <TimerInput 
-                  value={strategyTime} 
-                  onChange={onStrategyTimeChange}
-                  tooltip="This is the amount of time teams will have to publicly discuss what cards to play"
-                  minValue={30}
-                  maxValue={300}
-                  step={10}
-                />
+                <div className="flex justify-between items-center mb-3">
+                  <label className="flex-grow">Strategy Timer</label>
+                  <div className="flex items-center">
+                    <EnhancedTooltip 
+                      text={strategyTimerEnabled ? "Disable timer (unlimited time)" : "Enable timer (timed phase)"}
+                      position="top"
+                    >
+                      <div 
+                        className={`w-12 h-6 rounded-full flex items-center p-1 cursor-pointer transition-colors ${
+                          strategyTimerEnabled ? 'bg-green-600 justify-end' : 'bg-gray-600 justify-start'
+                        }`}
+                        onClick={() => onStrategyTimerEnabledChange(!strategyTimerEnabled)}
+                      >
+                        <div className="bg-white w-4 h-4 rounded-full"></div>
+                      </div>
+                    </EnhancedTooltip>
+                    <div className="ml-2">
+                      {strategyTimerEnabled ? <Clock size={16} /> : <Infinity size={16} />}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className={strategyTimerEnabled ? '' : 'opacity-50'}>
+                  <TimerInput 
+                    value={strategyTime} 
+                    onChange={onStrategyTimeChange}
+                    tooltip="This is the amount of time teams will have to publicly discuss what cards to play"
+                    minValue={30}
+                    maxValue={300}
+                    step={10}
+                    disabled={!strategyTimerEnabled}
+                  />
+                </div>
               </div>
               
               <div className="mb-4">
-                <label className="block mb-3">Action Timer</label>
-                <TimerInput 
-                  value={moveTime} 
-                  onChange={onMoveTimeChange}
-                  tooltip="This is the time each player will have to resolve their cards once revealed"
-                  minValue={10}
-                  maxValue={120}
-                  step={10}
-                />
+                <div className="flex justify-between items-center mb-3">
+                  <label className="flex-grow">Action Timer</label>
+                  <div className="flex items-center">
+                    <EnhancedTooltip 
+                      text={moveTimerEnabled ? "Disable timer (unlimited time)" : "Enable timer (timed phase)"}
+                      position="top"
+                    >
+                      <div 
+                        className={`w-12 h-6 rounded-full flex items-center p-1 cursor-pointer transition-colors ${
+                          moveTimerEnabled ? 'bg-green-600 justify-end' : 'bg-gray-600 justify-start'
+                        }`}
+                        onClick={() => onMoveTimerEnabledChange(!moveTimerEnabled)}
+                      >
+                        <div className="bg-white w-4 h-4 rounded-full"></div>
+                      </div>
+                    </EnhancedTooltip>
+                    <div className="ml-2">
+                      {moveTimerEnabled ? <Clock size={16} /> : <Infinity size={16} />}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className={moveTimerEnabled ? '' : 'opacity-50'}>
+                  <TimerInput 
+                    value={moveTime} 
+                    onChange={onMoveTimeChange}
+                    tooltip="This is the time each player will have to resolve their cards once revealed"
+                    minValue={10}
+                    maxValue={120}
+                    step={10}
+                    disabled={!moveTimerEnabled}
+                  />
+                </div>
               </div>
             </>
           )}

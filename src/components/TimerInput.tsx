@@ -9,6 +9,7 @@ interface TimerInputProps {
   minValue?: number;
   maxValue?: number;
   step?: number;
+  disabled?: boolean; // New prop for disabling the timer input
 }
 
 const TimerInput: React.FC<TimerInputProps> = ({
@@ -17,7 +18,8 @@ const TimerInput: React.FC<TimerInputProps> = ({
   tooltip,
   minValue = 10,
   maxValue = 600,
-  step = 10
+  step = 10,
+  disabled = false // Default to enabled
 }) => {
   const [inputValue, setInputValue] = useState<string>(formatTime(value));
 
@@ -56,6 +58,7 @@ const TimerInput: React.FC<TimerInputProps> = ({
 
   // Increment or decrement value
   const adjustValue = (delta: number) => {
+    if (disabled) return; // Don't adjust if disabled
     const newValue = Math.min(maxValue, Math.max(minValue, value + delta));
     onChange(newValue);
   };
@@ -67,11 +70,13 @@ const TimerInput: React.FC<TimerInputProps> = ({
 
   // Handle direct input
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (disabled) return; // Don't update if disabled
     setInputValue(e.target.value);
   };
 
   // Apply changes when input loses focus
   const handleBlur = () => {
+    if (disabled) return; // Don't update if disabled
     const newValue = parseTime(inputValue);
     onChange(newValue);
     setInputValue(formatTime(newValue));
@@ -79,6 +84,7 @@ const TimerInput: React.FC<TimerInputProps> = ({
 
   // Apply changes on Enter key
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (disabled) return; // Don't update if disabled
     if (e.key === 'Enter') {
       const newValue = parseTime(inputValue);
       onChange(newValue);
@@ -96,21 +102,30 @@ const TimerInput: React.FC<TimerInputProps> = ({
           onChange={handleInputChange}
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
-          className="w-20 bg-gray-700 text-center text-xl font-mono py-2 px-3 rounded-l-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className={`w-20 bg-gray-700 text-center text-xl font-mono py-2 px-3 rounded-l-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+            disabled ? 'cursor-not-allowed opacity-60' : ''
+          }`}
           aria-label="Timer duration"
+          disabled={disabled}
         />
         <div className="flex flex-col border-y border-r border-gray-600 rounded-r-md">
           <button
-            className="bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded-tr-md border-b border-gray-600"
+            className={`bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded-tr-md border-b border-gray-600 ${
+              disabled ? 'cursor-not-allowed opacity-60' : ''
+            }`}
             onClick={() => adjustValue(step)}
             aria-label="Increase time"
+            disabled={disabled}
           >
             <ChevronUp size={16} />
           </button>
           <button
-            className="bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded-br-md"
+            className={`bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded-br-md ${
+              disabled ? 'cursor-not-allowed opacity-60' : ''
+            }`}
             onClick={() => adjustValue(-step)}
             aria-label="Decrease time"
+            disabled={disabled}
           >
             <ChevronDown size={16} />
           </button>
