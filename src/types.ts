@@ -40,12 +40,22 @@ export interface Hero {
   movement_upgraded?: number;
 }
 
+// New interface for player statistics
+export interface PlayerStats {
+  totalGoldEarned: number;
+  totalKills: number;
+  totalAssists: number;
+  totalDeaths: number;
+  totalMinionKills: number;
+}
+
 export interface Player {
   id: number;
   team: Team;
   hero: Hero | null;
   lane?: Lane; // Assigned lane for 8-10 player games
   name: string; // New field for player name
+  stats?: PlayerStats; // NEW: Optional player statistics tracking
 }
 
 // Updated to include 'victory' phase

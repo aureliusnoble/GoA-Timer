@@ -1,9 +1,24 @@
 // src/components/GameTimer.tsx
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { GameState, Player, Team, Lane } from '../types';
-import { Clock, Plus, Minus, Check, RotateCcw, Award, Infinity } from 'lucide-react';
+import { 
+  Clock, 
+  Plus, 
+  Minus, 
+  Check, 
+  RotateCcw, 
+  Award, 
+  Infinity, 
+  Swords, 
+  Skull, 
+  Users, 
+  Bot, 
+  Coins,
+  Star
+} from 'lucide-react';
 import EnhancedTooltip from './common/EnhancedTooltip';
 import { useSound } from '../context/SoundContext';
+import EndOfRoundAssistant, { PlayerRoundStats } from './EndOfRoundAssistant';
 
 interface GameTimerProps {
   gameState: GameState;
@@ -27,9 +42,10 @@ interface GameTimerProps {
   onAdjustTurn: (delta: number) => void;
   onDeclareVictory: (team: Team) => void;
   onFlipCoin: () => void;
-  // New props for timer toggling
+  // New props
   strategyTimerEnabled: boolean;
   moveTimerEnabled: boolean;
+  onSavePlayerStats?: (playerStats: { [playerId: number]: PlayerRoundStats }) => void;
 }
 
 const GameTimer: React.FC<GameTimerProps> = ({
@@ -56,9 +72,13 @@ const GameTimer: React.FC<GameTimerProps> = ({
   onFlipCoin,
   // New props
   strategyTimerEnabled,
-  moveTimerEnabled
+  moveTimerEnabled,
+  onSavePlayerStats
 }) => {
   const { playSound } = useSound();
+  
+  // New state for end of round assistant
+  const [showEndOfRoundAssistant, setShowEndOfRoundAssistant] = useState<boolean>(false);
   
   const formatTime = (seconds: number): string => {
     const minutes = Math.floor(seconds / 60);
@@ -134,7 +154,29 @@ const GameTimer: React.FC<GameTimerProps> = ({
     onCompletePlayerTurn();
   };
   
+  // Modified to show end of round assistant when all players have moved
   const handleStartNextTurn = () => {
+    // Show the end of round assistant if this is the end of turn 4
+    if (gameState.turn === 4) {
+      setShowEndOfRoundAssistant(true);
+    } else {
+      // Otherwise just start the next turn as usual
+      playSound('turnStart');
+      onStartNextTurn();
+    }
+  };
+  
+  // Handler for completing the end of round process
+  const handleEndOfRoundComplete = (stats?: { [playerId: number]: PlayerRoundStats }) => {
+    // Save stats if provided
+    if (stats && onSavePlayerStats) {
+      onSavePlayerStats(stats);
+    }
+    
+    // Hide the assistant
+    setShowEndOfRoundAssistant(false);
+    
+    // Start the next turn
     playSound('turnStart');
     onStartNextTurn();
   };
@@ -489,7 +531,13 @@ const GameTimer: React.FC<GameTimerProps> = ({
                       />
                     </div>
                     <div>
-                      <div className="text-2xl font-bold">{activePlayer.hero.name}</div>
+                      <div className="flex items-center text-2xl font-bold">
+                        {activePlayer.hero.name}
+                        <span className="ml-2 text-sm bg-yellow-500/70 text-white px-1.5 py-0.5 rounded-full">
+                          <Star size={14} className="inline mr-0.5" />
+                          {activePlayer.hero.complexity}
+                        </span>
+                      </div>
                       <div className="text-lg text-gray-300">{activePlayer.name}</div>
                     </div>
                   </div>
@@ -552,13 +600,13 @@ const GameTimer: React.FC<GameTimerProps> = ({
               onClick={handleStartNextTurn}
             >
               <RotateCcw size={20} className="mr-2" />
-              Start Next Turn
+              {gameState.turn === 4 ? "End Round" : "Start Next Turn"}
             </button>
           </div>
         )}
       </div>
       
-      {/* Player Selection Grid - Add sound effects to player selection */}
+      {/* Player Selection Grid - Improved layout with larger cards */}
       {gameState.currentPhase !== 'turn-end' && (
         <div className="mt-6">
           <h3 className="text-xl font-bold mb-3">
@@ -568,13 +616,20 @@ const GameTimer: React.FC<GameTimerProps> = ({
           </h3>
           
           {/* Display all players in a grid with larger tiles */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {players.map((player, index) => (
               player.hero && renderPlayerCard(player, index)
             ))}
           </div>
         </div>
       )}
+      
+      {/* End of Round Assistant */}
+      <EndOfRoundAssistant 
+        players={players}
+        onComplete={handleEndOfRoundComplete}
+        isVisible={showEndOfRoundAssistant}
+      />
     </div>
   );
   
@@ -584,21 +639,24 @@ const GameTimer: React.FC<GameTimerProps> = ({
     const hasCompleted = gameState.completedTurns.includes(index);
     const isSelectable = gameState.currentPhase === 'move' && !hasCompleted && !isActive;
     
+    // Get player level (complexity is 1-4, representing player level)
+    const playerLevel = player.hero?.complexity || 1;
+    
     return (
       <div
         key={player.id}
-        className={`p-4 rounded-lg transition-all relative ${
+        className={`p-5 rounded-lg transition-all relative shadow-md ${
           // Different styles based on player status
           isActive
             ? player.team === Team.Titans
               ? 'bg-blue-700 ring-4 ring-white'
               : 'bg-red-700 ring-4 ring-white'
             : hasCompleted
-            ? 'bg-gray-700 opacity-60' // Greyed out for completed players
+            ? 'bg-gray-700/90 opacity-60' // Greyed out for completed players
             : player.team === Team.Titans
-            ? 'bg-blue-900/50 hover:bg-blue-800'
-            : 'bg-red-900/50 hover:bg-red-800'
-        } ${isSelectable ? 'cursor-pointer' : ''}`}
+            ? 'bg-blue-900/70 hover:bg-blue-800'
+            : 'bg-red-900/70 hover:bg-red-800'
+        } ${isSelectable ? 'cursor-pointer transform hover:scale-[1.02] hover:shadow-lg' : ''}`}
         onClick={() => {
           if (isSelectable) {
             // Play selection sound when selecting a player
@@ -607,43 +665,74 @@ const GameTimer: React.FC<GameTimerProps> = ({
           }
         }}
       >
-        <div className="flex items-center">
+        <div className="flex items-start">
           {player.hero && (
-            <div className="w-16 h-16 bg-gray-300 rounded-full overflow-hidden mr-3 flex-shrink-0">
+            <div className="w-24 h-24 bg-gray-300 rounded-full overflow-hidden mr-4 flex-shrink-0 border-2 border-gray-600">
               <img 
                 src={player.hero.icon} 
                 alt={player.hero.name} 
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
-                  target.src = 'https://via.placeholder.com/64?text=Hero';
+                  target.src = 'https://via.placeholder.com/96?text=Hero';
                 }}
               />
             </div>
           )}
-          <div>
-            <div className="text-lg font-bold mb-1">{player.hero?.name || 'Unknown Hero'}</div>
-            <div className="text-base text-gray-300">{player.name || `Player ${player.id}`}</div>
+          <div className="flex-1">
+            <div className="flex justify-between items-start">
+              <div className="text-xl font-bold mb-1 flex items-center">
+                {player.hero?.name || 'Unknown Hero'}
+                <span className="ml-2 text-sm bg-yellow-500/80 text-white px-2 py-0.5 rounded-full">
+                  <Star size={14} className="inline mr-0.5" />
+                  {playerLevel}
+                </span>
+              </div>
+              
+              {/* Status indicators - moved to top right corner of card content */}
+              {hasCompleted && (
+                <div className="bg-green-600 rounded-full p-1.5 ml-2" title="Completed">
+                  <Check size={20} />
+                </div>
+              )}
+              
+              {isActive && (
+                <div className="bg-yellow-500 rounded-full p-1.5 ml-2 animate-pulse" title="Active">
+                  <Clock size={20} />
+                </div>
+              )}
+            </div>
+            
+            <div className="text-lg font-medium text-gray-100 mb-2">{player.name || `Player ${player.id}`}</div>
+            
             {player.lane && (
-              <div className="text-xs text-gray-400 mt-1">
+              <div className="text-base text-gray-300 mb-2">
                 {player.lane === Lane.Top ? 'Top Lane' : 'Bottom Lane'}
+              </div>
+            )}
+            
+            {/* Show player stats if available with icons - larger text */}
+            {player.stats && (
+              <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-base bg-black/20 p-2 rounded">
+                <span className="flex items-center" title="Kills">
+                  <Swords size={18} className="mr-2 text-blue-400" /> <span className="font-bold">{player.stats.totalKills}</span>
+                </span>
+                <span className="flex items-center" title="Deaths">
+                  <Skull size={18} className="mr-2 text-red-400" /> <span className="font-bold">{player.stats.totalDeaths}</span>
+                </span>
+                <span className="flex items-center" title="Assists">
+                  <Users size={18} className="mr-2 text-green-400" /> <span className="font-bold">{player.stats.totalAssists}</span>
+                </span>
+                <span className="flex items-center" title="Minion Kills">
+                  <Bot size={18} className="mr-2 text-yellow-400" /> <span className="font-bold">{player.stats.totalMinionKills}</span>
+                </span>
+                <span className="flex items-center col-span-2 mt-1 justify-center bg-amber-900/30 py-1 px-2 rounded" title="Total Gold Earned">
+                  <Coins size={18} className="mr-2 text-amber-400" /> <span className="font-bold">{player.stats.totalGoldEarned}</span>
+                </span>
               </div>
             )}
           </div>
         </div>
-        
-        {/* Status indicators */}
-        {hasCompleted && (
-          <div className="absolute top-2 right-2 bg-green-600 rounded-full p-1" title="Completed">
-            <Check size={18} />
-          </div>
-        )}
-        
-        {isActive && (
-          <div className="absolute top-2 right-2 bg-yellow-500 rounded-full p-1 animate-pulse" title="Active">
-            <Clock size={18} />
-          </div>
-        )}
       </div>
     );
   }

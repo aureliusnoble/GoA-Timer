@@ -10,6 +10,7 @@ import SoundToggle from './components/common/SoundToggle';
 import AudioInitializer from './components/common/AudioInitializer';
 import VictoryScreen from './components/VictoryScreen';
 import { SoundProvider, useSound } from './context/SoundContext';
+import { PlayerRoundStats } from './components/EndOfRoundAssistant';
 import { 
   Hero, 
   GameState, 
@@ -20,7 +21,8 @@ import {
   LaneState, 
   DraftMode,
   DraftingState,
-  PickBanStep
+  PickBanStep,
+  PlayerStats
 } from './types';
 import { getAllExpansions, filterHeroesByExpansions } from './data/heroes';
 
@@ -539,12 +541,20 @@ function AppContent() {
       }
     }
     
+    // Initialize player with default stats
     const newPlayer: Player = {
       id: localPlayers.length + 1,
       team,
       hero: null,
       lane,
-      name: '' // Initialize with empty name
+      name: '', // Initialize with empty name
+      stats: {
+        totalGoldEarned: 0,
+        totalKills: 0,
+        totalAssists: 0,
+        totalDeaths: 0,
+        totalMinionKills: 0
+      }
     };
     
     setLocalPlayers([...localPlayers, newPlayer]);
@@ -1360,6 +1370,35 @@ function AppContent() {
     dispatch({ type: 'FLIP_COIN' });
   };
 
+  // NEW: Handle saving player round stats
+  const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStats }) => {
+    // Update the players with new stats
+    const updatedPlayers = localPlayers.map(player => {
+      const playerRoundStats = roundStats[player.id];
+      
+      if (playerRoundStats) {
+        // Calculate updated totals
+        const updatedStats: PlayerStats = {
+          totalGoldEarned: (player.stats?.totalGoldEarned || 0) + playerRoundStats.goldCollected,
+          totalKills: (player.stats?.totalKills || 0) + playerRoundStats.kills,
+          totalAssists: (player.stats?.totalAssists || 0) + playerRoundStats.assists,
+          totalDeaths: (player.stats?.totalDeaths || 0) + playerRoundStats.deaths,
+          totalMinionKills: (player.stats?.totalMinionKills || 0) + playerRoundStats.minionKills
+        };
+        
+        return {
+          ...player,
+          stats: updatedStats
+        };
+      }
+      
+      return player;
+    });
+    
+    setLocalPlayers(updatedPlayers);
+    players = updatedPlayers;
+  };
+
   // Handle strategy timer
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -1546,6 +1585,7 @@ function AppContent() {
           onAdjustTurn={adjustTurn}
           onDeclareVictory={declareVictory}
           onFlipCoin={flipCoin}
+          onSavePlayerStats={handleSavePlayerStats}
         />
       )}
 
