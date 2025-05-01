@@ -3,6 +3,15 @@ import { Hero } from '../../types';
 import { useDevice } from '../../hooks/useDevice';
 import { X } from 'lucide-react';
 
+// allow px positions or "auto"
+type TooltipPosition = {
+  left: number | 'auto';
+  top:  number | 'auto';
+  right: number | 'auto';
+  bottom: number | 'auto';
+};
+
+
 interface HeroInfoDisplayProps {
   hero: Hero | null;
   onClose: () => void;
@@ -27,56 +36,59 @@ const HeroInfoDisplay: React.FC<HeroInfoDisplayProps> = ({
   const tooltipRef = useRef<HTMLDivElement>(null);
   
   // State to track calculated position
-  const [tooltipPosition, setTooltipPosition] = useState({
-    left: 8,
-    bottom: 8,
-    right: 'auto',
-    top: 'auto'
-  });
+const [tooltipPosition, setTooltipPosition] = useState<TooltipPosition>({
+  left:   8,
+  bottom: 8,
+  right:  'auto',
+  top:    'auto',
+});
+
   
   // Calculate optimal tooltip position to avoid overlapping with the hero card
   useEffect(() => {
-    if (!isMobile && isVisible && tooltipRef.current && cardPosition) {
-      const tooltipRect = tooltipRef.current.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      
-      // Position calculation logic
-      let newPosition = { 
-        left: 8, 
-        bottom: 8, 
-        right: 'auto' as const, 
-        top: 'auto' as const 
+  if (!isMobile && isVisible && tooltipRef.current && cardPosition) {
+    const tooltipRect   = tooltipRef.current.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight= window.innerHeight;
+
+    // start with a valid TooltipPosition
+    let newPosition: TooltipPosition = {
+      left:   8,
+      bottom: 8,
+      right:  'auto',
+      top:    'auto',
+    };
+
+    if (cardPosition.x < viewportWidth / 2) {
+      newPosition = {
+        left:   Math.min(cardPosition.x + cardPosition.width + 20,
+                        viewportWidth - tooltipRect.width - 8),
+        top:    Math.min(cardPosition.y,
+                        viewportHeight - tooltipRect.height - 8),
+        right:  'auto',
+        bottom: 'auto',
       };
-      
-      // If hero card is in the left half of the screen, place tooltip on the right side
-      if (cardPosition.x < viewportWidth / 2) {
-        // Position tooltip to the right of the card
-        newPosition = {
-          left: Math.min(cardPosition.x + cardPosition.width + 20, viewportWidth - tooltipRect.width - 8),
-          top: Math.min(cardPosition.y, viewportHeight - tooltipRect.height - 8),
-          right: 'auto',
-          bottom: 'auto'
-        };
-      } else {
-        // Position tooltip to the left of the card
-        newPosition = {
-          right: Math.min(viewportWidth - cardPosition.x + 20, viewportWidth - 8),
-          top: Math.min(cardPosition.y, viewportHeight - tooltipRect.height - 8),
-          left: 'auto',
-          bottom: 'auto'
-        };
-      }
-      
-      // If tooltip would be too close to the bottom of the viewport,
-      // position it higher
-      if (cardPosition.y + tooltipRect.height > viewportHeight - 20) {
-        newPosition.top = Math.max(8, viewportHeight - tooltipRect.height - 20);
-      }
-      
-      setTooltipPosition(newPosition);
+    } else {
+      newPosition = {
+        right:  Math.min(viewportWidth - cardPosition.x + 20,
+                         viewportWidth - 8),
+        top:    Math.min(cardPosition.y,
+                        viewportHeight - tooltipRect.height - 8),
+        left:   'auto',
+        bottom: 'auto',
+      };
     }
-  }, [isMobile, isVisible, cardPosition]);
+
+    // if it would overflow the bottom
+    if (cardPosition.y + tooltipRect.height > viewportHeight - 20) {
+      newPosition.top = Math.max(8,
+                                 viewportHeight - tooltipRect.height - 20);
+    }
+
+    setTooltipPosition(newPosition);
+  }
+}, [isMobile, isVisible, cardPosition]);
+
   
   if (!hero || !isVisible) return null;
   
