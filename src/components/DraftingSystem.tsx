@@ -36,7 +36,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
   const { isMobile } = useDevice();
   const [hoveredHero, setHoveredHero] = useState<Hero | null>(null);
   const [heroInfoVisible, setHeroInfoVisible] = useState<boolean>(false);
-  // New state to track card position
+  // State to track card position
   const [hoveredCardPosition, setHoveredCardPosition] = useState<{
     x: number;
     y: number;
@@ -134,8 +134,8 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
     }
   };
   
-  // Render hero card with appropriate actions
-  const renderHeroCard = (hero: Hero, context: 'available' | 'assigned' | 'selected' | 'banned') => {
+  // Render standard hero card with appropriate actions
+  const renderHeroCard = (hero: Hero, context: 'available' | 'assigned' | 'selected' | 'banned', playerId?: number) => {
     const isAvailable = context === 'available';
     const isAssigned = context === 'assigned';
     const isSelected = context === 'selected';
@@ -150,16 +150,28 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
     // Determine if this card should be grayed out (all players have heroes)
     const isGrayedOut = allPlayersHaveSelectedHeroes && (isAvailable || isAssigned);
     
+    // Get player name if this is a selected hero
+    const playerName = playerId ? 
+      players.find(p => p.id === playerId)?.name || `Player ${playerId}` : '';
+    
+    // Get player team if this is a selected hero
+    const playerTeam = playerId ?
+      players.find(p => p.id === playerId)?.team : undefined;
+    
+    // Common card styling for all hero types - now larger
+    const cardClasses = `
+      relative p-5 rounded-lg transition-all
+      ${isGrayedOut ? 'opacity-40 pointer-events-none' : ''}
+      ${isAvailable ? 'bg-gray-800 hover:bg-gray-700' : ''}
+      ${isAssigned ? 'bg-amber-900/30 hover:bg-amber-800/40' : ''}
+      ${isSelected ? (playerTeam === Team.Titans ? 'bg-blue-900/30' : 'bg-red-900/30') : ''}
+      ${isBanned ? 'bg-red-900/30 opacity-70' : ''}
+    `;
+    
     return (
       <div 
-        key={hero.id}
-        className={`relative p-4 rounded-lg transition-all ${
-          isGrayedOut ? 'opacity-40 pointer-events-none' :
-          isAvailable ? 'bg-gray-800 hover:bg-gray-700' : 
-          isAssigned ? 'bg-amber-900/30 hover:bg-amber-800/40' :
-          isSelected ? 'bg-green-900/30' :
-          'bg-red-900/30 opacity-50'
-        }`}
+        key={`${hero.id}-${context}-${playerId || 0}`}
+        className={cardClasses}
         onClick={() => handleHeroInfoClick(hero)}
         onMouseEnter={(e) => handleHeroMouseEnter(hero, e)}
         onMouseLeave={handleHeroMouseLeave}
@@ -175,32 +187,41 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
         )}
         
         <div className="text-center mb-3">
-          <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gray-300 rounded-full mx-auto overflow-hidden">
+          {/* Larger hero icon */}
+          <div className="w-24 h-24 sm:w-28 sm:h-28 bg-gray-300 rounded-full mx-auto overflow-hidden">
             <img 
               src={hero.icon} 
               alt={hero.name} 
               className="w-full h-full object-cover"
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
-                target.src = 'https://via.placeholder.com/96?text=Hero';
+                target.src = 'https://via.placeholder.com/112?text=Hero';
               }}
             />
           </div>
-          <div className="mt-2 font-medium text-lg">{hero.name}</div>
+          {/* Larger hero name */}
+          <div className="mt-3 font-medium text-xl">{hero.name}</div>
+          
+          {/* Player name for selected heroes */}
+          {isSelected && playerName && (
+            <div className="mt-1 text-sm text-gray-300">
+              {playerName}
+            </div>
+          )}
         </div>
         
         {/* Complexity stars */}
         <div className="flex justify-center mb-2">
           {[...Array(hero.complexity)].map((_, i) => (
-            <span key={i} className="text-yellow-400 text-base sm:text-lg">★</span>
+            <span key={i} className="text-yellow-400 text-lg sm:text-xl">★</span>
           ))}
           {[...Array(4 - hero.complexity)].map((_, i) => (
-            <span key={i + hero.complexity} className="text-gray-600 text-base sm:text-lg">★</span>
+            <span key={i + hero.complexity} className="text-gray-600 text-lg sm:text-xl">★</span>
           ))}
         </div>
         
         {/* Roles */}
-        <div className="text-xs sm:text-sm text-center text-gray-300 mb-3">
+        <div className="text-sm sm:text-base text-center text-gray-300 mb-3">
           {hero.roles.join(', ')}
         </div>
         
@@ -351,7 +372,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
         </div>
         
         {/* Filter available heroes by search or ability */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
           {sortedHeroes.map(hero => 
             renderHeroCard(hero, 'available')
           )}
@@ -458,7 +479,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                           onMouseLeave={handleHeroMouseLeave}
                         >
                           <div className="text-center mb-3">
-                            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-300 rounded-full mx-auto overflow-hidden">
+                            <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gray-300 rounded-full mx-auto overflow-hidden">
                               <img 
                                 src={hero.icon} 
                                 alt={hero.name} 
@@ -469,7 +490,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                                 }}
                               />
                             </div>
-                            <div className="mt-2 font-medium text-base sm:text-lg">{hero.name}</div>
+                            <div className="mt-2 font-medium text-lg">{hero.name}</div>
                           </div>
                           
                           {/* Complexity stars */}
@@ -569,7 +590,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                           onMouseLeave={handleHeroMouseLeave}
                         >
                           <div className="text-center mb-3">
-                            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-300 rounded-full mx-auto overflow-hidden">
+                            <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gray-300 rounded-full mx-auto overflow-hidden">
                               <img 
                                 src={hero.icon} 
                                 alt={hero.name} 
@@ -580,7 +601,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
                                 }}
                               />
                             </div>
-                            <div className="mt-2 font-medium text-base sm:text-lg">{hero.name}</div>
+                            <div className="mt-2 font-medium text-lg">{hero.name}</div>
                           </div>
                           
                           {/* Complexity stars */}
@@ -737,6 +758,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
     
     // Sort heroes by complexity and then alphabetically
     const sortedHeroes = sortHeroes(draftingState.availableHeroes);
+    const sortedBannedHeroes = sortHeroes(draftingState.bannedHeroes);
     
     // Determine which action we're doing in the current step
     const currentStep = draftingState.currentStep < draftingState.pickBanSequence.length 
@@ -786,46 +808,13 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
         </div>
         
         {/* Banned heroes section */}
-        {draftingState.bannedHeroes.length > 0 && (
+        {sortedBannedHeroes.length > 0 && (
           <div className="mb-6">
-            <h4 className="text-lg font-medium mb-3">Banned Heroes</h4>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-              {sortHeroes(draftingState.bannedHeroes).map(hero => (
-                <div 
-                  key={hero.id} 
-                  className="relative p-3 rounded-lg bg-gray-800 opacity-50"
-                  onClick={() => handleHeroInfoClick(hero)}
-                  onMouseEnter={(e) => handleHeroMouseEnter(hero, e)}
-                  onMouseLeave={handleHeroMouseLeave}
-                >
-                  {/* Improved X overlay for banned heroes */}
-                  <div className="absolute inset-0 flex items-center justify-center z-10">
-                    <div className="relative w-full h-full flex items-center justify-center">
-                      <div className="absolute w-3/4 h-0.5 bg-red-500 transform rotate-45"></div>
-                      <div className="absolute w-3/4 h-0.5 bg-red-500 transform -rotate-45"></div>
-                    </div>
-                  </div>
-                  
-                  <div className="text-center mb-2">
-                    <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-300 rounded-full mx-auto overflow-hidden">
-                      <img 
-                        src={hero.icon} 
-                        alt={hero.name} 
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = 'https://via.placeholder.com/80?text=Hero';
-                        }}
-                      />
-                    </div>
-                    <div className="mt-2 font-medium">{hero.name}</div>
-                  </div>
-                  
-                  <div className="text-xs text-center text-gray-400">
-                    {hero.roles.join(', ')}
-                  </div>
-                </div>
-              ))}
+            <h4 className="text-lg font-medium mb-3 bg-red-900/30 p-2 rounded">Banned Heroes</h4>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              {sortedBannedHeroes.map(hero => 
+                renderHeroCard(hero, 'banned')
+              )}
             </div>
           </div>
         )}
@@ -932,87 +921,52 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
     }
   };
   
-  // Selected heroes overview
+  // Selected heroes overview - Updated with standardized card format
   const renderSelectedHeroes = () => {
     if (draftingState.selectedHeroes.length === 0) return null;
     
+    // Group selected heroes by team
+    const titanHeroes = draftingState.selectedHeroes.filter(selection => 
+      players.find(p => p.id === selection.playerId)?.team === Team.Titans
+    );
+    
+    const atlanteanHeroes = draftingState.selectedHeroes.filter(selection => 
+      players.find(p => p.id === selection.playerId)?.team === Team.Atlanteans
+    );
+    
     return (
-      <div className="mt-8 bg-gray-800 p-4 rounded-lg">
+      <div className="mb-8 bg-gray-800 p-6 rounded-lg">
         <h3 className="text-xl font-bold mb-4">Selected Heroes</h3>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Titans section */}
-          <div className="bg-blue-900/30 p-3 rounded-lg">
-            <h4 className="text-lg font-medium mb-3">Titans</h4>
-            <div className="space-y-2">
-              {players
-                .filter(player => player.team === Team.Titans)
-                .map(player => {
-                  const selection = draftingState.selectedHeroes.find(s => s.playerId === player.id);
-                  return (
-                    <div key={player.id} className="flex items-center">
-                      <div className="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center mr-2">
-                        {selection ? (
-                          <img 
-                            src={selection.hero.icon} 
-                            alt={selection.hero.name} 
-                            className="w-full h-full object-cover rounded-full"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.src = 'https://via.placeholder.com/32?text=H';
-                            }}
-                          />
-                        ) : (
-                          <span className="text-xs">?</span>
-                        )}
-                      </div>
-                      <div>
-                        <div className="font-medium">{player.name}</div>
-                        <div className="text-xs text-gray-300">
-                          {selection ? selection.hero.name : 'Not selected'}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
+          <div className="bg-blue-900/30 p-4 rounded-lg">
+            <h4 className="text-lg font-medium mb-3 border-b border-blue-700 pb-2">Titans</h4>
+            
+            {titanHeroes.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {titanHeroes.map(selection => 
+                  renderHeroCard(selection.hero, 'selected', selection.playerId)
+                )}
+              </div>
+            ) : (
+              <p className="text-gray-400 italic">No heroes selected yet</p>
+            )}
           </div>
           
           {/* Atlanteans section */}
-          <div className="bg-red-900/30 p-3 rounded-lg">
-            <h4 className="text-lg font-medium mb-3">Atlanteans</h4>
-            <div className="space-y-2">
-              {players
-                .filter(player => player.team === Team.Atlanteans)
-                .map(player => {
-                  const selection = draftingState.selectedHeroes.find(s => s.playerId === player.id);
-                  return (
-                    <div key={player.id} className="flex items-center">
-                      <div className="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center mr-2">
-                        {selection ? (
-                          <img 
-                            src={selection.hero.icon} 
-                            alt={selection.hero.name} 
-                            className="w-full h-full object-cover rounded-full"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.src = 'https://via.placeholder.com/32?text=H';
-                            }}
-                          />
-                        ) : (
-                          <span className="text-xs">?</span>
-                        )}
-                      </div>
-                      <div>
-                        <div className="font-medium">{player.name}</div>
-                        <div className="text-xs text-gray-300">
-                          {selection ? selection.hero.name : 'Not selected'}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
+          <div className="bg-red-900/30 p-4 rounded-lg">
+            <h4 className="text-lg font-medium mb-3 border-b border-red-700 pb-2">Atlanteans</h4>
+            
+            {atlanteanHeroes.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {atlanteanHeroes.map(selection => 
+                  renderHeroCard(selection.hero, 'selected', selection.playerId)
+                )}
+              </div>
+            ) : (
+              <p className="text-gray-400 italic">No heroes selected yet</p>
+            )}
           </div>
         </div>
       </div>
@@ -1094,22 +1048,22 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
       
       {/* Hero Role Explanation */}
       <HeroRoleExplanation />
+
+      {/* Selected heroes section - Now positioned ABOVE the drafting UI */}
+      {draftingState.selectedHeroes.length > 0 && renderSelectedHeroes()}
       
-      {/* Main drafting UI */}
+      {/* Main drafting UI - Now positioned BELOW the selected heroes */}
       <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
         {renderDraftingUI()}
       </div>
       
-      {/* Selected heroes overview */}
-      {renderSelectedHeroes()}
-      
       {/* Hero info display - will render as a modal on mobile, tooltip on desktop */}
-  <HeroInfoDisplay 
-    hero={hoveredHero} 
-    onClose={handleCloseHeroInfo} 
-    isVisible={(isMobile ? heroInfoVisible : !!hoveredHero) && !allPlayersHaveSelectedHeroes} 
-    cardPosition={hoveredCardPosition}
-  />
+      <HeroInfoDisplay 
+        hero={hoveredHero} 
+        onClose={handleCloseHeroInfo} 
+        isVisible={(isMobile ? heroInfoVisible : !!hoveredHero) && !allPlayersHaveSelectedHeroes} 
+        cardPosition={hoveredCardPosition}
+      />
 
       {/* Add custom scrollbar styles */}
       <style>{`
