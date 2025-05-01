@@ -100,3 +100,5 @@ This app has not been officially approved by Wolff Designa (the designers of Gua
 - Tooltips sometimes covering things up
 - In general check mobile
 - Uneven teams
+
+- If the tooltip for a hero is displayed on top of the hero card for the same hero (then when we mouse over the tooltip (which is obscuring the hero card it flickers). Perhaps an easy way to fix this is that for heroes who are displayed on the left half of the screen we show the tooltip on the right, and on the right side of t he screen on the left, only for the web version)

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useDevice } from '../../hooks/useDevice';
 
 interface EnhancedTooltipProps {
@@ -9,11 +9,6 @@ interface EnhancedTooltipProps {
   maxWidth?: string;
 }
 
-/**
- * Enhanced tooltip component that behaves differently based on device type:
- * - Mobile: Click/tap to show tooltip, click elsewhere to dismiss
- * - Desktop: Hover to show tooltip
- */
 const EnhancedTooltip: React.FC<EnhancedTooltipProps> = ({
   text,
   children,
@@ -23,26 +18,64 @@ const EnhancedTooltip: React.FC<EnhancedTooltipProps> = ({
 }) => {
   const { isMobile } = useDevice();
   const [isVisible, setIsVisible] = useState(false);
+  const [adjustedPosition, setAdjustedPosition] = useState(position);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  // Check viewport boundaries and adjust tooltip position
+  const adjustTooltipPosition = useCallback(() => {
+    if (!isVisible || !tooltipRef.current || !containerRef.current) return;
+    
+    const tooltipRect = tooltipRef.current.getBoundingClientRect();
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    let newPosition = position;
+    
+    // Check horizontal overflow
+    if ((position === 'left' && containerRect.left < tooltipRect.width + 10) ||
+        (position === 'right' && containerRect.right + tooltipRect.width + 10 > viewportWidth)) {
+      // If overflow, flip horizontal position
+      newPosition = position === 'left' ? 'right' : 'left';
+    }
+    
+    // Check vertical overflow
+    if ((position === 'top' && containerRect.top < tooltipRect.height + 10) ||
+        (position === 'bottom' && containerRect.bottom + tooltipRect.height + 10 > viewportHeight)) {
+      // If overflow, flip vertical position
+      newPosition = position === 'top' ? 'bottom' : 'top';
+    }
+    
+    setAdjustedPosition(newPosition);
+  }, [isVisible, position]);
+  
+  // Run position adjustment when tooltip becomes visible
+  useEffect(() => {
+    if (isVisible) {
+      // Wait for tooltip to render before measuring
+      setTimeout(adjustTooltipPosition, 0);
+    }
+  }, [isVisible, adjustTooltipPosition]);
   
   // Mobile click handler
   const handleMobileToggle = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent clicks from propagating
+    e.stopPropagation();
     setIsVisible(!isVisible);
   }, [isVisible]);
   
   // Desktop hover handlers
   const showTooltip = useCallback(() => {
-    if (isMobile) return; // Don't use hover on mobile
+    if (isMobile) return;
     
     timeoutRef.current = setTimeout(() => {
       setIsVisible(true);
-    }, 300); // Small delay to prevent flickering
+    }, 300);
   }, [isMobile]);
   
   const hideTooltip = useCallback(() => {
-    if (isMobile) return; // Don't use hover on mobile
+    if (isMobile) return;
     
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -51,18 +84,18 @@ const EnhancedTooltip: React.FC<EnhancedTooltipProps> = ({
   }, [isMobile]);
   
   // Click outside handler for mobile
-  React.useEffect(() => {
+  useEffect(() => {
     if (!isMobile || !isVisible) return;
     
     const handleClickOutside = (event: MouseEvent) => {
-      if (tooltipRef.current && !tooltipRef.current.contains(event.target as Node)) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsVisible(false);
       }
     };
     
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
-      document.addEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isMobile, isVisible]);
   
@@ -84,22 +117,22 @@ const EnhancedTooltip: React.FC<EnhancedTooltipProps> = ({
 
   return (
     <div 
-      ref={tooltipRef}
+      ref={containerRef}
       className={`relative inline-block ${className}`}
       onMouseEnter={showTooltip}
       onMouseLeave={hideTooltip}
       onClick={isMobile ? handleMobileToggle : undefined}
-      onTouchStart={isMobile ? () => {} : undefined} // Prevent default touch behavior on mobile
     >
       {children}
       
       {isVisible && (
         <div 
-          className={`absolute z-50 px-3 py-2 text-sm bg-gray-900 text-white rounded shadow-lg ${positionClasses[position]} ${maxWidth}`}
-          onClick={(e) => isMobile && e.stopPropagation()} // Prevent clicks inside tooltip from closing it
+          ref={tooltipRef}
+          className={`absolute z-50 px-3 py-2 text-sm bg-gray-900 text-white rounded shadow-lg w-auto min-w-[160px] ${positionClasses[adjustedPosition]} ${maxWidth}`}
+          onClick={(e) => isMobile && e.stopPropagation()}
         >
           {text}
-          <div className={`absolute w-0 h-0 ${arrowClasses[position]}`}></div>
+          <div className={`absolute w-0 h-0 ${arrowClasses[adjustedPosition]}`}></div>
         </div>
       )}
     </div>

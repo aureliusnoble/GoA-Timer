@@ -380,43 +380,46 @@ const GameSetup: React.FC<GameSetupProps> = ({
         </div>
       )}
       
-      {/* Action Button - Only Draft Heroes now */}
-      <div className="flex flex-col sm:flex-row items-center justify-center">
-        <div className="relative mb-4 sm:mb-0">
-          <button
-            className={`px-6 py-3 rounded-lg font-medium text-white ${
-              canDraft
-                ? 'bg-blue-600 hover:bg-blue-500'
-                : 'bg-gray-600 cursor-not-allowed'
-            }`}
-            onClick={onDraftHeroes}
-            disabled={!canDraft}
-          >
-            Draft Heroes
-          </button>
-          
-          {/* Replace custom tooltip with EnhancedTooltip */}
-          <EnhancedTooltip 
-            text="Click to select heroes for each player and start the game."
-            position="right"
-          >
-            <div className="ml-2 absolute top-1/2 right-0 transform translate-x-7 -translate-y-1/2 cursor-help">
-              <Info size={18} className="text-gray-400 hover:text-gray-200" />
-            </div>
-          </EnhancedTooltip>
-        </div>
-
-        <div className="text-sm text-center sm:ml-4">
-          <span className="text-blue-300">Available heroes: {heroCount}</span>
-          {totalPlayers > 0 && (
-            <span className="ml-4 text-yellow-300">
-              {canStartDrafting 
-                ? "✓ Enough heroes for drafting" 
-                : "✗ Not enough heroes for drafting"}
-            </span>
-          )}
-        </div>
+{/* Action Button - Only Draft Heroes now */}
+<div className="flex flex-col items-center justify-center">
+  <div className="relative mb-6 sm:mb-0">
+    <button
+      className={`px-6 py-3 rounded-lg font-medium text-white ${
+        canDraft
+          ? 'bg-blue-600 hover:bg-blue-500'
+          : 'bg-gray-600 cursor-not-allowed'
+      }`}
+      onClick={onDraftHeroes}
+      disabled={!canDraft}
+    >
+      Draft Heroes
+    </button>
+    
+    {/* Tooltip */}
+    <EnhancedTooltip 
+      text="Click to select heroes for each player and start the game."
+      position="right"
+    >
+      <div className="ml-2 absolute top-1/2 right-0 transform translate-x-7 -translate-y-1/2 cursor-help">
+        <Info size={18} className="text-gray-400 hover:text-gray-200" />
       </div>
+    </EnhancedTooltip>
+  </div>
+
+  {/* Hero count info - Repositioned */}
+  <div className="text-sm text-center w-full mt-4">
+    <div className="flex flex-wrap justify-center gap-4">
+      <span className="text-blue-300">Available heroes: {heroCount}</span>
+      {totalPlayers > 0 && (
+        <span className="text-yellow-300">
+          {canStartDrafting 
+            ? "✓ Enough heroes for drafting" 
+            : "✗ Not enough heroes for drafting"}
+        </span>
+      )}
+    </div>
+  </div>
+</div>
       
       <p className="mt-4 text-xs text-gray-300 text-center translate-y-5">
         Disclaimer: This is not an official product and has not been approved by Wolff Designa. All game content is the property of Wolff Designa.
