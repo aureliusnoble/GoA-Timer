@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { ChevronLeft, Users, Shuffle, Award, Info, Plus, ArrowRight, ArrowLeft, RefreshCw, Play } from 'lucide-react';
 import { DBPlayer } from '../../services/DatabaseService';
 import dbService from '../../services/DatabaseService';
-import { Team } from '../../types';
 import { useSound } from '../../context/SoundContext';
 import EnhancedTooltip from '../common/EnhancedTooltip';
 

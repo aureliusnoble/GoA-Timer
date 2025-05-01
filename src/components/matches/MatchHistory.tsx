@@ -1,7 +1,7 @@
 // src/components/matches/MatchHistory.tsx
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, Search, Calendar, Filter, ChevronDown, ChevronUp, Trash2, Shield, Award } from 'lucide-react';
-import { DBMatch, DBMatchPlayer, DBPlayer } from '../../services/DatabaseService';
+import { DBMatch, DBMatchPlayer} from '../../services/DatabaseService';
 import dbService from '../../services/DatabaseService';
 import { Team, GameLength } from '../../types';
 import { useSound } from '../../context/SoundContext';

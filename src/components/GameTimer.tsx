@@ -14,9 +14,7 @@ import {
   Users, 
   Bot, 
   Coins,
-  Star,
   Shield, // New icon for player level
-  Gauge // Alternative icon for player level
 } from 'lucide-react';
 import EnhancedTooltip from './common/EnhancedTooltip';
 import { useSound } from '../context/SoundContext';
@@ -135,11 +133,11 @@ const GameTimer: React.FC<GameTimerProps> = ({
   };
 
   // Helper function to check if ANY player has a specific stat
-  const hasAnyPlayerLoggedStat = (statName: keyof Player['stats']): boolean => {
-    return players.some(player => 
-      player.stats && player.stats[statName] > 0
-    );
-  };
+const hasAnyPlayerLoggedStat = (statName: 'totalKills' | 'totalDeaths' | 'totalAssists' | 'totalMinionKills' | 'totalGoldEarned'): boolean => {
+  return players.some(player => 
+    player.stats && player.stats[statName] > 0
+  );
+};
 
   // Button click handlers with sound
   const handleButtonClick = () => {

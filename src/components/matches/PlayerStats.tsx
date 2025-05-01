@@ -1,7 +1,7 @@
 // src/components/matches/PlayerStats.tsx
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Search, Award, TrendingUp, Users, Swords, Skull, Bot, Coins, Info } from 'lucide-react';
-import { DBPlayer, DBMatchPlayer } from '../../services/DatabaseService';
+import { ChevronLeft, Search, Award, TrendingUp, Users, Swords, Coins, Info } from 'lucide-react';
+import { DBPlayer } from '../../services/DatabaseService';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
 import EnhancedTooltip from '../common/EnhancedTooltip';

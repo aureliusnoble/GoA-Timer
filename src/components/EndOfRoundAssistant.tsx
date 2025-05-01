@@ -1,6 +1,6 @@
 // src/components/EndOfRoundAssistant.tsx
 import React, { useState, useEffect } from 'react';
-import { Player, Team, PlayerStats } from '../types';
+import { Player, Team } from '../types';
 import { 
   CheckCircle, 
   X, 

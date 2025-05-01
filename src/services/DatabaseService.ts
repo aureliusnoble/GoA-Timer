@@ -1,5 +1,5 @@
 // src/services/DatabaseService.ts
-import { Team, Hero, GameLength } from '../types';
+import { Team, GameLength } from '../types';
 
 // Database configuration
 const DB_NAME = 'GuardsOfAtlantisStats';

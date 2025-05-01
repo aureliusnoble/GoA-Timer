@@ -1,6 +1,6 @@
 // src/components/VictoryScreen.tsx
 import React, { useEffect, useState } from 'react';
-import { Team, GameLength } from '../types';
+import { Team, GameLength, Player } from '../types';
 import { Trophy, Home, Database, AlertTriangle } from 'lucide-react';
 import { useSound } from '../context/SoundContext';
 import dbService from '../services/DatabaseService';

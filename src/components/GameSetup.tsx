@@ -3,7 +3,7 @@ import { Player, Team, GameLength } from '../types';
 import { getAllExpansions } from '../data/heroes';
 import TimerInput from './TimerInput';
 import PlayerNameInput from './PlayerNameInput';
-import { Info, Clock, Infinity, BarChart } from 'lucide-react';
+import { Clock, Infinity, BarChart } from 'lucide-react';
 import EnhancedTooltip from './common/EnhancedTooltip';
 import { useSound } from '../context/SoundContext';
 import dbService from '../services/DatabaseService';
