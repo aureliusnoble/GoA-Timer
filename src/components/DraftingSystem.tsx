@@ -355,7 +355,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
               draftingState.currentTeam === Team.Titans ? 'bg-blue-900/50 border-2 border-blue-400' : 'bg-red-900/50 border-2 border-red-400'
             }`}>
               <h4 className="text-lg font-semibold mb-2">
-                {getTeamName(draftingState.currentTeam)}'s Turn
+                {getTeamName(draftingState.currentTeam)} Turn
               </h4>
               
               {pendingCurrentTeamPlayers.length > 0 ? (
@@ -402,7 +402,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
               draftingState.currentTeam === Team.Titans ? 'bg-blue-900/50 border-2 border-blue-400' : 'bg-red-900/50 border-2 border-red-400'
             }`}>
               <h4 className="text-lg font-semibold mb-2">
-                {getTeamName(draftingState.currentTeam)}'s Turn
+                {getTeamName(draftingState.currentTeam)} Turn
               </h4>
               
               {pendingCurrentTeamPlayers.length > 0 ? (
@@ -668,7 +668,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
               draftingState.currentTeam === Team.Titans ? 'bg-blue-900/50 border-2 border-blue-400' : 'bg-red-900/50 border-2 border-red-400'
             }`}>
               <h4 className="text-lg font-semibold mb-2">
-                {getTeamName(draftingState.currentTeam)}'s Turn
+                {getTeamName(draftingState.currentTeam)} Turn
               </h4>
               
               {pendingCurrentTeamPlayers.length > 0 ? (
