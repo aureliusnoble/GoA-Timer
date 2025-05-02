@@ -1,11 +1,11 @@
 // src/components/matches/RecordMatch.tsx
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Calendar, Shield, Users, Check, HelpCircle, Plus, Trash2, Save } from 'lucide-react';
+import { ChevronLeft, Calendar, Shield, Users, Check, HelpCircle, Plus, Save, ArrowDown, ArrowUp } from 'lucide-react';
 import { Team, GameLength, Hero } from '../../types';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
-import { heroes as allHeroes } from '../../data/heroes';
 import { getAllExpansions, filterHeroesByExpansions } from '../../data/heroes';
+import PlayerNameInput from '../PlayerNameInput';
 
 interface RecordMatchProps {
   onBack: () => void;
@@ -14,6 +14,7 @@ interface RecordMatchProps {
 // Define the player entry structure for the form
 interface PlayerEntry {
   id: string; // Player name as ID
+  name: string; // Added to match PlayerNameInput component interface
   team: Team;
   heroId: number | null;
   heroName: string;
@@ -38,10 +39,12 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
   const [showHeroSelector, setShowHeroSelector] = useState<boolean>(false);
   const [currentPlayerIndex, setCurrentPlayerIndex] = useState<number>(-1);
   
-  // Hero filtering
+  // Hero filtering and sorting
   const [selectedExpansions, setSelectedExpansions] = useState<string[]>(getAllExpansions());
   const [heroSearchTerm, setHeroSearchTerm] = useState<string>('');
   const [maxComplexity, setMaxComplexity] = useState<number>(4);
+  const [heroSortBy, setHeroSortBy] = useState<'name' | 'complexity'>('name');
+  const [heroSortOrder, setHeroSortOrder] = useState<'asc' | 'desc'>('asc');
   
   // Validation state
   const [formErrors, setFormErrors] = useState<{
@@ -101,6 +104,7 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
     
     const newPlayer: PlayerEntry = {
       id: '', // Empty name initially
+      name: '', // Empty name initially - for PlayerNameInput
       team,
       heroId: null,
       heroName: '',
@@ -116,11 +120,11 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
   };
   
   // Remove a player from the form
-  const handleRemovePlayer = (index: number) => {
+  const handleRemovePlayer = (playerId: number) => {
     playSound('buttonClick');
     
     const updatedPlayers = [...players];
-    updatedPlayers.splice(index, 1);
+    updatedPlayers.splice(playerId, 1);
     setPlayers(updatedPlayers);
     
     // Re-check for duplicates after removing a player
@@ -130,7 +134,9 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
   // Update player name and check for duplicates
   const handlePlayerNameChange = (index: number, name: string) => {
     const updatedPlayers = [...players];
+    // Update both id and name fields to keep them in sync
     updatedPlayers[index].id = name;
+    updatedPlayers[index].name = name;
     setPlayers(updatedPlayers);
     
     // Check for duplicate names
@@ -206,6 +212,20 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
     }
   };
   
+  // Handle hero sorting
+  const handleSortHeroes = (sortBy: 'name' | 'complexity') => {
+    playSound('buttonClick');
+    
+    // If already sorting by this field, toggle the order
+    if (heroSortBy === sortBy) {
+      setHeroSortOrder(heroSortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      // If sorting by a new field, set it and default to ascending
+      setHeroSortBy(sortBy);
+      setHeroSortOrder('asc');
+    }
+  };
+  
   // Validate the form before submission
   const validateForm = (): boolean => {
     const errors: {
@@ -244,7 +264,7 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
     if (uniqueNames.size !== playerNames.length) {
       // Find the duplicate names
       const duplicates = playerNames.filter((name, index) => 
-        playerNames.indexOf(name) !== index
+        name && playerNames.indexOf(name) !== index
       );
       errors.players = `Duplicate player names found: ${[...new Set(duplicates)].join(', ')}`;
     }
@@ -273,10 +293,10 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
     if (uniqueHeroIds.size !== heroIds.length) {
       // Find the duplicate heroes
       const duplicateHeroIds = heroIds.filter((id, index) => 
-        heroIds.indexOf(id) !== index
+        id !== null && heroIds.indexOf(id) !== index
       );
       const duplicateHeroNames = players
-        .filter(p => duplicateHeroIds.includes(p.heroId as number))
+        .filter(p => p.heroId !== null && duplicateHeroIds.includes(p.heroId as number))
         .map(p => p.heroName)
         .filter((name, i, arr) => arr.indexOf(name) === i);
       
@@ -323,7 +343,9 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
         minionKills: 0
       }));
       
-      // Record the match to the database
+      // Record the match to the database - THIS WAS MISSING!
+      await dbService.recordMatch(matchData, playerData);
+      
       playSound('phaseChange');
       
       // Show success message
@@ -342,7 +364,7 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
     }
   };
   
-  // Get filtered heroes based on selected expansions, complexity, and search term
+  // Get filtered heroes based on selected expansions, complexity, search term, and sort them
   const getFilteredHeroes = (): Hero[] => {
     let heroes = filterHeroesByExpansions(selectedExpansions).filter(
       hero => hero.complexity <= maxComplexity
@@ -357,13 +379,24 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
       );
     }
     
+    // Sort heroes based on current sort criteria
+    heroes.sort((a, b) => {
+      let comparison = 0;
+      
+      if (heroSortBy === 'name') {
+        comparison = a.name.localeCompare(b.name);
+      } else { // complexity
+        comparison = a.complexity - b.complexity;
+      }
+      
+      // Reverse for descending order
+      return heroSortOrder === 'asc' ? comparison : -comparison;
+    });
+    
     return heroes;
   };
   
-  // Get hero by ID
-  const getHeroById = (heroId: number): Hero | undefined => {
-    return allHeroes.find(hero => hero.id === heroId);
-  };
+
   
   const filteredHeroes = getFilteredHeroes();
   
@@ -524,25 +557,20 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
                     player.team === Team.Titans ? 'bg-blue-900/30' : 'bg-red-900/30'
                   } flex flex-col sm:flex-row items-start sm:items-center gap-2`}
                 >
-                  {/* Player Name - with duplicate highlighting */}
+                  {/* Player Name Input - using the component */}
                   <div className="w-full sm:w-1/3">
-                    <input
-                      type="text"
-                      value={player.id}
-                      onChange={(e) => handlePlayerNameChange(index, e.target.value)}
-                      placeholder="Player Name"
-                      className={`w-full px-3 py-2 bg-gray-800 border ${
-                        duplicatePlayerNames.includes(player.id.trim()) && player.id.trim() !== ''
-                          ? 'border-amber-500 bg-amber-900/30' 
-                          : 'border-gray-600'
-                      } rounded-lg`}
-                      list={`player-suggestions-${index}`}
+                    <PlayerNameInput
+                      player={{
+                        id: index, // Pass index as id for component
+                        team: player.team,
+                        hero: null,
+                        name: player.name
+                      }}
+                      onNameChange={(name) => handlePlayerNameChange(index, name)}
+                      onRemove={() => handleRemovePlayer(index)}
+                      isDuplicate={duplicatePlayerNames.includes(player.name.trim()) && player.name.trim() !== ''}
+                      suggestedNames={existingPlayerNames}
                     />
-                    <datalist id={`player-suggestions-${index}`}>
-                      {existingPlayerNames.map((name, i) => (
-                        <option key={i} value={name} />
-                      ))}
-                    </datalist>
                   </div>
                   
                   {/* Hero Selection */}
@@ -567,15 +595,6 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
                       )}
                     </button>
                   </div>
-                  
-                  {/* Remove Button */}
-                  <button
-                    onClick={() => handleRemovePlayer(index)}
-                    className="px-2 py-1 bg-gray-800 hover:bg-gray-700 rounded-lg"
-                    aria-label="Remove player"
-                  >
-                    <Trash2 size={16} />
-                  </button>
                 </div>
               ))}
             </div>
@@ -777,6 +796,48 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
                     {expansion}
                   </button>
                 ))}
+              </div>
+              
+              {/* Sorting Controls */}
+              <div className="mt-3 border-t border-gray-600 pt-3 flex items-center">
+                <span className="text-sm mr-2">Sort by:</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleSortHeroes('name')}
+                    className={`px-3 py-1 text-sm rounded flex items-center ${
+                      heroSortBy === 'name'
+                        ? 'bg-blue-700 hover:bg-blue-600'
+                        : 'bg-gray-700 hover:bg-gray-600'
+                    }`}
+                  >
+                    <span>Name</span>
+                    {heroSortBy === 'name' && (
+                      heroSortOrder === 'asc' ? (
+                        <ArrowUp size={14} className="ml-1" />
+                      ) : (
+                        <ArrowDown size={14} className="ml-1" />
+                      )
+                    )}
+                  </button>
+                  
+                  <button
+                    onClick={() => handleSortHeroes('complexity')}
+                    className={`px-3 py-1 text-sm rounded flex items-center ${
+                      heroSortBy === 'complexity'
+                        ? 'bg-blue-700 hover:bg-blue-600'
+                        : 'bg-gray-700 hover:bg-gray-600'
+                    }`}
+                  >
+                    <span>Complexity</span>
+                    {heroSortBy === 'complexity' && (
+                      heroSortOrder === 'asc' ? (
+                        <ArrowUp size={14} className="ml-1" />
+                      ) : (
+                        <ArrowDown size={14} className="ml-1" />
+                      )
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
             
