@@ -610,6 +610,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
       )}
       
 {/* Action Buttons - UPDATED to include View Matches */}
+{/* Action Buttons - UPDATED to include View Matches and disable mobile tooltips */}
 <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
   {/* View Matches Button */}
   <div className="relative">
@@ -618,6 +619,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
         ? "View match statistics and player records"
         : "No match data available yet. Play a game first!"}
       position="top"
+      disableMobileTooltip={true} // Disable tooltip on mobile
     >
       <button
         className={`px-6 py-3 rounded-lg font-medium text-white ${
@@ -641,6 +643,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
     <EnhancedTooltip 
       text="Click to select heroes for each player and start the game."
       position="top"
+      disableMobileTooltip={true} // Disable tooltip on mobile
     >
       <button
         className={`px-6 py-3 rounded-lg font-medium text-white ${

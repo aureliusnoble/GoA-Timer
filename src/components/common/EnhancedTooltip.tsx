@@ -7,6 +7,7 @@ interface EnhancedTooltipProps {
   position?: 'top' | 'bottom' | 'left' | 'right';
   className?: string;
   maxWidth?: string;
+  disableMobileTooltip?: boolean; // New prop to disable tooltip on mobile
 }
 
 const EnhancedTooltip: React.FC<EnhancedTooltipProps> = ({
@@ -15,6 +16,7 @@ const EnhancedTooltip: React.FC<EnhancedTooltipProps> = ({
   position = 'top',
   className = '',
   maxWidth = 'max-w-xs',
+  disableMobileTooltip = false, // Default to false for backward compatibility
 }) => {
   const { isMobile } = useDevice();
   const [isVisible, setIsVisible] = useState(false);
@@ -60,11 +62,13 @@ const EnhancedTooltip: React.FC<EnhancedTooltipProps> = ({
     }
   }, [isVisible, adjustTooltipPosition]);
   
-  // Mobile click handler
+  // Mobile click handler - now respects disableMobileTooltip
   const handleMobileToggle = useCallback((e: React.MouseEvent) => {
+    if (disableMobileTooltip) return; // Skip if mobile tooltips are disabled
+    
     e.stopPropagation();
     setIsVisible(!isVisible);
-  }, [isVisible]);
+  }, [isVisible, disableMobileTooltip]);
   
   // Desktop hover handlers
   const showTooltip = useCallback(() => {
@@ -122,7 +126,7 @@ const EnhancedTooltip: React.FC<EnhancedTooltipProps> = ({
       className={`relative inline-block ${className}`}
       onMouseEnter={showTooltip}
       onMouseLeave={hideTooltip}
-      onClick={isMobile ? handleMobileToggle : undefined}
+      onClick={isMobile && !disableMobileTooltip ? handleMobileToggle : undefined} // Only show tooltips on mobile if not disabled
     >
       {children}
       
@@ -130,7 +134,7 @@ const EnhancedTooltip: React.FC<EnhancedTooltipProps> = ({
         <div 
           ref={tooltipRef}
           className={`absolute z-50 px-3 py-2 text-sm bg-gray-900 text-white rounded shadow-lg w-auto min-w-[160px] ${positionClasses[adjustedPosition]} ${maxWidth}`}
-          onClick={(e) => isMobile && e.stopPropagation()}
+          onClick={(e) => isMobile && !disableMobileTooltip && e.stopPropagation()}
         >
           {text}
           <div className={`absolute w-0 h-0 ${arrowClasses[adjustedPosition]}`}></div>

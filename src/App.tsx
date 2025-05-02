@@ -9,6 +9,8 @@ import CollapsibleFeedback from './components/common/CollapsibleFeedback';
 import SoundToggle from './components/common/SoundToggle';
 import AudioInitializer from './components/common/AudioInitializer';
 import VictoryScreen from './components/VictoryScreen';
+import ResumeGamePrompt from './components/common/ResumeGamePrompt'; // Import ResumeGamePrompt
+import { gameStorageService } from './services/GameStorageService'; // Import gameStorageService
 import { SoundProvider, useSound } from './context/SoundContext';
 import { PlayerRoundStats } from './components/EndOfRoundAssistant';
 import { 
@@ -26,14 +28,13 @@ import {
 } from './types';
 import { getAllExpansions, filterHeroesByExpansions } from './data/heroes';
 
-// NEW: Import match statistics components
+// Import match statistics components
 import MatchesMenu, { MatchesView } from './components/matches/MatchesMenu';
 import PlayerStatsScreen from './components/matches/PlayerStats';
 import MatchHistory from './components/matches/MatchHistory';
 import MatchMaker from './components/matches/MatchMaker';
 
 // Modified interface for lane state return type
-// Fix: Removed the index signature and made it more explicit
 interface LaneStateResult {
   single?: LaneState;
   top?: LaneState;
@@ -41,7 +42,7 @@ interface LaneStateResult {
   hasMultipleLanes: boolean;
 }
 
-// Initial state for different game configurations - UPDATED
+// Initial state for different game configurations
 const getInitialLaneState = (
   gameLength: GameLength, 
   playerCount: number, 
@@ -72,7 +73,7 @@ const getInitialLaneState = (
   };
 };
 
-// Calculate team lives based on game length and player count - UPDATED
+// Calculate team lives based on game length and player count
 const calculateTeamLives = (
   gameLength: GameLength, 
   playerCount: number, 
@@ -106,7 +107,7 @@ const calculateTeamLives = (
 const generatePickBanSequence = (playerCount: number): PickBanStep[] => {
   const sequence: PickBanStep[] = [];
 
-  // MODIFIED: Round up to the nearest even number for odd counts
+  // Round up to the nearest even number for odd counts
   // 5 → 6, 7 → 8, 9 → 10
   const adjustedPlayerCount = playerCount % 2 === 1 ? playerCount + 1 : playerCount;
 
@@ -442,6 +443,11 @@ function AppContent() {
   const [showMatchStatistics, setShowMatchStatistics] = useState<boolean>(false);
   const [currentMatchView, setCurrentMatchView] = useState<MatchesView>('menu');
   
+  // NEW: Save/resume game state
+  const [showResumePrompt, setShowResumePrompt] = useState<boolean>(false);
+  const [savedGameData, setSavedGameData] = useState<any>(null);
+  const [savedGameDate, setSavedGameDate] = useState<string>('');
+  
   // Available heroes (filtered by expansions and complexity)
   const filteredHeroes = filterHeroesByExpansions(selectedExpansions).filter(
     hero => hero.complexity <= maxComplexity
@@ -464,6 +470,72 @@ function AppContent() {
   const [moveTimerActive, setMoveTimerActive] = useState<boolean>(false);
   const [strategyTimeRemaining, setStrategyTimeRemaining] = useState<number>(strategyTime);
   const [moveTimeRemaining, setMoveTimeRemaining] = useState<number>(moveTime);
+
+  // NEW: Save game state periodically or when important state changes
+  useEffect(() => {
+    if (gameStarted && !showVictoryScreen) {
+      // Only save if the game is in progress (not in setup and not at victory)
+      const saveGameData = async () => {
+        try {
+          await gameStorageService.saveGame({
+            gameState,
+            players: localPlayers,
+            strategyTimeRemaining,
+            moveTimeRemaining,
+            strategyTimerActive,
+            moveTimerActive,
+            strategyTimerEnabled,
+            moveTimerEnabled
+          });
+        } catch (error) {
+          console.error('Error saving game state:', error);
+        }
+      };
+      
+      saveGameData();
+    }
+  }, [
+    gameStarted, 
+    gameState.round, 
+    gameState.turn, 
+    gameState.currentPhase,
+    gameState.teamLives,
+    strategyTimerActive,
+    moveTimerActive,
+    showVictoryScreen
+  ]);
+
+  // NEW: Check for saved game on component mount
+  useEffect(() => {
+    const checkForSavedGame = async () => {
+      try {
+        const savedGame = await gameStorageService.loadGame();
+        
+        if (savedGame) {
+          // Format date for display
+          const date = new Date(savedGame.timestamp);
+          const formattedDate = date.toLocaleString(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+          
+          setSavedGameData(savedGame);
+          setSavedGameDate(formattedDate);
+          setShowResumePrompt(true);
+        }
+      } catch (error) {
+        console.error('Error checking for saved game:', error);
+      }
+    };
+    
+    // Only check for saved game if we're not already in a game
+    if (!gameStarted && !isDraftingMode) {
+      checkForSavedGame();
+    }
+  }, [gameStarted, isDraftingMode]);
 
   // Attempt to unlock audio on first user interaction
   useEffect(() => {
@@ -1234,6 +1306,22 @@ function AppContent() {
     // Calculate total player count
     const playerCount = playersToUse.length;
     
+    // IMPORTANT FIX: Reset player stats for the new game
+    const playersWithResetStats = playersToUse.map(player => ({
+      ...player,
+      stats: {
+        totalGoldEarned: 0,
+        totalKills: 0,
+        totalAssists: 0,
+        totalDeaths: 0,
+        totalMinionKills: 0
+      }
+    }));
+    
+    // Update local players with reset stats
+    setLocalPlayers(playersWithResetStats);
+    players = playersWithResetStats;
+    
     // Set initial lives and wave counters
     const laneState = getInitialLaneState(gameLength, playerCount, useDoubleLaneFor6Players);
     const teamLives = calculateTeamLives(gameLength, playerCount, useDoubleLaneFor6Players);
@@ -1267,6 +1355,9 @@ function AppContent() {
     setStrategyTimerActive(true);
     setStrategyTimeRemaining(strategyTime);
     setIsDraftingMode(false);
+    
+    // Clear any saved game since we're starting fresh
+    gameStorageService.clearGame().catch(console.error);
     
     playSound('turnStart');
   };
@@ -1354,40 +1445,89 @@ function AppContent() {
   };
   
   // Declare victory for a team
-const declareVictory = (team: Team) => {
-  playSound('victory');
-  
-  // Stop any active timers when declaring victory
-  setStrategyTimerActive(false);
-  setMoveTimerActive(false);
-  
-  setVictorTeam(team);
-  setShowVictoryScreen(true);
-};
+  const declareVictory = (team: Team) => {
+    playSound('victory');
+    
+    // Stop any active timers when declaring victory
+    setStrategyTimerActive(false);
+    setMoveTimerActive(false);
+    
+    setVictorTeam(team);
+    setShowVictoryScreen(true);
+    
+    // Clear any saved game state when a game ends
+    gameStorageService.clearGame().catch(console.error);
+  };
   
   // Reset game to setup
-const resetToSetup = () => {
-  playSound('buttonClick');
-  
-  // Ensure all timers are stopped when returning to setup
-  setStrategyTimerActive(false);
-  setMoveTimerActive(false);
-  setStrategyTimeRemaining(strategyTime);
-  setMoveTimeRemaining(moveTime);
-  
-  setShowVictoryScreen(false);
-  setVictorTeam(null);
-  setGameStarted(false);
-  setIsDraftingMode(false);
-  setShowDraftModeSelection(false);
-  dispatch({ type: 'RESET_GAME' });
-};
+  const resetToSetup = () => {
+    playSound('buttonClick');
+    
+    // Ensure all timers are stopped when returning to setup
+    setStrategyTimerActive(false);
+    setMoveTimerActive(false);
+    setStrategyTimeRemaining(strategyTime);
+    setMoveTimeRemaining(moveTime);
+    
+    setShowVictoryScreen(false);
+    setVictorTeam(null);
+    setGameStarted(false);
+    setIsDraftingMode(false);
+    setShowDraftModeSelection(false);
+    dispatch({ type: 'RESET_GAME' });
+    
+    // Clear any saved game state when resetting
+    gameStorageService.clearGame().catch(console.error);
+  };
 
   // Flip the tiebreaker coin
   const flipCoin = () => {
     playSound('coinFlip');
     
     dispatch({ type: 'FLIP_COIN' });
+  };
+
+  // NEW: Handle resuming a saved game
+  const handleResumeGame = () => {
+    if (!savedGameData) return;
+    
+    playSound('buttonClick');
+    
+    // Extract saved game data
+    const { gameState: savedGameState, players: savedPlayers, 
+            strategyTimeRemaining: savedStrategyTime, moveTimeRemaining: savedMoveTime,
+            strategyTimerActive: savedStrategyTimerActive, moveTimerActive: savedMoveTimerActive,
+            strategyTimerEnabled: savedStrategyTimerEnabled, moveTimerEnabled: savedMoveTimerEnabled } = savedGameData;
+    
+    // Restore game state
+    dispatch({ type: 'START_GAME', payload: savedGameState });
+    
+    // Restore player state
+    setLocalPlayers(savedPlayers);
+    players = savedPlayers;
+    
+    // Restore timer states
+    setStrategyTimeRemaining(savedStrategyTime);
+    setMoveTimeRemaining(savedMoveTime);
+    setStrategyTimerActive(savedStrategyTimerActive);
+    setMoveTimerActive(savedMoveTimerActive);
+    setStrategyTimerEnabled(savedStrategyTimerEnabled);
+    setMoveTimerEnabled(savedMoveTimerEnabled);
+    
+    // Start the game
+    setGameStarted(true);
+    setShowResumePrompt(false);
+  };
+
+  // NEW: Handle discarding a saved game
+  const handleDiscardSavedGame = () => {
+    playSound('buttonClick');
+    
+    // Clear the saved game
+    gameStorageService.clearGame().catch(console.error);
+    
+    // Hide the resume prompt
+    setShowResumePrompt(false);
   };
 
   // NEW: Handle saving player round stats
@@ -1525,6 +1665,17 @@ const resetToSetup = () => {
         <h1 className="text-3xl font-bold mb-2">Guards of Atlantis II Timer</h1>
       </header>
 
+      {/* Resume Game Prompt */}
+      {showResumePrompt && savedGameData && (
+        <ResumeGamePrompt
+          gameState={savedGameData.gameState}
+          players={savedGameData.players}
+          onResume={handleResumeGame}
+          onDiscard={handleDiscardSavedGame}
+          savedTime={savedGameDate}
+        />
+      )}
+
       {/* Coin flip animation */}
       {showCoinAnimation && (
         <CoinToss 
@@ -1536,7 +1687,7 @@ const resetToSetup = () => {
         />
       )}
 
-      {/* Main content area - Updated with match statistics */}
+      {/* Main content area */}
       {showMatchStatistics ? (
         // Match Statistics View
         <>
@@ -1556,58 +1707,58 @@ const resetToSetup = () => {
               onBack={() => handleMatchStatisticsNavigate('menu')}
             />
           )}
-{currentMatchView === 'match-maker' && (
-  <MatchMaker 
-    onBack={() => handleMatchStatisticsNavigate('menu')}
-    onUseTeams={(titanPlayerNames, atlanteanPlayerNames) => {
-      // Clear existing players
-      setLocalPlayers([]);
-      
-      // Create new players based on the teams
-      // First the Titans
-      const newPlayers = titanPlayerNames.map((name, index) => ({
-        id: index + 1,
-        team: Team.Titans,
-        hero: null,
-        name,
-        stats: {
-          totalGoldEarned: 0,
-          totalKills: 0,
-          totalAssists: 0,
-          totalDeaths: 0,
-          totalMinionKills: 0
-        }
-      }));
-      
-      // Then add the Atlanteans with continuing IDs
-      const atlanteanPlayers = atlanteanPlayerNames.map((name, index) => ({
-        id: titanPlayerNames.length + index + 1,
-        team: Team.Atlanteans,
-        hero: null,
-        name,
-        stats: {
-          totalGoldEarned: 0,
-          totalKills: 0,
-          totalAssists: 0,
-          totalDeaths: 0,
-          totalMinionKills: 0
-        }
-      }));
-      
-      // Combine both teams
-      const allPlayers = [...newPlayers, ...atlanteanPlayers];
-      
-      // Set the new players
-      setLocalPlayers(allPlayers);
-      
-      // Return to game setup
-      setShowMatchStatistics(false);
-      
-      // Play a sound to indicate success
-      playSound('phaseChange');
-    }}
-  />
-)}
+          {currentMatchView === 'match-maker' && (
+            <MatchMaker 
+              onBack={() => handleMatchStatisticsNavigate('menu')}
+              onUseTeams={(titanPlayerNames, atlanteanPlayerNames) => {
+                // Clear existing players
+                setLocalPlayers([]);
+                
+                // Create new players based on the teams
+                // First the Titans
+                const newPlayers = titanPlayerNames.map((name, index) => ({
+                  id: index + 1,
+                  team: Team.Titans,
+                  hero: null,
+                  name,
+                  stats: {
+                    totalGoldEarned: 0,
+                    totalKills: 0,
+                    totalAssists: 0,
+                    totalDeaths: 0,
+                    totalMinionKills: 0
+                  }
+                }));
+                
+                // Then add the Atlanteans with continuing IDs
+                const atlanteanPlayers = atlanteanPlayerNames.map((name, index) => ({
+                  id: titanPlayerNames.length + index + 1,
+                  team: Team.Atlanteans,
+                  hero: null,
+                  name,
+                  stats: {
+                    totalGoldEarned: 0,
+                    totalKills: 0,
+                    totalAssists: 0,
+                    totalDeaths: 0,
+                    totalMinionKills: 0
+                  }
+                }));
+                
+                // Combine both teams
+                const allPlayers = [...newPlayers, ...atlanteanPlayers];
+                
+                // Set the new players
+                setLocalPlayers(allPlayers);
+                
+                // Return to game setup
+                setShowMatchStatistics(false);
+                
+                // Play a sound to indicate success
+                playSound('phaseChange');
+              }}
+            />
+          )}
         </>
       ) : !gameStarted ? (
         <div className="game-setup-container">
@@ -1623,7 +1774,7 @@ const resetToSetup = () => {
                 [DraftMode.PickAndBan]: canUseDraftMode(DraftMode.PickAndBan)
               }}
               heroCount={filteredHeroes.length}
-              handicapTeam={handicapTeam} // NEW: Pass handicapTeam to DraftModeSelection
+              handicapTeam={handicapTeam}
             />
           ) : isDraftingMode ? (
             <DraftingSystem 
@@ -1665,7 +1816,7 @@ const resetToSetup = () => {
               onMaxComplexityChange={setMaxComplexity}
               useDoubleLaneFor6Players={useDoubleLaneFor6Players}
               onUseDoubleLaneFor6PlayersChange={setUseDoubleLaneFor6Players}
-              onViewMatches={handleViewMatches}  // NEW: Add view matches handler
+              onViewMatches={handleViewMatches}
             />
           )}
           
@@ -1699,7 +1850,7 @@ const resetToSetup = () => {
         />
       )}
 
-      {/* Victory Screen - UPDATED: Pass additional props for match data */}
+      {/* Victory Screen */}
       {showVictoryScreen && victorTeam && (
         <VictoryScreen 
           winningTeam={victorTeam} 
