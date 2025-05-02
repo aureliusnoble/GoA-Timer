@@ -71,7 +71,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
 }) => {
   const { playSound } = useSound();
   const [hasMatchData, setHasMatchData] = useState<boolean>(false);
-  // NEW: State for suggested player names
+  // State for suggested player names
   const [suggestedPlayerNames, setSuggestedPlayerNames] = useState<string[]>([]);
 
   const [expandedSection, setExpandedSection] = useState<{[key: string]: boolean}>({
@@ -102,12 +102,15 @@ const GameSetup: React.FC<GameSetupProps> = ({
     
     checkMatchData();
     
-    // NEW: Load player names from database
+    // Load player names from database - ONLY players who have played games
     const loadPlayerNames = async () => {
       try {
         const allPlayers = await dbService.getAllPlayers();
         // Extract unique player names and sort them alphabetically
-        const playerNames = allPlayers.map(player => player.name)
+        // ONLY include players who have match history (totalGames > 0)
+        const playerNames = allPlayers
+          .filter(player => player.totalGames > 0)
+          .map(player => player.name)
           .filter((name, index, self) => self.indexOf(name) === index)
           .sort();
         
@@ -209,7 +212,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
     }
   };
   
-  // NEW: Handle View Matches button click
+  // Handle View Matches button click
   const handleViewMatches = () => {
     playSound('buttonClick');
     onViewMatches();
@@ -345,7 +348,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                 </label>
               </div>
               
-              {/* NEW: Double Lane Option for 6 Players */}
+              {/* Double Lane Option for 6 Players */}
               {showDoubleLaneOption && (
                 <div className="mt-4 mb-4 bg-blue-900/30 p-3 rounded">
                   <label className="flex items-center cursor-pointer mb-1">
@@ -363,7 +366,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                 </div>
               )}
               
-              {/* Game configuration info - UPDATED with new values */}
+              {/* Game configuration info */}
 <div className="mt-4 bg-gray-700 p-3 rounded-md text-sm">
   <h4 className="font-semibold mb-1">Current Configuration:</h4>
   <ul className="list-disc list-inside space-y-1 text-gray-300">
@@ -492,7 +495,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                 </div>
               )}
               
-              {/* UPDATED: Changed team balance warning to handle both completely unbalanced teams
+              {/* Changed team balance warning to handle both completely unbalanced teams
                   and teams with a 1-player difference */}
               {titanCount !== atlanteanCount && (
                 <div className={`text-amber-400 text-sm mt-2 ${Math.abs(titanCount - atlanteanCount) > 1 ? "text-red-400" : ""}`}>
@@ -535,7 +538,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                 </div>
               )}
               
-              {/* NEW: Success message for valid uneven teams */}
+              {/* Success message for valid uneven teams */}
               {titanCount > 0 && atlanteanCount > 0 && titanCount !== atlanteanCount && 
                Math.abs(titanCount - atlanteanCount) === 1 &&
                allPlayersHaveNames && teamsHaveMinPlayers && duplicateNames.length === 0 && (
@@ -609,8 +612,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
         </div>
       )}
       
-{/* Action Buttons - UPDATED to include View Matches */}
-{/* Action Buttons - UPDATED to include View Matches and disable mobile tooltips */}
+{/* Action Buttons */}
 <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
   {/* View Matches Button */}
   <div className="relative">
@@ -619,7 +621,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
         ? "View match statistics and player records"
         : "No match data available yet. Play a game first!"}
       position="top"
-      disableMobileTooltip={true} // Disable tooltip on mobile
+      disableMobileTooltip={true}
     >
       <button
         className={`px-6 py-3 rounded-lg font-medium text-white ${
@@ -643,7 +645,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
     <EnhancedTooltip 
       text="Click to select heroes for each player and start the game."
       position="top"
-      disableMobileTooltip={true} // Disable tooltip on mobile
+      disableMobileTooltip={true}
     >
       <button
         className={`px-6 py-3 rounded-lg font-medium text-white ${
@@ -660,7 +662,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
   </div>
 </div>
 
-  {/* Hero count info - Repositioned */}
+  {/* Hero count info */}
   <div className="text-sm text-center w-full mt-4">
     <div className="flex flex-wrap justify-center gap-4">
       <span className="text-blue-300">Available heroes: {heroCount}</span>

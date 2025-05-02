@@ -1,6 +1,6 @@
 // src/components/matches/PlayerStats.tsx
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Search, Award, TrendingUp, Users, Swords, Coins, Info } from 'lucide-react';
+import { ChevronLeft, Search, Award, TrendingUp, Users, Swords, Skull, Info } from 'lucide-react';
 import { DBPlayer } from '../../services/DatabaseService';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
@@ -78,7 +78,10 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
           })
         );
         
-        setPlayers(playersWithStats);
+        // Filter out players with no match data (totalGames === 0)
+        const playersWithMatches = playersWithStats.filter(player => player.totalGames > 0);
+        
+        setPlayers(playersWithMatches);
       } catch (error) {
         console.error('Error loading player stats:', error);
       } finally {
@@ -308,7 +311,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
                           </div>
                           <div className="bg-gray-800 p-2 rounded">
                             <div className="flex items-center text-green-400 text-sm mb-1">
-                              <Coins size={14} className="mr-1" />
+                              <Users size={14} className="mr-1" />
                               <span>Avg Gold</span>
                             </div>
                             <div className="font-medium text-center">{player.averageGold}</div>

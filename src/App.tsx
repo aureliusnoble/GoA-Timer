@@ -187,6 +187,22 @@ type GameAction =
   | { type: 'RESET_GAME' }                  // New action for resetting game
   | { type: 'FLIP_COIN' };
 
+const loadPlayerNames = async () => {
+  try {
+    const allPlayers = await dbService.getAllPlayers();
+    // Extract unique player names from players who have played at least one game
+    const playerNames = allPlayers
+      .filter(player => player.totalGames > 0) // Only include players with match history
+      .map(player => player.name)
+      .filter((name, index, self) => self.indexOf(name) === index)
+      .sort();
+    
+    setSuggestedPlayerNames(playerNames);
+  } catch (error) {
+    console.error('Error loading player names:', error);
+  }
+};
+
 const gameReducer = (state: GameState, action: GameAction): GameState => {
   switch (action.type) {
     case 'START_GAME':

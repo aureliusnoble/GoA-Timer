@@ -29,25 +29,28 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
   
   // Load player data on component mount
   useEffect(() => {
-    const loadPlayers = async () => {
-      setLoading(true);
-      try {
-        // Get all players from the database
-        const players = await dbService.getAllPlayers();
-        
-        // Sort by name
-        players.sort((a, b) => a.name.localeCompare(b.name));
-        
-        setAllPlayers(players);
-      } catch (error) {
-        console.error('Error loading players:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    loadPlayers();
-  }, []);
+  const loadPlayers = async () => {
+    setLoading(true);
+    try {
+      // Get all players from the database
+      const players = await dbService.getAllPlayers();
+      
+      // Filter out players with no match history
+      const playersWithMatches = players.filter(player => player.totalGames > 0);
+      
+      // Sort by name
+      playersWithMatches.sort((a, b) => a.name.localeCompare(b.name));
+      
+      setAllPlayers(playersWithMatches);
+    } catch (error) {
+      console.error('Error loading players:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  loadPlayers();
+}, []);
   
   // Calculate win probability when teams change
   useEffect(() => {
