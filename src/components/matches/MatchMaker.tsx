@@ -372,14 +372,36 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                   <span className="font-medium">Balance Teams</span>
                 </div>
                 
-                {/* Balance Team Buttons - Horizontal row of 3 buttons, centered */}
-                <div className="flex justify-center gap-3">
+                {/* Balance Team Buttons - Vertical on mobile, horizontal on larger screens */}
+                <div className="flex flex-col sm:flex-row justify-center gap-3">
                   {/* Balance by Ranking Button */}
-                  <EnhancedTooltip text={tooltips.ranking} maxWidth="max-w-md">
+                  <div className="hidden sm:block">
+                    <EnhancedTooltip text={tooltips.ranking} maxWidth="max-w-md">
+                      <button
+                        onClick={balanceTeams}
+                        disabled={selectedPlayers.length < 4 || isBalancing || manualMode}
+                        className={`px-4 py-3 w-full rounded-lg flex items-center justify-center ${
+                          selectedPlayers.length < 4 || isBalancing || manualMode 
+                            ? 'opacity-50 cursor-not-allowed bg-gray-600' 
+                            : 'bg-blue-600 hover:bg-blue-500'
+                        }`}
+                      >
+                        {isBalancing ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        ) : (
+                          <Trophy size={18} className="mr-2" />
+                        )}
+                        <span>On Ranking</span>
+                      </button>
+                    </EnhancedTooltip>
+                  </div>
+                  
+                  {/* Mobile version without tooltip */}
+                  <div className="sm:hidden">
                     <button
                       onClick={balanceTeams}
                       disabled={selectedPlayers.length < 4 || isBalancing || manualMode}
-                      className={`px-4 py-3 rounded-lg flex items-center justify-center ${
+                      className={`px-4 py-3 w-full rounded-lg flex items-center justify-center ${
                         selectedPlayers.length < 4 || isBalancing || manualMode 
                           ? 'opacity-50 cursor-not-allowed bg-gray-600' 
                           : 'bg-blue-600 hover:bg-blue-500'
@@ -392,14 +414,36 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                       )}
                       <span>On Ranking</span>
                     </button>
-                  </EnhancedTooltip>
+                  </div>
                   
                   {/* Balance by Experience Button */}
-                  <EnhancedTooltip text={tooltips.experience} maxWidth="max-w-md">
+                  <div className="hidden sm:block">
+                    <EnhancedTooltip text={tooltips.experience} maxWidth="max-w-md">
+                      <button
+                        onClick={balanceTeamsByExperience}
+                        disabled={selectedPlayers.length < 4 || isBalancing || manualMode}
+                        className={`px-4 py-3 w-full rounded-lg flex items-center justify-center ${
+                          selectedPlayers.length < 4 || isBalancing || manualMode 
+                            ? 'opacity-50 cursor-not-allowed bg-gray-600' 
+                            : 'bg-green-600 hover:bg-green-500'
+                        }`}
+                      >
+                        {isBalancing ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        ) : (
+                          <Clock size={18} className="mr-2" />
+                        )}
+                        <span>On Experience</span>
+                      </button>
+                    </EnhancedTooltip>
+                  </div>
+                  
+                  {/* Mobile version without tooltip */}
+                  <div className="sm:hidden">
                     <button
                       onClick={balanceTeamsByExperience}
                       disabled={selectedPlayers.length < 4 || isBalancing || manualMode}
-                      className={`px-4 py-3 rounded-lg flex items-center justify-center ${
+                      className={`px-4 py-3 w-full rounded-lg flex items-center justify-center ${
                         selectedPlayers.length < 4 || isBalancing || manualMode 
                           ? 'opacity-50 cursor-not-allowed bg-gray-600' 
                           : 'bg-green-600 hover:bg-green-500'
@@ -412,14 +456,32 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                       )}
                       <span>On Experience</span>
                     </button>
-                  </EnhancedTooltip>
+                  </div>
                   
                   {/* Random Teams Button */}
-                  <EnhancedTooltip text={tooltips.random} maxWidth="max-w-md">
+                  <div className="hidden sm:block">
+                    <EnhancedTooltip text={tooltips.random} maxWidth="max-w-md">
+                      <button
+                        onClick={randomizeTeams}
+                        disabled={selectedPlayers.length < 4 || manualMode}
+                        className={`px-4 py-3 w-full rounded-lg flex items-center justify-center ${
+                          selectedPlayers.length < 4 || manualMode 
+                            ? 'opacity-50 cursor-not-allowed bg-gray-600' 
+                            : 'bg-purple-600 hover:bg-purple-500'
+                        }`}
+                      >
+                        <Shuffle size={18} className="mr-2" />
+                        <span>Random</span>
+                      </button>
+                    </EnhancedTooltip>
+                  </div>
+                  
+                  {/* Mobile version without tooltip */}
+                  <div className="sm:hidden">
                     <button
                       onClick={randomizeTeams}
                       disabled={selectedPlayers.length < 4 || manualMode}
-                      className={`px-4 py-3 rounded-lg flex items-center justify-center ${
+                      className={`px-4 py-3 w-full rounded-lg flex items-center justify-center ${
                         selectedPlayers.length < 4 || manualMode 
                           ? 'opacity-50 cursor-not-allowed bg-gray-600' 
                           : 'bg-purple-600 hover:bg-purple-500'
@@ -428,19 +490,39 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                       <Shuffle size={18} className="mr-2" />
                       <span>Random</span>
                     </button>
-                  </EnhancedTooltip>
+                  </div>
                 </div>
               </div>
             </div>
             
             {/* Manual Mode and Reset Teams Buttons - Centered below Balance Teams */}
-            <div className="flex justify-center gap-4">
-              {/* Manual Mode Button */}
-              <EnhancedTooltip text={tooltips.manual} maxWidth="max-w-md">
+            <div className="flex flex-col sm:flex-row justify-center gap-4">
+              {/* Manual Mode Button - Desktop with tooltip */}
+              <div className="hidden sm:block">
+                <EnhancedTooltip text={tooltips.manual} maxWidth="max-w-md">
+                  <button
+                    onClick={toggleManualMode}
+                    disabled={selectedPlayers.length < 4}
+                    className={`px-4 py-3 w-full rounded-lg flex items-center justify-center ${
+                      selectedPlayers.length < 4 
+                        ? 'opacity-50 cursor-not-allowed bg-gray-600' 
+                        : manualMode 
+                          ? 'bg-blue-600 hover:bg-blue-500' 
+                          : 'bg-gray-700 hover:bg-gray-600'
+                    }`}
+                  >
+                    <Users size={18} className="mr-2" />
+                    <span>Manual Mode</span>
+                  </button>
+                </EnhancedTooltip>
+              </div>
+              
+              {/* Manual Mode Button - Mobile without tooltip */}
+              <div className="sm:hidden">
                 <button
                   onClick={toggleManualMode}
                   disabled={selectedPlayers.length < 4}
-                  className={`px-4 py-3 rounded-lg flex items-center justify-center ${
+                  className={`px-4 py-3 w-full rounded-lg flex items-center justify-center ${
                     selectedPlayers.length < 4 
                       ? 'opacity-50 cursor-not-allowed bg-gray-600' 
                       : manualMode 
@@ -451,19 +533,35 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                   <Users size={18} className="mr-2" />
                   <span>Manual Mode</span>
                 </button>
-              </EnhancedTooltip>
+              </div>
               
               {/* Reset Teams Button - Only shown when teams exist */}
               {(team1.length > 0 || team2.length > 0) && (
-                <EnhancedTooltip text={tooltips.reset} maxWidth="max-w-md">
-                  <button
-                    onClick={resetTeams}
-                    className="px-4 py-3 bg-red-700 hover:bg-red-600 rounded-lg flex items-center justify-center"
-                  >
-                    <RefreshCw size={18} className="mr-2" />
-                    <span>Reset Teams</span>
-                  </button>
-                </EnhancedTooltip>
+                <>
+                  {/* Desktop with tooltip */}
+                  <div className="hidden sm:block">
+                    <EnhancedTooltip text={tooltips.reset} maxWidth="max-w-md">
+                      <button
+                        onClick={resetTeams}
+                        className="px-4 py-3 w-full bg-red-700 hover:bg-red-600 rounded-lg flex items-center justify-center"
+                      >
+                        <RefreshCw size={18} className="mr-2" />
+                        <span>Reset Teams</span>
+                      </button>
+                    </EnhancedTooltip>
+                  </div>
+                  
+                  {/* Mobile without tooltip */}
+                  <div className="sm:hidden">
+                    <button
+                      onClick={resetTeams}
+                      className="px-4 py-3 w-full bg-red-700 hover:bg-red-600 rounded-lg flex items-center justify-center"
+                    >
+                      <RefreshCw size={18} className="mr-2" />
+                      <span>Reset Teams</span>
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -498,15 +596,31 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                         </div>
                         
                         {manualMode && (
-                          <EnhancedTooltip text="Move to Atlanteans team">
-                            <button
-                              onClick={() => assignPlayerToTeam(player, 2)}
-                              className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-red-400 hover:text-red-300"
-                              aria-label="Move to Atlanteans"
-                            >
-                              <ArrowRight size={16} />
-                            </button>
-                          </EnhancedTooltip>
+                          <>
+                            {/* Desktop with tooltip */}
+                            <div className="hidden sm:block">
+                              <EnhancedTooltip text="Move to Atlanteans team">
+                                <button
+                                  onClick={() => assignPlayerToTeam(player, 2)}
+                                  className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-red-400 hover:text-red-300"
+                                  aria-label="Move to Atlanteans"
+                                >
+                                  <ArrowRight size={16} />
+                                </button>
+                              </EnhancedTooltip>
+                            </div>
+                            
+                            {/* Mobile without tooltip */}
+                            <div className="sm:hidden">
+                              <button
+                                onClick={() => assignPlayerToTeam(player, 2)}
+                                className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-red-400 hover:text-red-300"
+                                aria-label="Move to Atlanteans"
+                              >
+                                <ArrowRight size={16} />
+                              </button>
+                            </div>
+                          </>
                         )}
                       </div>
                     ))}
@@ -539,15 +653,31 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                         </div>
                         
                         {manualMode && (
-                          <EnhancedTooltip text="Move to Titans team">
-                            <button
-                              onClick={() => assignPlayerToTeam(player, 1)}
-                              className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-blue-400 hover:text-blue-300"
-                              aria-label="Move to Titans"
-                            >
-                              <ArrowLeft size={16} />
-                            </button>
-                          </EnhancedTooltip>
+                          <>
+                            {/* Desktop with tooltip */}
+                            <div className="hidden sm:block">
+                              <EnhancedTooltip text="Move to Titans team">
+                                <button
+                                  onClick={() => assignPlayerToTeam(player, 1)}
+                                  className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-blue-400 hover:text-blue-300"
+                                  aria-label="Move to Titans"
+                                >
+                                  <ArrowLeft size={16} />
+                                </button>
+                              </EnhancedTooltip>
+                            </div>
+                            
+                            {/* Mobile without tooltip */}
+                            <div className="sm:hidden">
+                              <button
+                                onClick={() => assignPlayerToTeam(player, 1)}
+                                className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-blue-400 hover:text-blue-300"
+                                aria-label="Move to Titans"
+                              >
+                                <ArrowLeft size={16} />
+                              </button>
+                            </div>
+                          </>
                         )}
                       </div>
                     ))}
