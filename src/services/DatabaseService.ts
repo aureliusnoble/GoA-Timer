@@ -237,7 +237,7 @@ class DatabaseService {
     });
   }
 
-  // New method to add to DatabaseService class
+ // New method to add to DatabaseService class
 
 /**
  * Get hero statistics based on match history
@@ -1206,8 +1206,12 @@ private async getAllMatchPlayers(): Promise<DBMatchPlayer[]> {
     }
   }
 
+  
+
   /**
-   * Merge imported data with existing data
+   * Merge imported data with existing data - IMPROVED IMPLEMENTATION
+   * This method focuses on only adding new matches and preserving existing ones,
+   * then recalculating all statistics from match data.
    */
   async mergeData(importedData: ExportData): Promise<boolean> {
     if (!this.db) await this.initialize();
@@ -1217,51 +1221,37 @@ private async getAllMatchPlayers(): Promise<DBMatchPlayer[]> {
       // Get current device ID
       const deviceId = this.getDeviceId();
       
-      // STEP 1: PROCESS PLAYERS
+      // STEP 1: ENSURE PLAYERS EXIST (minimal player creation)
       const existingPlayers = await this.getAllPlayers();
-      const existingPlayersMap = new Map(existingPlayers.map(p => [p.id, p]));
+      const existingPlayerIds = new Set(existingPlayers.map(p => p.id));
       
-      // Process each imported player
+      // Only add players that don't already exist - with minimal default data
       for (const importedPlayer of importedData.players) {
-        // Add device ID if missing
-        if (!importedPlayer.deviceId) {
-          importedPlayer.deviceId = `imported_${deviceId}`;
-        }
-        
-        // Check if player exists
-        const existingPlayer = existingPlayersMap.get(importedPlayer.id);
-        
-        if (!existingPlayer) {
-          // New player - just add
-          await this.savePlayer(importedPlayer);
-        } else {
-          // Merge strategy:
-          // - Keep higher ELO
-          // - Sum games/wins/losses
-          // - Take most recent last played date
-          // - Keep highest level
-          const mergedPlayer = {
-            ...existingPlayer,
-            elo: Math.max(existingPlayer.elo, importedPlayer.elo),
-            totalGames: existingPlayer.totalGames + importedPlayer.totalGames,
-            wins: existingPlayer.wins + importedPlayer.wins,
-            losses: existingPlayer.losses + importedPlayer.losses,
-            lastPlayed: new Date(Math.max(
-              new Date(existingPlayer.lastPlayed).getTime(), 
-              new Date(importedPlayer.lastPlayed).getTime()
-            )),
-            level: Math.max(
-              existingPlayer.level || 1, 
-              importedPlayer.level || 1
-            )
+        if (!existingPlayerIds.has(importedPlayer.id)) {
+          // Create a new player with minimal data - stats will be calculated later
+          const newPlayer: DBPlayer = {
+            id: importedPlayer.id,
+            name: importedPlayer.name,
+            totalGames: 0, // Will be recalculated
+            wins: 0, // Will be recalculated
+            losses: 0, // Will be recalculated
+            elo: INITIAL_ELO, // Will be recalculated
+            lastPlayed: new Date(), // Will be updated during recalculation
+            dateCreated: new Date(),
+            deviceId: `imported_${deviceId}`,
+            level: importedPlayer.level || 1 // Preserve level
           };
-          
-          await this.savePlayer(mergedPlayer);
+          await this.savePlayer(newPlayer);
+          existingPlayerIds.add(importedPlayer.id);
         }
       }
       
-      // STEP 2: PROCESS MATCHES
-      // Create a map of all match players for lookup
+      // STEP 2: ADD NEW MATCHES ONLY (preserving existing matches)
+      // Get all existing matches
+      const existingMatches = await this.getAllMatches();
+      const existingMatchIds = new Set(existingMatches.map(m => m.id));
+      
+      // Create a map of all match players from imported data
       const importedMatchPlayersMap = new Map<string, DBMatchPlayer[]>();
       for (const mp of importedData.matchPlayers) {
         if (!importedMatchPlayersMap.has(mp.matchId)) {
@@ -1270,35 +1260,37 @@ private async getAllMatchPlayers(): Promise<DBMatchPlayer[]> {
         importedMatchPlayersMap.get(mp.matchId)!.push(mp);
       }
       
-      // Get all existing matches
-      const existingMatches = await this.getAllMatches();
-      const existingMatchesMap = new Map(existingMatches.map(m => [m.id, m]));
-      
-      // Process each imported match
+      // Add only new matches and their player records
       for (const importedMatch of importedData.matches) {
+        // Skip matches that already exist
+        if (existingMatchIds.has(importedMatch.id)) {
+          continue;
+        }
+        
         // Add device ID if missing
         if (!importedMatch.deviceId) {
           importedMatch.deviceId = `imported_${deviceId}`;
         }
         
-        // Check if match exists - for matches we don't merge, we just add new ones
-        if (!existingMatchesMap.has(importedMatch.id)) {
-          // New match - save it
-          await this.saveMatch(importedMatch);
-          
-          // Also add all related match players
-          const matchPlayers = importedMatchPlayersMap.get(importedMatch.id) || [];
-          for (const matchPlayer of matchPlayers) {
-            // Add device ID if missing
-            if (!matchPlayer.deviceId) {
-              matchPlayer.deviceId = `imported_${deviceId}`;
-            }
-            
-            await this.saveMatchPlayer(matchPlayer);
+        // Save the new match
+        await this.saveMatch(importedMatch);
+        
+        // Add all associated match player records
+        const matchPlayers = importedMatchPlayersMap.get(importedMatch.id) || [];
+        for (const matchPlayer of matchPlayers) {
+          // Add device ID if missing
+          if (!matchPlayer.deviceId) {
+            matchPlayer.deviceId = `imported_${deviceId}`;
           }
+          
+          // Save the match player record
+          await this.saveMatchPlayer(matchPlayer);
         }
-        // Skip existing matches (don't modify)
       }
+      
+      // STEP 3: RECALCULATE ALL PLAYER STATISTICS
+      // This recalculates all statistics based on the combined match history
+      await this.recalculatePlayerStats();
       
       return true;
     } catch (error) {
