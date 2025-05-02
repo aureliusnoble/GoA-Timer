@@ -1,6 +1,6 @@
 // src/components/matches/MatchMaker.tsx
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Users, Shuffle, Award, Info, Plus, ArrowRight, ArrowLeft, RefreshCw, Play } from 'lucide-react';
+import { ChevronLeft, Users, Shuffle, Award, Info, Plus, ArrowRight, ArrowLeft, RefreshCw, Play, Trophy, Clock } from 'lucide-react';
 import { DBPlayer } from '../../services/DatabaseService';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
@@ -85,7 +85,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     }
   };
   
-  // Balance teams automatically
+  // Balance teams by ELO (ranking)
   const balanceTeams = async () => {
     if (selectedPlayers.length < 4) {
       return; // Not enough players
@@ -107,6 +107,33 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
       setTeam2(team2Players);
     } catch (error) {
       console.error('Error balancing teams:', error);
+    } finally {
+      setIsBalancing(false);
+    }
+  };
+  
+  // Balance teams by experience (total games)
+  const balanceTeamsByExperience = async () => {
+    if (selectedPlayers.length < 4) {
+      return; // Not enough players
+    }
+    
+    setIsBalancing(true);
+    playSound('phaseChange');
+    
+    try {
+      // Get balanced teams from the database service using experience
+      const playerIds = selectedPlayers.map(p => p.id);
+      const { team1: team1Ids, team2: team2Ids } = await dbService.generateBalancedTeamsByExperience(playerIds);
+      
+      // Map IDs back to player objects
+      const team1Players = team1Ids.map(id => selectedPlayers.find(p => p.id === id)!);
+      const team2Players = team2Ids.map(id => selectedPlayers.find(p => p.id === id)!);
+      
+      setTeam1(team1Players);
+      setTeam2(team2Players);
+    } catch (error) {
+      console.error('Error balancing teams by experience:', error);
     } finally {
       setIsBalancing(false);
     }
@@ -233,8 +260,8 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
               <div>
                 <h3 className="font-semibold mb-1">How Match Maker Works</h3>
                 <p className="text-sm text-gray-300">
-                  Select players to include, then click "Balance Teams" to generate balanced teams based on ELO ratings.
-                  The system will attempt to create two teams with similar average skill levels for fair matches.
+                  Select players to include, then balance teams based on player ranking (ELO) or experience (games played).
+                  The system will attempt to create two teams with similar average skill or experience levels for fair matches.
                 </p>
               </div>
             </div>
@@ -299,59 +326,95 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
           </div>
           
           {/* Team Generation Controls */}
-          <div className="flex flex-wrap gap-4 justify-center mb-8">
-            <button
-              onClick={balanceTeams}
-              disabled={selectedPlayers.length < 4 || isBalancing || manualMode}
-              className={`px-6 py-3 bg-green-600 hover:bg-green-500 rounded-lg flex items-center ${
-                selectedPlayers.length < 4 || isBalancing || manualMode ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
-            >
-              {isBalancing ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  <span>Balancing...</span>
-                </>
-              ) : (
-                <>
-                  <Award size={18} className="mr-2" />
-                  <span>Balance Teams (ELO Based)</span>
-                </>
-              )}
-            </button>
-            
-            <button
-              onClick={randomizeTeams}
-              disabled={selectedPlayers.length < 4 || manualMode}
-              className={`px-6 py-3 bg-purple-600 hover:bg-purple-500 rounded-lg flex items-center ${
-                selectedPlayers.length < 4 || manualMode ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
-            >
-              <Shuffle size={18} className="mr-2" />
-              <span>Random Teams</span>
-            </button>
-            
-            <button
-              onClick={toggleManualMode}
-              disabled={selectedPlayers.length < 4}
-              className={`px-6 py-3 rounded-lg flex items-center ${
-                selectedPlayers.length < 4 ? 'opacity-50 cursor-not-allowed' : 
-                manualMode ? 'bg-blue-600 hover:bg-blue-500' : 'bg-gray-600 hover:bg-gray-500'
-              }`}
-            >
-              <Users size={18} className="mr-2" />
-              <span>{manualMode ? 'Manual Mode (Enabled)' : 'Manual Mode'}</span>
-            </button>
-            
-            {(team1.length > 0 || team2.length > 0) && (
-              <button
-                onClick={resetTeams}
-                className="px-6 py-3 bg-red-700 hover:bg-red-600 rounded-lg flex items-center"
-              >
-                <RefreshCw size={18} className="mr-2" />
-                <span>Reset Teams</span>
-              </button>
-            )}
+          <div className="mb-8">
+            {/* Balance teams group with header */}
+            <div className="grid grid-cols-1 gap-4">
+              {/* Balance Teams Header */}
+              <div className="flex items-center bg-gray-700/80 p-2 rounded-t-lg mx-auto">
+                <Award size={18} className="mr-2 text-blue-400" />
+                <span className="font-medium">Balance Teams</span>
+              </div>
+              
+              {/* Balance Team Buttons */}
+              <div className="flex flex-wrap gap-4 justify-center">
+                {/* Balance by Ranking Button */}
+                <button
+                  onClick={balanceTeams}
+                  disabled={selectedPlayers.length < 4 || isBalancing || manualMode}
+                  className={`px-6 py-3 rounded-lg flex items-center ${
+                    selectedPlayers.length < 4 || isBalancing || manualMode 
+                      ? 'opacity-50 cursor-not-allowed bg-gray-600' 
+                      : 'bg-blue-600 hover:bg-blue-500'
+                  }`}
+                >
+                  {isBalancing ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  ) : (
+                    <Trophy size={18} className="mr-2" />
+                  )}
+                  <span>On Ranking</span>
+                </button>
+                
+                {/* Balance by Experience Button */}
+                <button
+                  onClick={balanceTeamsByExperience}
+                  disabled={selectedPlayers.length < 4 || isBalancing || manualMode}
+                  className={`px-6 py-3 rounded-lg flex items-center ${
+                    selectedPlayers.length < 4 || isBalancing || manualMode 
+                      ? 'opacity-50 cursor-not-allowed bg-gray-600' 
+                      : 'bg-green-600 hover:bg-green-500'
+                  }`}
+                >
+                  {isBalancing ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  ) : (
+                    <Clock size={18} className="mr-2" />
+                  )}
+                  <span>On Experience</span>
+                </button>
+                
+                {/* Random Teams Button */}
+                <button
+                  onClick={randomizeTeams}
+                  disabled={selectedPlayers.length < 4 || manualMode}
+                  className={`px-6 py-3 rounded-lg flex items-center ${
+                    selectedPlayers.length < 4 || manualMode 
+                      ? 'opacity-50 cursor-not-allowed bg-gray-600' 
+                      : 'bg-purple-600 hover:bg-purple-500'
+                  }`}
+                >
+                  <Shuffle size={18} className="mr-2" />
+                  <span>Random Teams</span>
+                </button>
+                
+                {/* Manual Mode Button */}
+                <button
+                  onClick={toggleManualMode}
+                  disabled={selectedPlayers.length < 4}
+                  className={`px-6 py-3 rounded-lg flex items-center ${
+                    selectedPlayers.length < 4 
+                      ? 'opacity-50 cursor-not-allowed bg-gray-600' 
+                      : manualMode 
+                        ? 'bg-blue-600 hover:bg-blue-500' 
+                        : 'bg-gray-700 hover:bg-gray-600'
+                  }`}
+                >
+                  <Users size={18} className="mr-2" />
+                  <span>{manualMode ? 'Manual Mode (Enabled)' : 'Manual Mode'}</span>
+                </button>
+                
+                {/* Reset Teams Button */}
+                {(team1.length > 0 || team2.length > 0) && (
+                  <button
+                    onClick={resetTeams}
+                    className="px-6 py-3 bg-red-700 hover:bg-red-600 rounded-lg flex items-center"
+                  >
+                    <RefreshCw size={18} className="mr-2" />
+                    <span>Reset Teams</span>
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
           
           {/* Teams Display */}

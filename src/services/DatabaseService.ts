@@ -699,6 +699,49 @@ class DatabaseService {
   }
 
   /**
+   * Generate balanced teams based on gameplay experience (total games)
+   * Returns the player IDs split into two arrays
+   */
+  generateBalancedTeamsByExperience(playerIds: string[]): Promise<{ team1: string[], team2: string[] }> {
+    return this.getAllPlayers()
+      .then(allPlayers => {
+        // Filter to only include the selected players
+        const selectedPlayers = allPlayers.filter(p => playerIds.includes(p.id));
+        
+        // If we don't have enough players, return empty teams
+        if (selectedPlayers.length < 4) {
+          return { team1: [], team2: [] };
+        }
+        
+        // Sort players by total games (highest to lowest)
+        selectedPlayers.sort((a, b) => b.totalGames - a.totalGames);
+        
+        // Use a greedy algorithm to create balanced teams
+        const team1: DBPlayer[] = [];
+        const team2: DBPlayer[] = [];
+        
+        // Distribute players to balance total experience
+        selectedPlayers.forEach(player => {
+          // Calculate current team total games
+          const team1Games = team1.reduce((sum, p) => sum + p.totalGames, 0);
+          const team2Games = team2.reduce((sum, p) => sum + p.totalGames, 0);
+          
+          // Add player to the team with lower total games
+          if (team1Games <= team2Games) {
+            team1.push(player);
+          } else {
+            team2.push(player);
+          }
+        });
+        
+        return {
+          team1: team1.map(p => p.id),
+          team2: team2.map(p => p.id)
+        };
+      });
+  }
+
+  /**
    * Export all database data
    */
   async exportData(): Promise<ExportData> {
