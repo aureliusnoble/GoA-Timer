@@ -33,6 +33,7 @@ import MatchesMenu, { MatchesView } from './components/matches/MatchesMenu';
 import PlayerStatsScreen from './components/matches/PlayerStats';
 import MatchHistory from './components/matches/MatchHistory';
 import MatchMaker from './components/matches/MatchMaker';
+import HeroStats from './components/matches/HeroStats';
 
 // Modified interface for lane state return type
 interface LaneStateResult {
@@ -1698,78 +1699,84 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
 
       {/* Main content area */}
       {showMatchStatistics ? (
-        // Match Statistics View
-        <>
-          {currentMatchView === 'menu' && (
-            <MatchesMenu 
-              onBack={handleBackFromMatchStatistics}
-              onNavigate={handleMatchStatisticsNavigate}
-            />
-          )}
-          {currentMatchView === 'player-stats' && (
-            <PlayerStatsScreen 
-              onBack={() => handleMatchStatisticsNavigate('menu')}
-            />
-          )}
-          {currentMatchView === 'match-history' && (
-            <MatchHistory 
-              onBack={() => handleMatchStatisticsNavigate('menu')}
-            />
-          )}
-          {currentMatchView === 'match-maker' && (
-            <MatchMaker 
-              onBack={() => handleMatchStatisticsNavigate('menu')}
-              onUseTeams={(titanPlayerNames, atlanteanPlayerNames) => {
-                // Clear existing players
-                setLocalPlayers([]);
-                
-                // Create new players based on the teams
-                // First the Titans
-                const newPlayers = titanPlayerNames.map((name, index) => ({
-                  id: index + 1,
-                  team: Team.Titans,
-                  hero: null,
-                  name,
-                  stats: {
-                    totalGoldEarned: 0,
-                    totalKills: 0,
-                    totalAssists: 0,
-                    totalDeaths: 0,
-                    totalMinionKills: 0
-                  }
-                }));
-                
-                // Then add the Atlanteans with continuing IDs
-                const atlanteanPlayers = atlanteanPlayerNames.map((name, index) => ({
-                  id: titanPlayerNames.length + index + 1,
-                  team: Team.Atlanteans,
-                  hero: null,
-                  name,
-                  stats: {
-                    totalGoldEarned: 0,
-                    totalKills: 0,
-                    totalAssists: 0,
-                    totalDeaths: 0,
-                    totalMinionKills: 0
-                  }
-                }));
-                
-                // Combine both teams
-                const allPlayers = [...newPlayers, ...atlanteanPlayers];
-                
-                // Set the new players
-                setLocalPlayers(allPlayers);
-                
-                // Return to game setup
-                setShowMatchStatistics(false);
-                
-                // Play a sound to indicate success
-                playSound('phaseChange');
-              }}
-            />
-          )}
-        </>
-      ) : !gameStarted ? (
+  // Match Statistics View
+  <>
+    {currentMatchView === 'menu' && (
+      <MatchesMenu 
+        onBack={handleBackFromMatchStatistics}
+        onNavigate={handleMatchStatisticsNavigate}
+      />
+    )}
+    {currentMatchView === 'player-stats' && (
+      <PlayerStatsScreen 
+        onBack={() => handleMatchStatisticsNavigate('menu')}
+      />
+    )}
+    {/* NEW: Hero Stats View */}
+    {currentMatchView === 'hero-stats' && (
+      <HeroStats 
+        onBack={() => handleMatchStatisticsNavigate('menu')}
+      />
+    )}
+    {currentMatchView === 'match-history' && (
+      <MatchHistory 
+        onBack={() => handleMatchStatisticsNavigate('menu')}
+      />
+    )}
+    {currentMatchView === 'match-maker' && (
+      <MatchMaker 
+        onBack={() => handleMatchStatisticsNavigate('menu')}
+        onUseTeams={(titanPlayerNames, atlanteanPlayerNames) => {
+          // Clear existing players
+          setLocalPlayers([]);
+          
+          // Create new players based on the teams
+          // First the Titans
+          const newPlayers = titanPlayerNames.map((name, index) => ({
+            id: index + 1,
+            team: Team.Titans,
+            hero: null,
+            name,
+            stats: {
+              totalGoldEarned: 0,
+              totalKills: 0,
+              totalAssists: 0,
+              totalDeaths: 0,
+              totalMinionKills: 0
+            }
+          }));
+          
+          // Then add the Atlanteans with continuing IDs
+          const atlanteanPlayers = atlanteanPlayerNames.map((name, index) => ({
+            id: titanPlayerNames.length + index + 1,
+            team: Team.Atlanteans,
+            hero: null,
+            name,
+            stats: {
+              totalGoldEarned: 0,
+              totalKills: 0,
+              totalAssists: 0,
+              totalDeaths: 0,
+              totalMinionKills: 0
+            }
+          }));
+          
+          // Combine both teams
+          const allPlayers = [...newPlayers, ...atlanteanPlayers];
+          
+          // Set the new players
+          setLocalPlayers(allPlayers);
+          
+          // Return to game setup
+          setShowMatchStatistics(false);
+          
+          // Play a sound to indicate success
+          playSound('phaseChange');
+        }}
+      />
+    )}
+  </>
+) : !gameStarted ? (
         <div className="game-setup-container">
           {showDraftModeSelection ? (
             <DraftModeSelection 

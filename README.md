@@ -88,3 +88,9 @@ The application uses Tailwind CSS for styling. Custom styles can be added in:
 
 # Disclaimer
 This app has not been officially approved by Wolff Designa (the designers of Guards of Atlantis). All game content, e.g. heroes, mechanics, images, etc. is the sole property of Wolff Designa.
+
+# Future
+
+Add Firebase database. This would allow automatic synchronisation across your devices (with login) of IndexedDB database (which we retain), and the option to add friends (and to automatically or manually synchroise with them).
+
+Option to opt into global database. Which would track Global Player ELOs; as well as hero stats, win rates by hero. Best partners for each hero. Best counters for each hero. Which heroes each hero is most effective against. 

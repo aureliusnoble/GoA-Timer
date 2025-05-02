@@ -1,11 +1,11 @@
 // src/components/matches/MatchesMenu.tsx
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Users, History, Shuffle, Download, Upload, Trash2, Info, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, Users, History, Shield, Download, Upload, Trash2, Info, AlertTriangle, Shuffle } from 'lucide-react';
 import EnhancedTooltip from '../common/EnhancedTooltip';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
 
-export type MatchesView = 'menu' | 'player-stats' | 'match-history' | 'match-maker';
+export type MatchesView = 'menu' | 'player-stats' | 'hero-stats' | 'match-history' | 'match-maker';
 
 interface MatchesMenuProps {
   onBack: () => void;
@@ -19,7 +19,7 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
   const [importError, setImportError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
   
-  // New state for import options
+  // State for import options
   const [showImportOptions, setShowImportOptions] = useState<boolean>(false);
   const [importMode, setImportMode] = useState<'replace' | 'merge'>('replace');
   
@@ -181,7 +181,8 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
         <h2 className="text-2xl font-bold">Match Statistics</h2>
       </div>
       
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-8">
+      {/* Updated grid layout to 2x2 for desktop, column for mobile */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-8">
         {/* Player Stats */}
         <div 
           className={`bg-gray-700 hover:bg-gray-600 rounded-lg p-6 cursor-pointer transition-colors ${
@@ -195,6 +196,29 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
           </div>
           <p className="text-gray-300">
             View detailed player performance statistics, favorite heroes, and ELO ratings.
+          </p>
+          
+          {!hasData && (
+            <div className="mt-3 text-yellow-400 text-sm flex items-center">
+              <Info size={16} className="mr-1" />
+              <span>No match data available</span>
+            </div>
+          )}
+        </div>
+        
+        {/* Hero Stats */}
+        <div 
+          className={`bg-gray-700 hover:bg-gray-600 rounded-lg p-6 cursor-pointer transition-colors ${
+            !hasData ? 'opacity-50 pointer-events-none' : ''
+          }`}
+          onClick={() => hasData && handleNavigate('hero-stats')}
+        >
+          <div className="flex items-center text-xl font-semibold mb-4">
+            <Shield size={24} className="mr-3 text-purple-400" />
+            <span>Hero Stats</span>
+          </div>
+          <p className="text-gray-300">
+            Analyze hero win rates, synergies, and counters based on your match history.
           </p>
           
           {!hasData && (
@@ -240,7 +264,7 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
             <span>Match Maker</span>
           </div>
           <p className="text-gray-300">
-            Generate balanced teams based on player ELO ratings for fair matches.
+            Generate balanced teams based on player rankings or experience for fair matches.
           </p>
           
           {!hasData && (

@@ -237,6 +237,270 @@ class DatabaseService {
     });
   }
 
+  // New method to add to DatabaseService class
+
+/**
+ * Get hero statistics based on match history
+ * This includes win rates, most common teammates, best matchups, and counters
+ */
+async getHeroStats(): Promise<any[]> {
+  try {
+    // 1. Get all match players (heroes played in matches)
+    const allMatchPlayers = await this.getAllMatchPlayers();
+    
+    // 2. Get all matches for context
+    const allMatches = await this.getAllMatches();
+    const matchesMap = new Map(allMatches.map(m => [m.id, m]));
+    
+    // 3. Get all heroes from match data
+    const heroMap = new Map<number, {
+      heroId: number;
+      heroName: string;
+      icon: string;
+      roles: string[];
+      complexity: number;
+      expansion: string;
+      totalGames: number;
+      wins: number;
+      losses: number;
+      teammates: Map<number, { wins: number; games: number }>;
+      opponents: Map<number, { wins: number; games: number }>;
+    }>();
+    
+    // First pass: create the hero records
+    for (const matchPlayer of allMatchPlayers) {
+      const heroId = matchPlayer.heroId;
+      
+      // Skip if no hero is assigned
+      if (heroId === undefined || heroId === null) continue;
+      
+      // Get or create hero stats record
+      if (!heroMap.has(heroId)) {
+        heroMap.set(heroId, {
+          heroId,
+          heroName: matchPlayer.heroName,
+          icon: `heroes/${matchPlayer.heroName.toLowerCase()}.png`, // Base icon path
+          roles: matchPlayer.heroRoles,
+          complexity: 1, // Will be populated later from heroes.ts
+          expansion: 'Unknown', // Will be populated later from heroes.ts
+          totalGames: 0,
+          wins: 0,
+          losses: 0,
+          teammates: new Map(),
+          opponents: new Map()
+        });
+      }
+      
+      // Update hero record
+      const heroRecord = heroMap.get(heroId)!;
+      heroRecord.totalGames += 1;
+      
+      // Check if the match exists and get the result
+      const match = matchesMap.get(matchPlayer.matchId);
+      if (!match) continue;
+      
+      // Determine if this hero won
+      const won = matchPlayer.team === match.winningTeam;
+      
+      // Update wins/losses
+      if (won) {
+        heroRecord.wins += 1;
+      } else {
+        heroRecord.losses += 1;
+      }
+    }
+    
+    // Second pass: calculate synergies and counters
+    for (const match of allMatches) {
+      // Get all heroes in this match
+      const matchHeroes = allMatchPlayers.filter(mp => mp.matchId === match.id);
+      
+      // Process each hero in the match
+      for (const heroMatchPlayer of matchHeroes) {
+        const heroId = heroMatchPlayer.heroId;
+        if (heroId === undefined || heroId === null) continue;
+        
+        // Skip if not in our heroMap
+        if (!heroMap.has(heroId)) continue;
+        
+        const heroRecord = heroMap.get(heroId)!;
+        const heroTeam = heroMatchPlayer.team;
+        const heroWon = heroTeam === match.winningTeam;
+        
+        // Process teammates (same team)
+        const teammates = matchHeroes.filter(mp => 
+          mp.team === heroTeam && mp.heroId !== heroId
+        );
+        
+        // Process opponents (opposite team)
+        const opponents = matchHeroes.filter(mp => 
+          mp.team !== heroTeam
+        );
+        
+        // Update teammate data
+        for (const teammate of teammates) {
+          if (teammate.heroId === undefined || teammate.heroId === null) continue;
+          
+          // Get existing teammate record or create new one
+          let teammateRecord = heroRecord.teammates.get(teammate.heroId);
+          if (!teammateRecord) {
+            teammateRecord = { wins: 0, games: 0 };
+            heroRecord.teammates.set(teammate.heroId, teammateRecord);
+          }
+          
+          // Update records
+          teammateRecord.games += 1;
+          if (heroWon) {
+            teammateRecord.wins += 1;
+          }
+        }
+        
+        // Update opponent data
+        for (const opponent of opponents) {
+          if (opponent.heroId === undefined || opponent.heroId === null) continue;
+          
+          // Get existing opponent record or create new one
+          let opponentRecord = heroRecord.opponents.get(opponent.heroId);
+          if (!opponentRecord) {
+            opponentRecord = { wins: 0, games: 0 };
+            heroRecord.opponents.set(opponent.heroId, opponentRecord);
+          }
+          
+          // Update records
+          opponentRecord.games += 1;
+          if (heroWon) {
+            opponentRecord.wins += 1;
+          }
+        }
+      }
+    }
+    
+    // 4. Transform map to array with calculated stats
+    const heroStats = Array.from(heroMap.values()).map(hero => {
+      // Calculate win rate
+      const winRate = hero.totalGames > 0 ? (hero.wins / hero.totalGames) * 100 : 0;
+      
+      // Calculate best teammates (highest win rate when played together)
+      const bestTeammates = Array.from(hero.teammates.entries())
+        .filter(([_, stats]) => stats.games >= 2) // Minimum 2 games together
+        .map(([teammateId, stats]) => {
+          // Find the hero record for this teammate
+          const teammateHero = heroMap.get(teammateId);
+          if (!teammateHero) return null;
+          
+          return {
+            heroId: teammateId,
+            heroName: teammateHero.heroName,
+            icon: teammateHero.icon,
+            winRate: stats.games > 0 ? (stats.wins / stats.games) * 100 : 0,
+            gamesPlayed: stats.games
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null) // Type guard to filter out nulls
+        .sort((a, b) => b.winRate - a.winRate) // Sort by win rate
+        .slice(0, 3); // Top 3
+      
+      // Calculate best matchups (highest win rate against)
+      const bestAgainst = Array.from(hero.opponents.entries())
+        .filter(([_, stats]) => stats.games >= 2) // Minimum 2 games against
+        .map(([opponentId, stats]) => {
+          // Find the hero record for this opponent
+          const opponentHero = heroMap.get(opponentId);
+          if (!opponentHero) return null;
+          
+          return {
+            heroId: opponentId,
+            heroName: opponentHero.heroName,
+            icon: opponentHero.icon,
+            winRate: stats.games > 0 ? (stats.wins / stats.games) * 100 : 0,
+            gamesPlayed: stats.games
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null) // Type guard to filter out nulls
+        .sort((a, b) => b.winRate - a.winRate) // Sort by win rate
+        .slice(0, 3); // Top 3
+      
+      // Calculate worst matchups (lowest win rate against)
+      const worstAgainst = Array.from(hero.opponents.entries())
+        .filter(([_, stats]) => stats.games >= 2) // Minimum 2 games against
+        .map(([opponentId, stats]) => {
+          // Find the hero record for this opponent
+          const opponentHero = heroMap.get(opponentId);
+          if (!opponentHero) return null;
+          
+          return {
+            heroId: opponentId,
+            heroName: opponentHero.heroName,
+            icon: opponentHero.icon,
+            winRate: stats.games > 0 ? (stats.wins / stats.games) * 100 : 0,
+            gamesPlayed: stats.games
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null) // Type guard to filter out nulls
+        .sort((a, b) => a.winRate - b.winRate) // Sort by win rate (ascending)
+        .slice(0, 3); // Bottom 3
+      
+      return {
+        ...hero,
+        winRate,
+        bestTeammates,
+        bestAgainst,
+        worstAgainst,
+        // Remove map objects before returning
+        teammates: undefined,
+        opponents: undefined
+      };
+    });
+    
+    // 5. Enrich with data from heroes.ts if available
+    try {
+      // Try to import heroes from data/heroes
+      const { heroes } = await import('../data/heroes');
+      
+      // Update hero data with additional information
+      for (const heroStat of heroStats) {
+        const heroData = heroes.find(h => h.name === heroStat.heroName);
+        if (heroData) {
+          heroStat.complexity = heroData.complexity;
+          heroStat.expansion = heroData.expansion;
+          // Add any other useful properties
+        }
+      }
+    } catch (error) {
+      console.error('Error enriching hero stats with heroes.ts data:', error);
+      // Continue without enrichment if heroes.ts can't be imported
+    }
+    
+    return heroStats;
+  } catch (error) {
+    console.error('Error getting hero stats:', error);
+    return [];
+  }
+}
+
+/**
+ * Get all match players from the database
+ * This is a helper method for getHeroStats()
+ */
+private async getAllMatchPlayers(): Promise<DBMatchPlayer[]> {
+  if (!this.db) await this.initialize();
+  if (!this.db) return [];
+
+  return new Promise((resolve, reject) => {
+    const transaction = this.db!.transaction([TABLES.MATCH_PLAYERS], 'readonly');
+    const matchPlayerStore = transaction.objectStore(TABLES.MATCH_PLAYERS);
+    const request = matchPlayerStore.getAll();
+
+    request.onsuccess = () => {
+      resolve(request.result || []);
+    };
+
+    request.onerror = () => {
+      reject(request.error);
+    };
+  });
+}
+
   /**
    * Get all matches
    */
