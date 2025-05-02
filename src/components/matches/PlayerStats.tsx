@@ -385,7 +385,8 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
         </h4>
         <p>
           ELO ratings are calculated based on match results and opponent skill. Players start at 1200 ELO.
-          Higher ratings indicate stronger players. Ratings are used for team balancing in Match Maker.
+          Higher ratings indicate stronger players. Ratings are used for team balancing in Match Maker. These
+          ratings are calculated relative to your player group.
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
           <div className="text-purple-400">Grandmaster: 2000+</div>

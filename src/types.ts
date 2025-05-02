@@ -40,13 +40,14 @@ export interface Hero {
   movement_upgraded?: number;
 }
 
-// New interface for player statistics
+// New interface for player statistics - Updated to include level
 export interface PlayerStats {
   totalGoldEarned: number;
   totalKills: number;
   totalAssists: number;
   totalDeaths: number;
   totalMinionKills: number;
+  level?: number; // New field to track player level
 }
 
 export interface Player {

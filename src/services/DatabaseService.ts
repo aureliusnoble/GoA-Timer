@@ -29,6 +29,7 @@ export interface DBPlayer {
   lastPlayed: Date;
   dateCreated: Date;
   deviceId?: string; // New field to track origin device
+  level?: number; // New field to track player level
 }
 
 // Match database model
@@ -43,7 +44,7 @@ export interface DBMatch {
   deviceId?: string; // New field to track origin device
 }
 
-// MatchPlayer database model (connects players to matches)
+// MatchPlayer database model (connects players to matches) - Updated to include level
 export interface DBMatchPlayer {
   id: string; // Auto-generated UUID
   matchId: string;
@@ -57,6 +58,7 @@ export interface DBMatchPlayer {
   assists?: number;
   goldEarned?: number;
   minionKills?: number;
+  level?: number; // New field to track player level
   deviceId?: string; // New field to track origin device
 }
 
@@ -478,6 +480,7 @@ class DatabaseService {
       assists?: number;
       goldEarned?: number;
       minionKills?: number;
+      level?: number; // New field for player level
     }[]
   ): Promise<string> {
     if (!this.db) await this.initialize();
@@ -498,10 +501,18 @@ class DatabaseService {
           elo: INITIAL_ELO,
           lastPlayed: new Date(),
           dateCreated: new Date(),
-          deviceId: this.getDeviceId()
+          deviceId: this.getDeviceId(),
+          level: playerInfo.level || 1 // Initialize with level from player data or default to 1
         };
         await this.savePlayer(newPlayer);
         return newPlayer;
+      } 
+      
+      // Update player level if provided and greater than current level
+      if (playerInfo.level !== undefined && 
+          (existingPlayer.level === undefined || playerInfo.level > existingPlayer.level)) {
+        existingPlayer.level = playerInfo.level;
+        await this.savePlayer(existingPlayer);
       }
       
       return existingPlayer;
@@ -548,7 +559,8 @@ class DatabaseService {
         wins: player.wins + (isWinner ? 1 : 0),
         losses: player.losses + (isWinner ? 0 : 1),
         elo: newELO,
-        lastPlayed: new Date()
+        lastPlayed: new Date(),
+        level: playerInfo.level || player.level // Updated to include player level
       };
       
       await this.savePlayer(updatedPlayer);
@@ -567,6 +579,7 @@ class DatabaseService {
         assists: playerInfo.assists,
         goldEarned: playerInfo.goldEarned,
         minionKills: playerInfo.minionKills,
+        level: playerInfo.level, // Updated to include player level
         deviceId: this.getDeviceId()
       };
       
@@ -835,6 +848,7 @@ class DatabaseService {
           // - Keep higher ELO
           // - Sum games/wins/losses
           // - Take most recent last played date
+          // - Keep highest level
           const mergedPlayer = {
             ...existingPlayer,
             elo: Math.max(existingPlayer.elo, importedPlayer.elo),
@@ -844,7 +858,11 @@ class DatabaseService {
             lastPlayed: new Date(Math.max(
               new Date(existingPlayer.lastPlayed).getTime(), 
               new Date(importedPlayer.lastPlayed).getTime()
-            ))
+            )),
+            level: Math.max(
+              existingPlayer.level || 1, 
+              importedPlayer.level || 1
+            )
           };
           
           await this.savePlayer(mergedPlayer);

@@ -127,17 +127,21 @@ const GameTimer: React.FC<GameTimerProps> = ({
         player.stats.totalAssists > 0 ||
         player.stats.totalDeaths > 0 ||
         player.stats.totalMinionKills > 0 ||
-        player.stats.totalGoldEarned > 0
+        player.stats.totalGoldEarned > 0 ||
+        player.stats.level !== undefined
       )
     );
   };
 
   // Helper function to check if ANY player has a specific stat
-const hasAnyPlayerLoggedStat = (statName: 'totalKills' | 'totalDeaths' | 'totalAssists' | 'totalMinionKills' | 'totalGoldEarned'): boolean => {
-  return players.some(player => 
-    player.stats && player.stats[statName] > 0
-  );
-};
+  const hasAnyPlayerLoggedStat = (statName: 'totalKills' | 'totalDeaths' | 'totalAssists' | 'totalMinionKills' | 'totalGoldEarned' | 'level'): boolean => {
+    return players.some(player => 
+      player.stats && 
+      (statName === 'level' 
+        ? player.stats[statName] !== undefined 
+        : player.stats[statName] > 0)
+    );
+  };
 
   // Button click handlers with sound
   const handleButtonClick = () => {
@@ -553,7 +557,13 @@ const hasAnyPlayerLoggedStat = (statName: 'totalKills' | 'totalDeaths' | 'totalA
                     <div>
                       <div className="flex items-center text-2xl font-bold">
                         {activePlayer.hero.name}
-                    
+                        {/* Display player level with shield icon if available */}
+                        {activePlayer.stats?.level && (
+                          <span className="ml-2 flex items-center" title="Player Level">
+                            <Shield size={18} className={`${activePlayer.team === Team.Titans ? 'text-blue-300' : 'text-red-300'} mr-1`} />
+                            {activePlayer.stats.level}
+                          </span>
+                        )}
                       </div>
                       <div className="text-lg text-gray-300">{activePlayer.name}</div>
                     </div>
@@ -656,8 +666,7 @@ const hasAnyPlayerLoggedStat = (statName: 'totalKills' | 'totalDeaths' | 'totalA
     const hasCompleted = gameState.completedTurns.includes(index);
     const isSelectable = gameState.currentPhase === 'move' && !hasCompleted && !isActive;
     
-    // Get hero complexity (1-4)
-    const heroComplexity = player.hero?.complexity || 1;
+
     
     // Check if this player has any stats
     const playerHasStats = player.stats && (
@@ -665,7 +674,8 @@ const hasAnyPlayerLoggedStat = (statName: 'totalKills' | 'totalDeaths' | 'totalA
       player.stats.totalAssists > 0 ||
       player.stats.totalDeaths > 0 ||
       player.stats.totalMinionKills > 0 ||
-      player.stats.totalGoldEarned > 0
+      player.stats.totalGoldEarned > 0 ||
+      player.stats.level !== undefined
     );
     
     return (
@@ -709,8 +719,16 @@ const hasAnyPlayerLoggedStat = (statName: 'totalKills' | 'totalDeaths' | 'totalA
             <div className="flex justify-between items-start">
               <div className="text-xl font-bold mb-1 flex items-center">
                 {player.hero?.name || 'Unknown Hero'}
-                {/* Show hero complexity with shield icon instead of star */}
-         
+                {/* Add player level with shield icon if available */}
+                {player.stats?.level && (
+                  <span className="ml-2 flex items-center" title={`Level ${player.stats.level}`}>
+                    <Shield 
+                      size={16} 
+                      className={`${player.team === Team.Titans ? 'text-blue-300' : 'text-red-300'} mr-1`} 
+                    />
+                    {player.stats.level}
+                  </span>
+                )}
               </div>
               
               {/* Status indicators - moved to top right corner of card content */}

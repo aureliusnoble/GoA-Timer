@@ -586,66 +586,68 @@ function AppContent() {
   };
 
   // Add a new player
-  const addPlayer = (team: Team) => {
-    // Don't add more than 10 players
-    if (localPlayers.length >= 10) {
-      return;
+// Add a new player
+const addPlayer = (team: Team) => {
+  // Don't add more than 10 players
+  if (localPlayers.length >= 10) {
+    return;
+  }
+  
+  playSound('buttonClick');
+  
+  // Determine lane for 8+ player games or 6 players with double lane enabled
+  let lane: Lane | undefined = undefined;
+  const hasDoubleLane = localPlayers.length >= 7 || 
+                        (localPlayers.length === 5 && useDoubleLaneFor6Players && gameLength === GameLength.Long);
+  
+  if (hasDoubleLane) {
+    // If we're adding the 7th or 8th player, or 6th with double lane enabled, assign lanes to everyone
+    if (localPlayers.length === 6) {
+      // We need to assign lanes to the first 6 players too
+      const updatedPlayers = localPlayers.map((player, index) => ({
+        ...player,
+        lane: index < 3 ? Lane.Top : Lane.Bottom
+      }));
+      setLocalPlayers(updatedPlayers);
+    } 
+    
+    // For the new player, assign to top or bottom lane
+    if (localPlayers.length === 5 && useDoubleLaneFor6Players && gameLength === GameLength.Long) {
+      lane = Lane.Top; // 6th player with double lane goes to top lane
+    } else if (localPlayers.length === 6) {
+      lane = Lane.Top; // 7th player goes to top lane
+    } else if (localPlayers.length === 7) {
+      lane = Lane.Bottom; // 8th player goes to bottom lane
+    } else if (localPlayers.length >= 8) {
+      // For 9th and 10th players, alternate lanes
+      lane = localPlayers.length % 2 === 0 ? Lane.Top : Lane.Bottom;
     }
-    
-    playSound('buttonClick');
-    
-    // Determine lane for 8+ player games or 6 players with double lane enabled
-    let lane: Lane | undefined = undefined;
-    const hasDoubleLane = localPlayers.length >= 7 || 
-                          (localPlayers.length === 5 && useDoubleLaneFor6Players && gameLength === GameLength.Long);
-    
-    if (hasDoubleLane) {
-      // If we're adding the 7th or 8th player, or 6th with double lane enabled, assign lanes to everyone
-      if (localPlayers.length === 6) {
-        // We need to assign lanes to the first 6 players too
-        const updatedPlayers = localPlayers.map((player, index) => ({
-          ...player,
-          lane: index < 3 ? Lane.Top : Lane.Bottom
-        }));
-        setLocalPlayers(updatedPlayers);
-      } 
-      
-      // For the new player, assign to top or bottom lane
-      if (localPlayers.length === 5 && useDoubleLaneFor6Players && gameLength === GameLength.Long) {
-        lane = Lane.Top; // 6th player with double lane goes to top lane
-      } else if (localPlayers.length === 6) {
-        lane = Lane.Top; // 7th player goes to top lane
-      } else if (localPlayers.length === 7) {
-        lane = Lane.Bottom; // 8th player goes to bottom lane
-      } else if (localPlayers.length >= 8) {
-        // For 9th and 10th players, alternate lanes
-        lane = localPlayers.length % 2 === 0 ? Lane.Top : Lane.Bottom;
-      }
-    }
-    
-    // Initialize player with default stats
-    const newPlayer: Player = {
-      id: localPlayers.length + 1,
-      team,
-      hero: null,
-      lane,
-      name: '', // Initialize with empty name
-      stats: {
-        totalGoldEarned: 0,
-        totalKills: 0,
-        totalAssists: 0,
-        totalDeaths: 0,
-        totalMinionKills: 0
-      }
-    };
-    
-    setLocalPlayers([...localPlayers, newPlayer]);
-    
-    // Enforce Long game for 8+ players
-    if (localPlayers.length >= 7 && gameLength === GameLength.Quick) {
-      setGameLength(GameLength.Long);
+  }
+  
+  // Initialize player with default stats including level
+  const newPlayer: Player = {
+    id: localPlayers.length + 1,
+    team,
+    hero: null,
+    lane,
+    name: '', // Initialize with empty name
+    stats: {
+      totalGoldEarned: 0,
+      totalKills: 0,
+      totalAssists: 0,
+      totalDeaths: 0,
+      totalMinionKills: 0,
+      level: 1 // Initialize with level 1
     }
   };
+  
+  setLocalPlayers([...localPlayers, newPlayer]);
+  
+  // Enforce Long game for 8+ players
+  if (localPlayers.length >= 7 && gameLength === GameLength.Quick) {
+    setGameLength(GameLength.Long);
+  }
+};
 
   // Remove a player
   const removePlayer = (playerId: number) => {
@@ -1302,65 +1304,68 @@ function AppContent() {
   };
 
   // Start the game with the specified players
-  const startGameWithPlayers = (playersToUse: Player[]) => {
-    // Calculate total player count
-    const playerCount = playersToUse.length;
-    
-    // IMPORTANT FIX: Reset player stats for the new game
-    const playersWithResetStats = playersToUse.map(player => ({
-      ...player,
-      stats: {
-        totalGoldEarned: 0,
-        totalKills: 0,
-        totalAssists: 0,
-        totalDeaths: 0,
-        totalMinionKills: 0
-      }
-    }));
-    
-    // Update local players with reset stats
-    setLocalPlayers(playersWithResetStats);
-    players = playersWithResetStats;
-    
-    // Set initial lives and wave counters
-    const laneState = getInitialLaneState(gameLength, playerCount, useDoubleLaneFor6Players);
-    const teamLives = calculateTeamLives(gameLength, playerCount, useDoubleLaneFor6Players);
-    
-    // Create initial game state
-    const initialState: GameState = {
-      round: 1,
-      turn: 1,
-      gameLength: gameLength,
-      waves: laneState.hasMultipleLanes 
-        ? { 
-            [Lane.Top]: laneState.top!,
-            [Lane.Bottom]: laneState.bottom!
-          }
-        : { [Lane.Single]: laneState.single! },
-      teamLives: {
-        [Team.Titans]: teamLives,
-        [Team.Atlanteans]: teamLives
-      },
-      currentPhase: 'strategy',
-      activeHeroIndex: -1,
-      coinSide: gameState.coinSide,
-      hasMultipleLanes: laneState.hasMultipleLanes,
-      completedTurns: [], // Initialize empty array for completed turn tracking
-      allPlayersMoved: false // Initialize to false
-    };
-    
-    // Set game state and mark game as started
-    dispatch({ type: 'START_GAME', payload: initialState });
-    setGameStarted(true);
-    setStrategyTimerActive(true);
-    setStrategyTimeRemaining(strategyTime);
-    setIsDraftingMode(false);
-    
-    // Clear any saved game since we're starting fresh
-    gameStorageService.clearGame().catch(console.error);
-    
-    playSound('turnStart');
+
+// Start the game with the specified players
+const startGameWithPlayers = (playersToUse: Player[]) => {
+  // Calculate total player count
+  const playerCount = playersToUse.length;
+  
+  // IMPORTANT FIX: Reset player stats for the new game while preserving levels
+  const playersWithResetStats = playersToUse.map(player => ({
+    ...player,
+    stats: {
+      totalGoldEarned: 0,
+      totalKills: 0,
+      totalAssists: 0,
+      totalDeaths: 0,
+      totalMinionKills: 0,
+      level: player.stats?.level || 1 // Preserve existing level or set default
+    }
+  }));
+  
+  // Update local players with reset stats
+  setLocalPlayers(playersWithResetStats);
+  players = playersWithResetStats;
+  
+  // Set initial lives and wave counters
+  const laneState = getInitialLaneState(gameLength, playerCount, useDoubleLaneFor6Players);
+  const teamLives = calculateTeamLives(gameLength, playerCount, useDoubleLaneFor6Players);
+  
+  // Create initial game state
+  const initialState: GameState = {
+    round: 1,
+    turn: 1,
+    gameLength: gameLength,
+    waves: laneState.hasMultipleLanes 
+      ? { 
+          [Lane.Top]: laneState.top!,
+          [Lane.Bottom]: laneState.bottom!
+        }
+      : { [Lane.Single]: laneState.single! },
+    teamLives: {
+      [Team.Titans]: teamLives,
+      [Team.Atlanteans]: teamLives
+    },
+    currentPhase: 'strategy',
+    activeHeroIndex: -1,
+    coinSide: gameState.coinSide,
+    hasMultipleLanes: laneState.hasMultipleLanes,
+    completedTurns: [], // Initialize empty array for completed turn tracking
+    allPlayersMoved: false // Initialize to false
   };
+  
+  // Set game state and mark game as started
+  dispatch({ type: 'START_GAME', payload: initialState });
+  setGameStarted(true);
+  setStrategyTimerActive(true);
+  setStrategyTimeRemaining(strategyTime);
+  setIsDraftingMode(false);
+  
+  // Clear any saved game since we're starting fresh
+  gameStorageService.clearGame().catch(console.error);
+  
+  playSound('turnStart');
+};
 
   // Cancel drafting and return to setup
   const cancelDrafting = () => {
@@ -1531,33 +1536,35 @@ function AppContent() {
   };
 
   // NEW: Handle saving player round stats
-  const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStats }) => {
-    // Update the players with new stats
-    const updatedPlayers = localPlayers.map(player => {
-      const playerRoundStats = roundStats[player.id];
-      
-      if (playerRoundStats) {
-        // Calculate updated totals
-        const updatedStats: PlayerStats = {
-          totalGoldEarned: (player.stats?.totalGoldEarned || 0) + playerRoundStats.goldCollected,
-          totalKills: (player.stats?.totalKills || 0) + playerRoundStats.kills,
-          totalAssists: (player.stats?.totalAssists || 0) + playerRoundStats.assists,
-          totalDeaths: (player.stats?.totalDeaths || 0) + playerRoundStats.deaths,
-          totalMinionKills: (player.stats?.totalMinionKills || 0) + playerRoundStats.minionKills
-        };
-        
-        return {
-          ...player,
-          stats: updatedStats
-        };
-      }
-      
-      return player;
-    });
+// NEW: Handle saving player round stats
+const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStats }) => {
+  // Update the players with new stats
+  const updatedPlayers = localPlayers.map(player => {
+    const playerRoundStats = roundStats[player.id];
     
-    setLocalPlayers(updatedPlayers);
-    players = updatedPlayers;
-  };
+    if (playerRoundStats) {
+      // Calculate updated totals
+      const updatedStats: PlayerStats = {
+        totalGoldEarned: (player.stats?.totalGoldEarned || 0) + playerRoundStats.goldCollected,
+        totalKills: (player.stats?.totalKills || 0) + playerRoundStats.kills,
+        totalAssists: (player.stats?.totalAssists || 0) + playerRoundStats.assists,
+        totalDeaths: (player.stats?.totalDeaths || 0) + playerRoundStats.deaths,
+        totalMinionKills: (player.stats?.totalMinionKills || 0) + playerRoundStats.minionKills,
+        level: playerRoundStats.level // Update the player level if provided
+      };
+      
+      return {
+        ...player,
+        stats: updatedStats
+      };
+    }
+    
+    return player;
+  });
+  
+  setLocalPlayers(updatedPlayers);
+  players = updatedPlayers;
+};
 
   // Handle strategy timer
   useEffect(() => {

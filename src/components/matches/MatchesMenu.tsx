@@ -165,7 +165,7 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
   // Define detailed tooltips for import modes
   const importTooltips = {
     replace: "This will delete all your existing match history and player statistics and replace them with the imported data. Use this when setting up a new device or completely refreshing your data.",
-    merge: "This will add new matches from the imported file while preserving your existing data. Player stats (like wins and ELO) will be combined. Use this to synchronize data between devices."
+    merge: "This will add new matches from the imported file while preserving your existing data. Any new match records will be added to your match records. Use this to synchronize data between devices."
   };
   
   return (

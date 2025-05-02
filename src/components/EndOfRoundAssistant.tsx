@@ -14,7 +14,8 @@ import {
   ChevronRight,
   ChevronLeft,
   Star,
-  CheckSquare
+  CheckSquare,
+  Shield // Added Shield icon for player level
 } from 'lucide-react';
 import { useSound } from '../context/SoundContext';
 
@@ -24,21 +25,23 @@ interface EndOfRoundAssistantProps {
   isVisible: boolean;
 }
 
-// Stats collected for a single round
+// Stats collected for a single round - Updated to include level
 export interface PlayerRoundStats {
   goldCollected: number;
   kills: number;
   assists: number;
   deaths: number;
   minionKills: number;
+  level?: number; // New field to track player level
 }
 
-// Enum for stat tracking tabs
+// Enum for stat tracking tabs - Updated to include Level
 enum StatTrackingTab {
   Kills,
   Deaths,
   Minions,
-  Gold
+  Gold,
+  Level // New tab for level tracking
 }
 
 const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
@@ -77,7 +80,8 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
           kills: 0,
           assists: 0,
           deaths: 0,
-          minionKills: 0
+          minionKills: 0,
+          level: player.stats?.level || 1 // Initialize with current level or default to 1
         };
       });
       setPlayerStats(initialStats);
@@ -105,6 +109,20 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
     playSound('buttonClick');
     setPlayerStats(prev => {
       const currentValue = prev[playerId]?.[statName] || 0;
+      
+      // Special case for level - keep it between 1 and 10
+      if (statName === 'level') {
+        const newLevel = Math.max(1, Math.min(10, currentValue + delta));
+        return {
+          ...prev,
+          [playerId]: {
+            ...prev[playerId],
+            [statName]: newLevel
+          }
+        };
+      }
+      
+      // For other stats, just ensure they don't go below 0
       const newValue = Math.max(0, currentValue + delta);
       
       return {
@@ -340,7 +358,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
               <p className="text-gray-300 italic">Enter stats for this round only. You only need to enter the stats you are interested in tracking.</p>
               
               {/* Tabs for different stat types */}
-              <div className="flex border-b border-gray-700">
+              <div className="flex border-b border-gray-700 flex-wrap">
                 <button 
                   className={`px-4 py-2 flex items-center ${activeTab === StatTrackingTab.Kills ? 'border-b-2 border-blue-500 text-blue-400' : 'text-gray-400 hover:text-white'}`}
                   onClick={() => changeTab(StatTrackingTab.Kills)}
@@ -364,6 +382,13 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                   onClick={() => changeTab(StatTrackingTab.Gold)}
                 >
                   <Coins size={16} className="mr-2" /> Gold
+                </button>
+                {/* New tab for Level */}
+                <button 
+                  className={`px-4 py-2 flex items-center ${activeTab === StatTrackingTab.Level ? 'border-b-2 border-blue-500 text-blue-400' : 'text-gray-400 hover:text-white'}`}
+                  onClick={() => changeTab(StatTrackingTab.Level)}
+                >
+                  <Shield size={16} className="mr-2" /> Level
                 </button>
               </div>
               
@@ -402,7 +427,15 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                                   )}
                                 </div>
                                 <div>
-                                  <div className="font-medium flex items-center">{player.name} <Star size={14} className="ml-1 text-yellow-500" />{player.hero?.complexity || 1}</div>
+                                  <div className="font-medium flex items-center">
+                                    {player.name} 
+                                    <Star size={14} className="ml-1 text-yellow-500" />{player.hero?.complexity || 1}
+                                    {player.stats?.level && (
+                                      <span className="ml-1 flex items-center">
+                                        <Shield size={14} className="text-blue-300" /> {player.stats.level}
+                                      </span>
+                                    )}
+                                  </div>
                                   <div className="text-xs flex space-x-2">
                                     <span className="flex items-center" title="Kills"><Swords size={12} className="mr-1" />{playerStats[player.id]?.kills || 0}</span>
                                     <span className="flex items-center" title="Assists"><Users size={12} className="mr-1" />{playerStats[player.id]?.assists || 0}</span>
@@ -453,7 +486,15 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                                   )}
                                 </div>
                                 <div>
-                                  <div className="font-medium flex items-center">{player.name} <Star size={14} className="ml-1 text-yellow-500" />{player.hero?.complexity || 1}</div>
+                                  <div className="font-medium flex items-center">
+                                    {player.name} 
+                                    <Star size={14} className="ml-1 text-yellow-500" />{player.hero?.complexity || 1}
+                                    {player.stats?.level && (
+                                      <span className="ml-1 flex items-center">
+                                        <Shield size={14} className="text-red-300" /> {player.stats.level}
+                                      </span>
+                                    )}
+                                  </div>
                                   <div className="text-xs flex space-x-2">
                                     <span className="flex items-center" title="Kills"><Swords size={12} className="mr-1" />{playerStats[player.id]?.kills || 0}</span>
                                     <span className="flex items-center" title="Assists"><Users size={12} className="mr-1" />{playerStats[player.id]?.assists || 0}</span>
@@ -516,7 +557,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                                   )}
                                 </div>
                                 <div>
-                                  <div className="font-medium flex items-center">{player.name} <Star size={14} className="ml-1 text-yellow-500" />{player.hero?.complexity || 1}</div>
+                                  <div className="font-medium flex items-center">{player.name}</div>
                                   <div className="text-xs flex items-center">
                                     <span className="flex items-center" title="Deaths"><Skull size={12} className="mr-1" />{playerStats[player.id]?.deaths || 0}</span>
                                   </div>
@@ -569,7 +610,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                                   )}
                                 </div>
                                 <div>
-                                  <div className="font-medium flex items-center">{player.name} <Star size={14} className="ml-1 text-yellow-500" />{player.hero?.complexity || 1}</div>
+                                  <div className="font-medium flex items-center">{player.name}</div>
                                   <div className="text-xs flex items-center">
                                     <span className="flex items-center" title="Deaths"><Skull size={12} className="mr-1" />{playerStats[player.id]?.deaths || 0}</span>
                                   </div>
@@ -634,7 +675,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                                   )}
                                 </div>
                                 <div>
-                                  <div className="font-medium flex items-center">{player.name} <Star size={14} className="ml-1 text-yellow-500" />{player.hero?.complexity || 1}</div>
+                                  <div className="font-medium flex items-center">{player.name}</div>
                                   <div className="text-xs flex items-center">
                                     <span className="flex items-center" title="Minion Kills"><Bot size={12} className="mr-1" />{playerStats[player.id]?.minionKills || 0}</span>
                                   </div>
@@ -687,7 +728,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                                   )}
                                 </div>
                                 <div>
-                                  <div className="font-medium flex items-center">{player.name} <Star size={14} className="ml-1 text-yellow-500" />{player.hero?.complexity || 1}</div>
+                                  <div className="font-medium flex items-center">{player.name}</div>
                                   <div className="text-xs flex items-center">
                                     <span className="flex items-center" title="Minion Kills"><Bot size={12} className="mr-1" />{playerStats[player.id]?.minionKills || 0}</span>
                                   </div>
@@ -752,7 +793,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                                   )}
                                 </div>
                                 <div>
-                                  <div className="font-medium flex items-center">{player.name} <Star size={14} className="ml-1 text-yellow-500" />{player.hero?.complexity || 1}</div>
+                                  <div className="font-medium flex items-center">{player.name}</div>
                                   <div className="text-xs flex items-center">
                                     <span className="flex items-center" title="Gold Collected"><Coins size={12} className="mr-1" />{playerStats[player.id]?.goldCollected || 0}</span>
                                   </div>
@@ -805,7 +846,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                                   )}
                                 </div>
                                 <div>
-                                  <div className="font-medium flex items-center">{player.name} <Star size={14} className="ml-1 text-yellow-500" />{player.hero?.complexity || 1}</div>
+                                  <div className="font-medium flex items-center">{player.name}</div>
                                   <div className="text-xs flex items-center">
                                     <span className="flex items-center" title="Gold Collected"><Coins size={12} className="mr-1" />{playerStats[player.id]?.goldCollected || 0}</span>
                                   </div>
@@ -837,6 +878,132 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                   </div>
                 )}
                 
+                {/* Level Tab - NEW */}
+                {activeTab === StatTrackingTab.Level && (
+                  <div>
+                    <div className="mb-4 text-sm text-gray-300">
+                      <p>Record player level after purchasing any level ups with gold.</p>
+                    </div>
+                    
+                    {/* Team-based layout for player levels */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Titans */}
+                      <div className="bg-blue-900/30 border border-blue-800 p-4 rounded-lg">
+                        <h4 className="font-bold text-lg mb-3 flex items-center">
+                          <div className="w-3 h-3 rounded-full mr-2 bg-blue-500"></div>
+                          Titans
+                        </h4>
+                        <div className="space-y-2">
+                          {titanPlayers.map(player => (
+                            <div key={player.id} className="flex justify-between items-center bg-blue-900/40 p-2 rounded">
+                              <div className="flex items-center">
+                                <div className="w-8 h-8 bg-gray-300 rounded-full overflow-hidden mr-2">
+                                  {player.hero && (
+                                    <img 
+                                      src={player.hero.icon}
+                                      alt={player.hero.name}
+                                      className="w-full h-full object-cover"
+                                      onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        target.src = 'https://via.placeholder.com/48?text=Hero';
+                                      }}
+                                    />
+                                  )}
+                                </div>
+                                <div>
+                                  <div className="font-medium flex items-center">{player.name}</div>
+                                  <div className="text-xs flex items-center">
+                                    <span className="flex items-center" title="Player Level">
+                                      <Shield size={14} className="mr-1 text-blue-300" />
+                                      Current Level: {player.stats?.level || 1}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <button 
+                                  className="bg-gray-700 hover:bg-gray-600 p-1 rounded"
+                                  onClick={() => adjustStat(player.id, 'level', -1)}
+                                  disabled={playerStats[player.id]?.level === 1}
+                                >
+                                  <CircleMinus size={16} />
+                                </button>
+                                <div className="w-8 text-center font-bold">
+                                  {playerStats[player.id]?.level || 1}
+                                </div>
+                                <button 
+                                  className="bg-gray-700 hover:bg-gray-600 p-1 rounded"
+                                  onClick={() => adjustStat(player.id, 'level', 1)}
+                                  disabled={playerStats[player.id]?.level === 10}
+                                >
+                                  <CirclePlus size={16} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {/* Atlanteans */}
+                      <div className="bg-red-900/30 border border-red-800 p-4 rounded-lg">
+                        <h4 className="font-bold text-lg mb-3 flex items-center">
+                          <div className="w-3 h-3 rounded-full mr-2 bg-red-500"></div>
+                          Atlanteans
+                        </h4>
+                        <div className="space-y-2">
+                          {atlanteanPlayers.map(player => (
+                            <div key={player.id} className="flex justify-between items-center bg-red-900/40 p-2 rounded">
+                              <div className="flex items-center">
+                                <div className="w-8 h-8 bg-gray-300 rounded-full overflow-hidden mr-2">
+                                  {player.hero && (
+                                    <img 
+                                      src={player.hero.icon}
+                                      alt={player.hero.name}
+                                      className="w-full h-full object-cover"
+                                      onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        target.src = 'https://via.placeholder.com/48?text=Hero';
+                                      }}
+                                    />
+                                  )}
+                                </div>
+                                <div>
+                                  <div className="font-medium flex items-center">{player.name}</div>
+                                  <div className="text-xs flex items-center">
+                                    <span className="flex items-center" title="Player Level">
+                                      <Shield size={14} className="mr-1 text-red-300" />
+                                      Current Level: {player.stats?.level || 1}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <button 
+                                  className="bg-gray-700 hover:bg-gray-600 p-1 rounded"
+                                  onClick={() => adjustStat(player.id, 'level', -1)}
+                                  disabled={playerStats[player.id]?.level === 1}
+                                >
+                                  <CircleMinus size={16} />
+                                </button>
+                                <div className="w-8 text-center font-bold">
+                                  {playerStats[player.id]?.level || 1}
+                                </div>
+                                <button 
+                                  className="bg-gray-700 hover:bg-gray-600 p-1 rounded"
+                                  onClick={() => adjustStat(player.id, 'level', 1)}
+                                  disabled={playerStats[player.id]?.level === 10}
+                                >
+                                  <CirclePlus size={16} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
                 {/* Navigation buttons for tabs */}
                 <div className="flex justify-between mt-4">
                   <button 
@@ -852,10 +1019,10 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                   <button 
                     className="flex items-center px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded"
                     onClick={() => {
-                      const newTab = Math.min(StatTrackingTab.Gold, activeTab + 1);
+                      const newTab = Math.min(StatTrackingTab.Level, activeTab + 1);
                       changeTab(newTab);
                     }}
-                    disabled={activeTab === StatTrackingTab.Gold}
+                    disabled={activeTab === StatTrackingTab.Level}
                   >
                     Next <ChevronRight size={16} className="ml-1" />
                   </button>
