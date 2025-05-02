@@ -553,10 +553,7 @@ const hasAnyPlayerLoggedStat = (statName: 'totalKills' | 'totalDeaths' | 'totalA
                     <div>
                       <div className="flex items-center text-2xl font-bold">
                         {activePlayer.hero.name}
-                        <span className="ml-2 text-sm bg-yellow-500/70 text-white px-1.5 py-0.5 rounded-full">
-                          <Shield size={14} className="inline mr-0.5" />
-                          {activePlayer.hero.complexity}
-                        </span>
+                    
                       </div>
                       <div className="text-lg text-gray-300">{activePlayer.name}</div>
                     </div>
@@ -713,10 +710,7 @@ const hasAnyPlayerLoggedStat = (statName: 'totalKills' | 'totalDeaths' | 'totalA
               <div className="text-xl font-bold mb-1 flex items-center">
                 {player.hero?.name || 'Unknown Hero'}
                 {/* Show hero complexity with shield icon instead of star */}
-                <span className="ml-2 text-sm bg-yellow-500/70 text-white px-1.5 py-0.5 rounded-full">
-                  <Shield size={14} className="inline mr-0.5" />
-                  {heroComplexity}
-                </span>
+         
               </div>
               
               {/* Status indicators - moved to top right corner of card content */}
