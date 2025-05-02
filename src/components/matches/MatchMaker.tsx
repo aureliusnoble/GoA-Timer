@@ -1,10 +1,12 @@
 // src/components/matches/MatchMaker.tsx
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Users, Shuffle, Award, Info, Plus, ArrowRight, ArrowLeft, RefreshCw, Play, Trophy, Clock } from 'lucide-react';
+import { ChevronLeft, Users, Shuffle, Award, Info, Plus, ArrowRight, ArrowLeft, RefreshCw, Play, Trophy, Clock, ChevronUp, ChevronDown } from 'lucide-react';
 import { DBPlayer } from '../../services/DatabaseService';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
 import EnhancedTooltip from '../common/EnhancedTooltip';
+
+export type MatchesView = 'menu' | 'player-stats' | 'match-history' | 'match-maker';
 
 interface MatchMakerProps {
   onBack: () => void;
@@ -22,6 +24,8 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
   const [isBalancing, setIsBalancing] = useState<boolean>(false);
   const [manualMode, setManualMode] = useState<boolean>(false);
   const [winProbability, setWinProbability] = useState<number | null>(null);
+  // New state for collapsible win probability section
+  const [showWinProbability, setShowWinProbability] = useState<boolean>(false);
   
   // Load player data on component mount
   useEffect(() => {
@@ -105,6 +109,9 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
       
       setTeam1(team1Players);
       setTeam2(team2Players);
+      
+      // Keep win probability collapsed by default
+      setShowWinProbability(false);
     } catch (error) {
       console.error('Error balancing teams:', error);
     } finally {
@@ -132,6 +139,9 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
       
       setTeam1(team1Players);
       setTeam2(team2Players);
+      
+      // Keep win probability collapsed by default
+      setShowWinProbability(false);
     } catch (error) {
       console.error('Error balancing teams by experience:', error);
     } finally {
@@ -154,6 +164,9 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     const halfway = Math.ceil(shuffled.length / 2);
     setTeam1(shuffled.slice(0, halfway));
     setTeam2(shuffled.slice(halfway));
+    
+    // Keep win probability collapsed by default
+    setShowWinProbability(false);
   };
   
   // Reset teams
@@ -161,6 +174,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     playSound('buttonClick');
     setTeam1([]);
     setTeam2([]);
+    setShowWinProbability(false);
   };
   
   // Reset selection
@@ -169,6 +183,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     setSelectedPlayers([]);
     setTeam1([]);
     setTeam2([]);
+    setShowWinProbability(false);
   };
   
   // Toggle manual team assignment mode
@@ -179,9 +194,16 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     if (manualMode) {
       setTeam1([]);
       setTeam2([]);
+      setShowWinProbability(false);
     }
     
     setManualMode(!manualMode);
+  };
+  
+  // Toggle win probability display
+  const toggleWinProbability = () => {
+    playSound('buttonClick');
+    setShowWinProbability(!showWinProbability);
   };
   
   // Manual team assignment
@@ -206,9 +228,14 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
         setTeam2([...team2, player]);
       }
     }
+    
+    // Keep win probability collapsed by default when teams change
+    if ((team1.length > 0 || team === 1) && (team2.length > 0 || team === 2)) {
+      setShowWinProbability(false);
+    }
   };
   
-  // NEW: Function to handle using the teams in game setup
+  // Function to handle using the teams in game setup
   const handleUseTeams = () => {
     if (onUseTeams && team1.length > 0 && team2.length > 0) {
       playSound('phaseChange');
@@ -231,6 +258,15 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     if (elo >= 1200) return { tier: 'Gold', color: 'text-yellow-400' };
     if (elo >= 1000) return { tier: 'Silver', color: 'text-gray-400' };
     return { tier: 'Bronze', color: 'text-orange-400' };
+  };
+  
+  // Tooltip text definitions for buttons
+  const tooltips = {
+    ranking: "Balance teams based on player ELO ratings to create fair matches. Higher ELO players will be evenly distributed to make teams equally skilled.",
+    experience: "Balance teams based on player experience (total games played), ensuring both teams have a mix of experienced and newer players.",
+    random: "Create random teams without consideration for player skill or experience. Each player has an equal chance to be on either team.",
+    manual: "Enable manual team assignment mode to create teams by hand. You can move players between teams freely to create custom matchups.",
+    reset: "Reset both teams and start over. Player selection will be maintained but no players will be assigned to teams."
   };
   
   return (
@@ -325,73 +361,86 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
             )}
           </div>
           
-          {/* Team Generation Controls */}
+          {/* Team Generation Controls - SIMPLIFIED LAYOUT */}
           <div className="mb-8">
-            {/* Balance teams group with header */}
-            <div className="grid grid-cols-1 gap-4">
-              {/* Balance Teams Header */}
-              <div className="flex items-center bg-gray-700/80 p-2 rounded-t-lg mx-auto">
-                <Award size={18} className="mr-2 text-blue-400" />
-                <span className="font-medium">Balance Teams</span>
+            {/* Balance Teams Box */}
+            <div className="mb-4">
+              <div className="bg-gray-700/30 p-4 rounded-lg mx-auto max-w-2xl">
+                {/* Balance Teams Header */}
+                <div className="flex items-center justify-center bg-gray-700/80 p-2 rounded-t-lg mb-3">
+                  <Award size={18} className="mr-2 text-blue-400" />
+                  <span className="font-medium">Balance Teams</span>
+                </div>
+                
+                {/* Balance Team Buttons - Horizontal row of 3 buttons, centered */}
+                <div className="flex justify-center gap-3">
+                  {/* Balance by Ranking Button */}
+                  <EnhancedTooltip text={tooltips.ranking} maxWidth="max-w-md">
+                    <button
+                      onClick={balanceTeams}
+                      disabled={selectedPlayers.length < 4 || isBalancing || manualMode}
+                      className={`px-4 py-3 rounded-lg flex items-center justify-center ${
+                        selectedPlayers.length < 4 || isBalancing || manualMode 
+                          ? 'opacity-50 cursor-not-allowed bg-gray-600' 
+                          : 'bg-blue-600 hover:bg-blue-500'
+                      }`}
+                    >
+                      {isBalancing ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      ) : (
+                        <Trophy size={18} className="mr-2" />
+                      )}
+                      <span>On Ranking</span>
+                    </button>
+                  </EnhancedTooltip>
+                  
+                  {/* Balance by Experience Button */}
+                  <EnhancedTooltip text={tooltips.experience} maxWidth="max-w-md">
+                    <button
+                      onClick={balanceTeamsByExperience}
+                      disabled={selectedPlayers.length < 4 || isBalancing || manualMode}
+                      className={`px-4 py-3 rounded-lg flex items-center justify-center ${
+                        selectedPlayers.length < 4 || isBalancing || manualMode 
+                          ? 'opacity-50 cursor-not-allowed bg-gray-600' 
+                          : 'bg-green-600 hover:bg-green-500'
+                      }`}
+                    >
+                      {isBalancing ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      ) : (
+                        <Clock size={18} className="mr-2" />
+                      )}
+                      <span>On Experience</span>
+                    </button>
+                  </EnhancedTooltip>
+                  
+                  {/* Random Teams Button */}
+                  <EnhancedTooltip text={tooltips.random} maxWidth="max-w-md">
+                    <button
+                      onClick={randomizeTeams}
+                      disabled={selectedPlayers.length < 4 || manualMode}
+                      className={`px-4 py-3 rounded-lg flex items-center justify-center ${
+                        selectedPlayers.length < 4 || manualMode 
+                          ? 'opacity-50 cursor-not-allowed bg-gray-600' 
+                          : 'bg-purple-600 hover:bg-purple-500'
+                      }`}
+                    >
+                      <Shuffle size={18} className="mr-2" />
+                      <span>Random</span>
+                    </button>
+                  </EnhancedTooltip>
+                </div>
               </div>
-              
-              {/* Balance Team Buttons */}
-              <div className="flex flex-wrap gap-4 justify-center">
-                {/* Balance by Ranking Button */}
-                <button
-                  onClick={balanceTeams}
-                  disabled={selectedPlayers.length < 4 || isBalancing || manualMode}
-                  className={`px-6 py-3 rounded-lg flex items-center ${
-                    selectedPlayers.length < 4 || isBalancing || manualMode 
-                      ? 'opacity-50 cursor-not-allowed bg-gray-600' 
-                      : 'bg-blue-600 hover:bg-blue-500'
-                  }`}
-                >
-                  {isBalancing ? (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  ) : (
-                    <Trophy size={18} className="mr-2" />
-                  )}
-                  <span>On Ranking</span>
-                </button>
-                
-                {/* Balance by Experience Button */}
-                <button
-                  onClick={balanceTeamsByExperience}
-                  disabled={selectedPlayers.length < 4 || isBalancing || manualMode}
-                  className={`px-6 py-3 rounded-lg flex items-center ${
-                    selectedPlayers.length < 4 || isBalancing || manualMode 
-                      ? 'opacity-50 cursor-not-allowed bg-gray-600' 
-                      : 'bg-green-600 hover:bg-green-500'
-                  }`}
-                >
-                  {isBalancing ? (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  ) : (
-                    <Clock size={18} className="mr-2" />
-                  )}
-                  <span>On Experience</span>
-                </button>
-                
-                {/* Random Teams Button */}
-                <button
-                  onClick={randomizeTeams}
-                  disabled={selectedPlayers.length < 4 || manualMode}
-                  className={`px-6 py-3 rounded-lg flex items-center ${
-                    selectedPlayers.length < 4 || manualMode 
-                      ? 'opacity-50 cursor-not-allowed bg-gray-600' 
-                      : 'bg-purple-600 hover:bg-purple-500'
-                  }`}
-                >
-                  <Shuffle size={18} className="mr-2" />
-                  <span>Random Teams</span>
-                </button>
-                
-                {/* Manual Mode Button */}
+            </div>
+            
+            {/* Manual Mode and Reset Teams Buttons - Centered below Balance Teams */}
+            <div className="flex justify-center gap-4">
+              {/* Manual Mode Button */}
+              <EnhancedTooltip text={tooltips.manual} maxWidth="max-w-md">
                 <button
                   onClick={toggleManualMode}
                   disabled={selectedPlayers.length < 4}
-                  className={`px-6 py-3 rounded-lg flex items-center ${
+                  className={`px-4 py-3 rounded-lg flex items-center justify-center ${
                     selectedPlayers.length < 4 
                       ? 'opacity-50 cursor-not-allowed bg-gray-600' 
                       : manualMode 
@@ -400,20 +449,22 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                   }`}
                 >
                   <Users size={18} className="mr-2" />
-                  <span>{manualMode ? 'Manual Mode (Enabled)' : 'Manual Mode'}</span>
+                  <span>Manual Mode</span>
                 </button>
-                
-                {/* Reset Teams Button */}
-                {(team1.length > 0 || team2.length > 0) && (
+              </EnhancedTooltip>
+              
+              {/* Reset Teams Button - Only shown when teams exist */}
+              {(team1.length > 0 || team2.length > 0) && (
+                <EnhancedTooltip text={tooltips.reset} maxWidth="max-w-md">
                   <button
                     onClick={resetTeams}
-                    className="px-6 py-3 bg-red-700 hover:bg-red-600 rounded-lg flex items-center"
+                    className="px-4 py-3 bg-red-700 hover:bg-red-600 rounded-lg flex items-center justify-center"
                   >
                     <RefreshCw size={18} className="mr-2" />
                     <span>Reset Teams</span>
                   </button>
-                )}
-              </div>
+                </EnhancedTooltip>
+              )}
             </div>
           </div>
           
@@ -446,7 +497,6 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                           </div>
                         </div>
                         
-                        {/* UPDATED: Changed X to ArrowRight icon */}
                         {manualMode && (
                           <EnhancedTooltip text="Move to Atlanteans team">
                             <button
@@ -488,7 +538,6 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                           </div>
                         </div>
                         
-                        {/* UPDATED: Changed X to ArrowLeft icon */}
                         {manualMode && (
                           <EnhancedTooltip text="Move to Titans team">
                             <button
@@ -506,7 +555,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                 </div>
               </div>
               
-              {/* NEW: "Use These Teams" button */}
+              {/* Use These Teams Button */}
               {team1.length > 0 && team2.length > 0 && onUseTeams && (
                 <div className="mt-6 flex justify-center">
                   <button
@@ -562,45 +611,67 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
             </div>
           )}
           
-          {/* Win Probability Display */}
+          {/* Win Probability Display - Made Collapsible */}
           {winProbability !== null && team1.length > 0 && team2.length > 0 && (
-            <div className="mt-8 p-4 bg-gray-700 rounded-lg">
-              <h3 className="font-semibold mb-3">Predicted Win Probability</h3>
+            <div className="mt-8 bg-gray-700 rounded-lg overflow-hidden">
+              {/* Collapsible Header */}
+              <div 
+                className="p-4 bg-gray-700 cursor-pointer flex justify-between items-center"
+                onClick={toggleWinProbability}
+              >
+                <h3 className="font-semibold flex items-center">
+                  <Award size={16} className="mr-2 text-yellow-400" />
+                  Predicted Win Probability
+                </h3>
+                {showWinProbability ? (
+                  <ChevronUp size={18} />
+                ) : (
+                  <ChevronDown size={18} />
+                )}
+              </div>
               
-              <div className="flex items-center mb-2">
-                <div className="w-24 text-blue-400 font-medium">Titans</div>
-                <div className="flex-grow h-5 bg-gray-800 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-blue-600" 
-                    style={{ width: `${winProbability}%` }}
-                  ></div>
+              {/* Collapsible Content */}
+              {showWinProbability && (
+                <div className="p-4 border-t border-gray-600">
+                  <div className="flex items-center mb-2">
+                    <div className="w-24 text-blue-400 font-medium">Titans</div>
+                    <div className="flex-grow h-5 bg-gray-800 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-blue-600" 
+                        style={{ width: `${winProbability}%` }}
+                      ></div>
+                    </div>
+                    <div className="w-12 ml-3 font-medium">{winProbability}%</div>
+                  </div>
+                  
+                  <div className="flex items-center">
+                    <div className="w-24 text-red-400 font-medium">Atlanteans</div>
+                    <div className="flex-grow h-5 bg-gray-800 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-red-600" 
+                        style={{ width: `${100 - winProbability}%` }}
+                      ></div>
+                    </div>
+                    <div className="w-12 ml-3 font-medium">{100 - winProbability}%</div>
+                  </div>
+                  
+                  <div className="mt-4 text-sm text-gray-300">
+                    Prediction based on team average ELO ratings. Closer to 50% means more balanced teams.
+                  </div>
                 </div>
-                <div className="w-12 ml-3 font-medium">{winProbability}%</div>
-              </div>
-              
-              <div className="flex items-center">
-                <div className="w-24 text-red-400 font-medium">Atlanteans</div>
-                <div className="flex-grow h-5 bg-gray-800 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-red-600" 
-                    style={{ width: `${100 - winProbability}%` }}
-                  ></div>
-                </div>
-                <div className="w-12 ml-3 font-medium">{100 - winProbability}%</div>
-              </div>
-              
-              <div className="mt-4 text-sm text-gray-300">
-                Prediction based on team average ELO ratings. Closer to 50% means more balanced teams.
-              </div>
+              )}
             </div>
           )}
           
           {/* Manual Mode Instructions */}
           {manualMode && (
             <div className="mt-6 p-4 bg-gray-700/50 rounded-lg text-sm text-gray-300">
-              <p className="flex items-center">
-                <Info size={16} className="mr-2 text-blue-400" />
-                Manual Mode allows you to assign players to teams directly. Use the arrow buttons to move players between teams.
+              <p className="flex items-start">
+                <Info size={16} className="mr-2 text-blue-400 mt-0.5 flex-shrink-0" />
+                <span>
+                  Manual Mode allows you to assign players to teams directly. 
+                  Use the arrow buttons to move players between teams or the team buttons for unassigned players.
+                </span>
               </p>
             </div>
           )}
