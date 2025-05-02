@@ -28,6 +28,7 @@ export interface DBPlayer {
   elo: number;
   lastPlayed: Date;
   dateCreated: Date;
+  deviceId?: string; // New field to track origin device
 }
 
 // Match database model
@@ -39,6 +40,7 @@ export interface DBMatch {
   doubleLanes: boolean;
   titanPlayers: number; // Count of players
   atlanteanPlayers: number; // Count of players
+  deviceId?: string; // New field to track origin device
 }
 
 // MatchPlayer database model (connects players to matches)
@@ -55,6 +57,7 @@ export interface DBMatchPlayer {
   assists?: number;
   goldEarned?: number;
   minionKills?: number;
+  deviceId?: string; // New field to track origin device
 }
 
 // Export data model (for import/export)
@@ -141,6 +144,27 @@ class DatabaseService {
   }
 
   /**
+   * Get or generate a unique device ID for this device
+   */
+  private getDeviceId(): string {
+    const storageKey = 'guards-of-atlantis-device-id';
+    
+    // Try to get existing device ID from localStorage
+    let deviceId = localStorage.getItem(storageKey);
+    
+    // If none exists, create one with timestamp and random component
+    if (!deviceId) {
+      const timestamp = Date.now().toString(36);
+      const randomPart = Math.random().toString(36).substring(2, 10);
+      
+      deviceId = `device_${timestamp}_${randomPart}`;
+      localStorage.setItem(storageKey, deviceId);
+    }
+    
+    return deviceId;
+  }
+
+  /**
    * Get a player by ID (name)
    */
   async getPlayer(playerId: string): Promise<DBPlayer | null> {
@@ -168,6 +192,11 @@ class DatabaseService {
   async savePlayer(player: DBPlayer): Promise<void> {
     if (!this.db) await this.initialize();
     if (!this.db) throw new Error('Database not initialized');
+
+    // Add device ID if missing
+    if (!player.deviceId) {
+      player.deviceId = this.getDeviceId();
+    }
 
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction([TABLES.PLAYERS], 'readwrite');
@@ -262,6 +291,11 @@ class DatabaseService {
       match.id = generateUUID();
     }
 
+    // Add device ID if missing
+    if (!match.deviceId) {
+      match.deviceId = this.getDeviceId();
+    }
+
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction([TABLES.MATCHES], 'readwrite');
       const matchStore = transaction.objectStore(TABLES.MATCHES);
@@ -332,6 +366,11 @@ class DatabaseService {
     // If no ID, generate one
     if (!matchPlayer.id) {
       matchPlayer.id = generateUUID();
+    }
+
+    // Add device ID if missing
+    if (!matchPlayer.deviceId) {
+      matchPlayer.deviceId = this.getDeviceId();
     }
 
     return new Promise((resolve, reject) => {
@@ -458,7 +497,8 @@ class DatabaseService {
           losses: 0,
           elo: INITIAL_ELO,
           lastPlayed: new Date(),
-          dateCreated: new Date()
+          dateCreated: new Date(),
+          deviceId: this.getDeviceId()
         };
         await this.savePlayer(newPlayer);
         return newPlayer;
@@ -485,7 +525,8 @@ class DatabaseService {
       gameLength: matchData.gameLength,
       doubleLanes: matchData.doubleLanes,
       titanPlayers: titanPlayers.length,
-      atlanteanPlayers: atlanteanPlayers.length
+      atlanteanPlayers: atlanteanPlayers.length,
+      deviceId: this.getDeviceId()
     };
     
     // Save the match
@@ -525,7 +566,8 @@ class DatabaseService {
         deaths: playerInfo.deaths,
         assists: playerInfo.assists,
         goldEarned: playerInfo.goldEarned,
-        minionKills: playerInfo.minionKills
+        minionKills: playerInfo.minionKills,
+        deviceId: this.getDeviceId()
       };
       
       await this.saveMatchPlayer(matchPlayer);
@@ -680,34 +722,135 @@ class DatabaseService {
   }
 
   /**
-   * Import data (overwrites existing data)
+   * Import data with an option to replace or merge
    */
-  async importData(data: ExportData): Promise<boolean> {
+  async importData(data: ExportData, mode: 'replace' | 'merge' = 'replace'): Promise<boolean> {
     if (!this.db) await this.initialize();
     if (!this.db) throw new Error('Database not initialized');
     
     try {
-      // Clear existing data
-      await this.clearAllData();
-      
-      // Import players
-      for (const player of data.players) {
-        await this.savePlayer(player);
-      }
-      
-      // Import matches
-      for (const match of data.matches) {
-        await this.saveMatch(match);
-      }
-      
-      // Import match players
-      for (const matchPlayer of data.matchPlayers) {
-        await this.saveMatchPlayer(matchPlayer);
+      if (mode === 'replace') {
+        // Original behavior: Clear existing data and replace
+        await this.clearAllData();
+        
+        // Import players
+        for (const player of data.players) {
+          await this.savePlayer(player);
+        }
+        
+        // Import matches
+        for (const match of data.matches) {
+          await this.saveMatch(match);
+        }
+        
+        // Import match players
+        for (const matchPlayer of data.matchPlayers) {
+          await this.saveMatchPlayer(matchPlayer);
+        }
+      } else {
+        // New behavior: Merge data
+        await this.mergeData(data);
       }
       
       return true;
     } catch (error) {
       console.error('Error importing data:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Merge imported data with existing data
+   */
+  async mergeData(importedData: ExportData): Promise<boolean> {
+    if (!this.db) await this.initialize();
+    if (!this.db) throw new Error('Database not initialized');
+    
+    try {
+      // Get current device ID
+      const deviceId = this.getDeviceId();
+      
+      // STEP 1: PROCESS PLAYERS
+      const existingPlayers = await this.getAllPlayers();
+      const existingPlayersMap = new Map(existingPlayers.map(p => [p.id, p]));
+      
+      // Process each imported player
+      for (const importedPlayer of importedData.players) {
+        // Add device ID if missing
+        if (!importedPlayer.deviceId) {
+          importedPlayer.deviceId = `imported_${deviceId}`;
+        }
+        
+        // Check if player exists
+        const existingPlayer = existingPlayersMap.get(importedPlayer.id);
+        
+        if (!existingPlayer) {
+          // New player - just add
+          await this.savePlayer(importedPlayer);
+        } else {
+          // Merge strategy:
+          // - Keep higher ELO
+          // - Sum games/wins/losses
+          // - Take most recent last played date
+          const mergedPlayer = {
+            ...existingPlayer,
+            elo: Math.max(existingPlayer.elo, importedPlayer.elo),
+            totalGames: existingPlayer.totalGames + importedPlayer.totalGames,
+            wins: existingPlayer.wins + importedPlayer.wins,
+            losses: existingPlayer.losses + importedPlayer.losses,
+            lastPlayed: new Date(Math.max(
+              new Date(existingPlayer.lastPlayed).getTime(), 
+              new Date(importedPlayer.lastPlayed).getTime()
+            ))
+          };
+          
+          await this.savePlayer(mergedPlayer);
+        }
+      }
+      
+      // STEP 2: PROCESS MATCHES
+      // Create a map of all match players for lookup
+      const importedMatchPlayersMap = new Map<string, DBMatchPlayer[]>();
+      for (const mp of importedData.matchPlayers) {
+        if (!importedMatchPlayersMap.has(mp.matchId)) {
+          importedMatchPlayersMap.set(mp.matchId, []);
+        }
+        importedMatchPlayersMap.get(mp.matchId)!.push(mp);
+      }
+      
+      // Get all existing matches
+      const existingMatches = await this.getAllMatches();
+      const existingMatchesMap = new Map(existingMatches.map(m => [m.id, m]));
+      
+      // Process each imported match
+      for (const importedMatch of importedData.matches) {
+        // Add device ID if missing
+        if (!importedMatch.deviceId) {
+          importedMatch.deviceId = `imported_${deviceId}`;
+        }
+        
+        // Check if match exists - for matches we don't merge, we just add new ones
+        if (!existingMatchesMap.has(importedMatch.id)) {
+          // New match - save it
+          await this.saveMatch(importedMatch);
+          
+          // Also add all related match players
+          const matchPlayers = importedMatchPlayersMap.get(importedMatch.id) || [];
+          for (const matchPlayer of matchPlayers) {
+            // Add device ID if missing
+            if (!matchPlayer.deviceId) {
+              matchPlayer.deviceId = `imported_${deviceId}`;
+            }
+            
+            await this.saveMatchPlayer(matchPlayer);
+          }
+        }
+        // Skip existing matches (don't modify)
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error merging data:', error);
       return false;
     }
   }
