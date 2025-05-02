@@ -1,11 +1,11 @@
 // src/components/matches/MatchesMenu.tsx
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Users, History, Shield, Download, Upload, Trash2, Info, AlertTriangle, Shuffle } from 'lucide-react';
+import { ChevronLeft, Users, History, Shield, Download, Upload, Trash2, Info, AlertTriangle, Shuffle, FileText } from 'lucide-react';
 import EnhancedTooltip from '../common/EnhancedTooltip';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
 
-export type MatchesView = 'menu' | 'player-stats' | 'hero-stats' | 'match-history' | 'match-maker';
+export type MatchesView = 'menu' | 'player-stats' | 'hero-stats' | 'match-history' | 'match-maker' | 'record-match';
 
 interface MatchesMenuProps {
   onBack: () => void;
@@ -181,8 +181,8 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
         <h2 className="text-2xl font-bold">Match Statistics</h2>
       </div>
       
-      {/* Updated grid layout to 2x2 for desktop, column for mobile */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-8">
+      {/* Updated grid layout to include Record Match */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-8">
         {/* Player Stats */}
         <div 
           className={`bg-gray-700 hover:bg-gray-600 rounded-lg p-6 cursor-pointer transition-colors ${
@@ -250,6 +250,25 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
               <span>No match data available</span>
             </div>
           )}
+        </div>
+        
+        {/* NEW: Record Match */}
+        <div 
+          className="bg-gray-700 hover:bg-gray-600 rounded-lg p-6 cursor-pointer transition-colors"
+          onClick={() => handleNavigate('record-match')}
+        >
+          <div className="flex items-center text-xl font-semibold mb-4">
+            <FileText size={24} className="mr-3 text-orange-400" />
+            <span>Record Match</span>
+          </div>
+          <p className="text-gray-300">
+            Manually log match results for games played outside the application.
+          </p>
+          
+          <div className="mt-3 text-blue-400 text-sm flex items-center">
+            <Info size={16} className="mr-1" />
+            <span>Add match data not recorded in the timer</span>
+          </div>
         </div>
         
         {/* Match Maker */}

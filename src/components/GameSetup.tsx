@@ -70,7 +70,6 @@ const GameSetup: React.FC<GameSetupProps> = ({
   onViewMatches
 }) => {
   const { playSound } = useSound();
-  const [hasMatchData, setHasMatchData] = useState<boolean>(false);
   // State for suggested player names
   const [suggestedPlayerNames, setSuggestedPlayerNames] = useState<string[]>([]);
 
@@ -95,12 +94,10 @@ const GameSetup: React.FC<GameSetupProps> = ({
     }
     
     // Check if we have match data to enable View Matches button
-    const checkMatchData = async () => {
-      const hasData = await dbService.hasMatchData();
-      setHasMatchData(hasData);
-    };
-    
-    checkMatchData();
+    // This was previously setting hasMatchData state which is not being used
+    // Since the View Matches button is now always clickable (per the comment),
+    // we can just call the async check but don't need to store the result
+    dbService.hasMatchData();
     
     // Load player names from database - ONLY players who have played games
     const loadPlayerNames = async () => {
@@ -611,26 +608,18 @@ const GameSetup: React.FC<GameSetupProps> = ({
           )}
         </div>
       )}
-      
-{/* Action Buttons */}
+      {/* Action Buttons */}
 <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-  {/* View Matches Button */}
+  {/* View Matches Button - Updated to always be clickable */}
   <div className="relative">
     <EnhancedTooltip 
-      text={hasMatchData 
-        ? "View match statistics and player records"
-        : "No match data available yet. Play a game first!"}
+      text="View match statistics and player records"
       position="top"
       disableMobileTooltip={true}
     >
       <button
-        className={`px-6 py-3 rounded-lg font-medium text-white ${
-          hasMatchData
-            ? 'bg-green-600 hover:bg-green-500'
-            : 'bg-gray-600 cursor-not-allowed'
-        }`}
+        className="px-6 py-3 rounded-lg font-medium text-white bg-green-600 hover:bg-green-500"
         onClick={handleViewMatches}
-        disabled={!hasMatchData}
       >
         <div className="flex items-center">
           <BarChart size={20} className="mr-2" />
@@ -661,7 +650,6 @@ const GameSetup: React.FC<GameSetupProps> = ({
     </EnhancedTooltip>
   </div>
 </div>
-
   {/* Hero count info */}
   <div className="text-sm text-center w-full mt-4">
     <div className="flex flex-wrap justify-center gap-4">

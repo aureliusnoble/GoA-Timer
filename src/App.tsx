@@ -34,6 +34,7 @@ import PlayerStatsScreen from './components/matches/PlayerStats';
 import MatchHistory from './components/matches/MatchHistory';
 import MatchMaker from './components/matches/MatchMaker';
 import HeroStats from './components/matches/HeroStats';
+import RecordMatch from './components/matches/RecordMatch';
 
 // Modified interface for lane state return type
 interface LaneStateResult {
@@ -1712,7 +1713,6 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
         onBack={() => handleMatchStatisticsNavigate('menu')}
       />
     )}
-    {/* NEW: Hero Stats View */}
     {currentMatchView === 'hero-stats' && (
       <HeroStats 
         onBack={() => handleMatchStatisticsNavigate('menu')}
@@ -1720,6 +1720,12 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
     )}
     {currentMatchView === 'match-history' && (
       <MatchHistory 
+        onBack={() => handleMatchStatisticsNavigate('menu')}
+      />
+    )}
+    {/* NEW: Record Match View */}
+    {currentMatchView === 'record-match' && (
+      <RecordMatch 
         onBack={() => handleMatchStatisticsNavigate('menu')}
       />
     )}
