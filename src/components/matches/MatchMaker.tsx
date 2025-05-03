@@ -252,17 +252,6 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     }
   };
   
-  // Helper function to get ELO tier
-  const getELOTier = (elo: number): { tier: string; color: string } => {
-    if (elo >= 2000) return { tier: 'Grandmaster', color: 'text-purple-400' };
-    if (elo >= 1800) return { tier: 'Master', color: 'text-indigo-400' };
-    if (elo >= 1600) return { tier: 'Diamond', color: 'text-blue-400' };
-    if (elo >= 1400) return { tier: 'Platinum', color: 'text-teal-400' };
-    if (elo >= 1200) return { tier: 'Gold', color: 'text-yellow-400' };
-    if (elo >= 1000) return { tier: 'Silver', color: 'text-gray-400' };
-    return { tier: 'Bronze', color: 'text-orange-400' };
-  };
-  
   // Tooltip text definitions for buttons
   const tooltips = {
     ranking: "Balance teams based on player ELO ratings to create fair matches. Higher ELO players will be evenly distributed to make teams equally skilled.",
@@ -327,7 +316,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                 {allPlayers.map((player) => {
                   const isSelected = selectedPlayers.some(p => p.id === player.id);
-                  const eloTier = getELOTier(player.elo);
+                 
                   
                   return (
                     <div
@@ -339,8 +328,8 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                     >
                       <div className="flex flex-col items-center">
                         <div className="font-medium mb-1 truncate w-full text-center">{player.name}</div>
-                        <div className={`text-sm mb-1 ${eloTier.color}`}>
-                          {eloTier.tier} ({player.elo})
+                        <div className={`text-sm mb-1`}>
+                          ({player.elo})
                         </div>
                         <div className="text-xs text-gray-400">
                           W: {player.wins} L: {player.losses}
@@ -594,7 +583,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                         <div>
                           <div className="font-medium">{player.name}</div>
                           <div className="text-sm text-gray-300">
-                            {getELOTier(player.elo).tier} ({player.elo})
+                            ({player.elo})
                           </div>
                         </div>
                         
@@ -651,7 +640,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                         <div>
                           <div className="font-medium">{player.name}</div>
                           <div className="text-sm text-gray-300">
-                            {getELOTier(player.elo).tier} ({player.elo})
+                            ({player.elo})
                           </div>
                         </div>
                         
@@ -720,7 +709,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                     <div>
                       <div className="font-medium">{player.name}</div>
                       <div className="text-sm text-gray-300">
-                        {getELOTier(player.elo).tier} ({player.elo})
+                        ({player.elo})
                       </div>
                     </div>
                     

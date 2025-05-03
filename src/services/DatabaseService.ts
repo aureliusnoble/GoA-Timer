@@ -3,7 +3,7 @@ import { Team, GameLength } from '../types';
 
 // Database configuration
 const DB_NAME = 'GuardsOfAtlantisStats';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 // Database tables
 const TABLES = {
@@ -16,7 +16,7 @@ const TABLES = {
 const INITIAL_ELO = 1200;
 
 // Constants for ELO calculation
-const K_FACTOR = 32; // How much ELO changes per match (higher = faster changes)
+const K_FACTOR = 40; // How much ELO changes per match (higher = faster changes)
 
 // Player database model
 export interface DBPlayer {
@@ -828,159 +828,224 @@ private async getAllMatchPlayers(): Promise<DBMatchPlayer[]> {
   }
 
   /**
-   * Calculate new ELO ratings after a match
-   * Using the standard ELO formula: R' = R + K * (S - E)
-   * Where:
-   * - R' is the new rating
-   * - R is the old rating
-   * - K is the K-factor (how much ratings can change)
-   * - S is the score (1 for win, 0 for loss)
-   * - E is the expected score based on rating difference
-   */
-  calculateNewELO(playerELO: number, opponentTeamAvgELO: number, won: boolean): number {
-    // Calculate expected outcome
-    const expectedOutcome = 1 / (1 + Math.pow(10, (opponentTeamAvgELO - playerELO) / 400));
-    
-    // Calculate actual outcome (1 for win, 0 for loss)
-    const actualOutcome = won ? 1 : 0;
-    
-    // Calculate new ELO
-    const newELO = Math.round(playerELO + K_FACTOR * (actualOutcome - expectedOutcome));
-    
-    return newELO;
+ * Calculate new ELO ratings with balanced sensitivity to upsets
+ * @param playerELO The player's current ELO rating
+ * @param playerTeamAvgELO The average ELO of the player's team
+ * @param opponentTeamAvgELO The average ELO of the opponent team
+ * @param won Whether the player's team won (true) or lost (false)
+ * @param teamWeight Weight given to team component (0-1, default 0.7)
+ * @param baseKFactor Base K-factor value (default 32)
+ * @returns New ELO rating for the player
+ */
+calculateNewELO(
+  playerELO: number, 
+  playerTeamAvgELO: number, 
+  opponentTeamAvgELO: number, 
+  won: boolean,
+  teamWeight: number = 0.7,
+  baseKFactor: number = 32
+): number {
+  // Ensure teamWeight is within valid range
+  teamWeight = Math.max(0, Math.min(1, teamWeight));
+  
+  // Calculate team-based expected outcome
+  const teamExpectedOutcome = 1 / (1 + Math.pow(10, (opponentTeamAvgELO - playerTeamAvgELO) / 400));
+  
+  // Calculate individual-based expected outcome
+  const individualExpectedOutcome = 1 / (1 + Math.pow(10, (opponentTeamAvgELO - playerELO) / 400));
+  
+  // Combine team and individual components
+  const combinedExpectedOutcome = (teamWeight * teamExpectedOutcome) + 
+                               ((1 - teamWeight) * individualExpectedOutcome);
+  
+  // Actual outcome (1 for win, 0 for loss)
+  const actualOutcome = won ? 1 : 0;
+  
+  // Calculate surprise factor (how unexpected the result was)
+  const surpriseFactor = Math.abs(actualOutcome - combinedExpectedOutcome);
+  
+  // Calculate absolute rating difference between teams (capped for stability)
+  const ratingDifference = Math.min(400, Math.abs(playerTeamAvgELO - opponentTeamAvgELO));
+  
+  // Dynamic K-factor based on rating difference and surprise (with caps)
+  const dynamicKFactor = Math.min(64, baseKFactor * (1 + (surpriseFactor * 0.5) + (ratingDifference / 600) * 0.3));
+  
+  // Apply a more moderate multiplier for upsets
+  let upsetMultiplier = 1.0;
+  if (won && playerTeamAvgELO < opponentTeamAvgELO) {
+    // More moderate bonus for beating stronger opponents
+    upsetMultiplier = 1.0 + Math.min(1.5, Math.pow((opponentTeamAvgELO - playerTeamAvgELO) / 400, 1.2) * 0.5);
+  } else if (!won && playerTeamAvgELO > opponentTeamAvgELO) {
+    // More moderate penalty for losing to weaker opponents
+    upsetMultiplier = 1.0 + Math.min(1.3, Math.pow((playerTeamAvgELO - opponentTeamAvgELO) / 500, 1.0) * 0.3);
   }
+  
+  // Calculate ELO change with safeguards
+  const rawEloChange = dynamicKFactor * (actualOutcome - combinedExpectedOutcome) * upsetMultiplier;
+  
+  // Cap maximum ELO change (both gain and loss)
+  const maxChange = 75; // Maximum points that can change in a single match
+  const cappedEloChange = Math.max(-maxChange, Math.min(maxChange, rawEloChange));
+  
+  // Ensure ELO never drops below minimum threshold
+  const minELO = 100;
+  const newELO = Math.max(minELO, Math.round(playerELO + cappedEloChange));
+  
+  // Add logging for troubleshooting and tuning
+  console.log(`
+    ELO Change Calculation:
+    Player ELO: ${playerELO}, Team Avg: ${playerTeamAvgELO}, Opponent Avg: ${opponentTeamAvgELO}
+    Expected Outcome: ${combinedExpectedOutcome.toFixed(4)}, Actual: ${actualOutcome}
+    Surprise Factor: ${surpriseFactor.toFixed(4)}, Rating Diff: ${ratingDifference}
+    Dynamic K-Factor: ${dynamicKFactor.toFixed(2)}, Upset Multiplier: ${upsetMultiplier.toFixed(2)}
+    Raw Change: ${rawEloChange.toFixed(2)}, Capped Change: ${cappedEloChange.toFixed(2)}
+    New ELO: ${newELO}
+  `);
+  
+  return newELO;
+}
 
-  /**
-   * Record a completed match and update player statistics
-   */
-  async recordMatch(
-    matchData: {
-      date: Date;
-      winningTeam: Team;
-      gameLength: GameLength;
-      doubleLanes: boolean;
-    },
-    playerData: {
-      id: string; // player name
-      team: Team;
-      heroId: number;
-      heroName: string;
-      heroRoles: string[];
-      kills?: number;
-      deaths?: number;
-      assists?: number;
-      goldEarned?: number;
-      minionKills?: number;
-      level?: number; // New field for player level
-    }[]
-  ): Promise<string> {
-    if (!this.db) await this.initialize();
-    if (!this.db) throw new Error('Database not initialized');
+/**
+ * Record a completed match and update player statistics
+ */
+async recordMatch(
+  matchData: {
+    date: Date;
+    winningTeam: Team;
+    gameLength: GameLength;
+    doubleLanes: boolean;
+  },
+  playerData: {
+    id: string; // player name
+    team: Team;
+    heroId: number;
+    heroName: string;
+    heroRoles: string[];
+    kills?: number;
+    deaths?: number;
+    assists?: number;
+    goldEarned?: number;
+    minionKills?: number;
+    level?: number; // New field for player level
+  }[]
+): Promise<string> {
+  if (!this.db) await this.initialize();
+  if (!this.db) throw new Error('Database not initialized');
 
-    // First, ensure all players exist in the database
-    const playerPromises = playerData.map(async (playerInfo) => {
-      const existingPlayer = await this.getPlayer(playerInfo.id);
-      
-      if (!existingPlayer) {
-        // Create new player record
-        const newPlayer: DBPlayer = {
-          id: playerInfo.id,
-          name: playerInfo.id, // Use name as ID
-          totalGames: 0,
-          wins: 0,
-          losses: 0,
-          elo: INITIAL_ELO,
-          lastPlayed: new Date(),
-          dateCreated: new Date(),
-          deviceId: this.getDeviceId(),
-          level: playerInfo.level || 1 // Initialize with level from player data or default to 1
-        };
-        await this.savePlayer(newPlayer);
-        return newPlayer;
-      } 
-      
-      // Update player level if provided and greater than current level
-      if (playerInfo.level !== undefined && 
-          (existingPlayer.level === undefined || playerInfo.level > existingPlayer.level)) {
-        existingPlayer.level = playerInfo.level;
-        await this.savePlayer(existingPlayer);
-      }
-      
-      return existingPlayer;
-    });
+  // First, ensure all players exist in the database
+  const playerPromises = playerData.map(async (playerInfo) => {
+    const existingPlayer = await this.getPlayer(playerInfo.id);
     
-    const players = await Promise.all(playerPromises);
+    if (!existingPlayer) {
+      // Create new player record
+      const newPlayer: DBPlayer = {
+        id: playerInfo.id,
+        name: playerInfo.id, // Use name as ID
+        totalGames: 0,
+        wins: 0,
+        losses: 0,
+        elo: INITIAL_ELO,
+        lastPlayed: new Date(),
+        dateCreated: new Date(),
+        deviceId: this.getDeviceId(),
+        level: playerInfo.level || 1 // Initialize with level from player data or default to 1
+      };
+      await this.savePlayer(newPlayer);
+      return newPlayer;
+    } 
     
-    // Group players by team
-    const titanPlayers = players.filter((_, index) => playerData[index].team === Team.Titans);
-    const atlanteanPlayers = players.filter((_, index) => playerData[index].team === Team.Atlanteans);
+    // Update player level if provided and greater than current level
+    if (playerInfo.level !== undefined && 
+        (existingPlayer.level === undefined || playerInfo.level > existingPlayer.level)) {
+      existingPlayer.level = playerInfo.level;
+      await this.savePlayer(existingPlayer);
+    }
     
-    // Calculate average ELO for each team
-    const titanAvgELO = titanPlayers.reduce((sum, p) => sum + p.elo, 0) / titanPlayers.length;
-    const atlanteanAvgELO = atlanteanPlayers.reduce((sum, p) => sum + p.elo, 0) / atlanteanPlayers.length;
+    return existingPlayer;
+  });
+  
+  const players = await Promise.all(playerPromises);
+  
+  // Group players by team
+  const titanPlayers = players.filter((_, index) => playerData[index].team === Team.Titans);
+  const atlanteanPlayers = players.filter((_, index) => playerData[index].team === Team.Atlanteans);
+  
+  // Calculate average ELO for each team
+  const titanAvgELO = titanPlayers.reduce((sum, p) => sum + p.elo, 0) / titanPlayers.length;
+  const atlanteanAvgELO = atlanteanPlayers.reduce((sum, p) => sum + p.elo, 0) / atlanteanPlayers.length;
+  
+  // Create the match record
+  const match: DBMatch = {
+    id: generateUUID(),
+    date: matchData.date,
+    winningTeam: matchData.winningTeam,
+    gameLength: matchData.gameLength,
+    doubleLanes: matchData.doubleLanes,
+    titanPlayers: titanPlayers.length,
+    atlanteanPlayers: atlanteanPlayers.length,
+    deviceId: this.getDeviceId()
+  };
+  
+  // Save the match
+  await this.saveMatch(match);
+  
+  // Update player statistics and create match player records
+  const playerUpdatePromises = playerData.map(async (playerInfo, index) => {
+    const player = players[index];
+    const isWinner = playerInfo.team === matchData.winningTeam;
     
-    // Create the match record
-    const match: DBMatch = {
+    // Get the player's team average ELO
+    const playerTeamAvgELO = playerInfo.team === Team.Titans ? titanAvgELO : atlanteanAvgELO;
+    
+    // Get the opponent team average ELO
+    const opponentTeamAvgELO = playerInfo.team === Team.Titans ? atlanteanAvgELO : titanAvgELO;
+    
+    // Calculate new ELO using the balanced approach
+    const newELO = this.calculateNewELO(
+      player.elo, 
+      playerTeamAvgELO, 
+      opponentTeamAvgELO, 
+      isWinner
+    );
+    
+    // Update player record
+    const updatedPlayer: DBPlayer = {
+      ...player,
+      totalGames: player.totalGames + 1,
+      wins: player.wins + (isWinner ? 1 : 0),
+      losses: player.losses + (isWinner ? 0 : 1),
+      elo: newELO,
+      lastPlayed: new Date(),
+      level: playerInfo.level || player.level // Updated to include player level
+    };
+    
+    await this.savePlayer(updatedPlayer);
+    
+    // Create match player record
+    const matchPlayer: DBMatchPlayer = {
       id: generateUUID(),
-      date: matchData.date,
-      winningTeam: matchData.winningTeam,
-      gameLength: matchData.gameLength,
-      doubleLanes: matchData.doubleLanes,
-      titanPlayers: titanPlayers.length,
-      atlanteanPlayers: atlanteanPlayers.length,
+      matchId: match.id,
+      playerId: player.id,
+      team: playerInfo.team,
+      heroId: playerInfo.heroId,
+      heroName: playerInfo.heroName,
+      heroRoles: playerInfo.heroRoles,
+      kills: playerInfo.kills,
+      deaths: playerInfo.deaths,
+      assists: playerInfo.assists,
+      goldEarned: playerInfo.goldEarned,
+      minionKills: playerInfo.minionKills,
+      level: playerInfo.level, // Updated to include player level
       deviceId: this.getDeviceId()
     };
     
-    // Save the match
-    await this.saveMatch(match);
-    
-    // Update player statistics and create match player records
-    const playerUpdatePromises = playerData.map(async (playerInfo, index) => {
-      const player = players[index];
-      const isWinner = playerInfo.team === matchData.winningTeam;
-      
-      // Calculate new ELO based on team average ELOs
-      const opponentAvgELO = playerInfo.team === Team.Titans ? atlanteanAvgELO : titanAvgELO;
-      const newELO = this.calculateNewELO(player.elo, opponentAvgELO, isWinner);
-      
-      // Update player record
-      const updatedPlayer: DBPlayer = {
-        ...player,
-        totalGames: player.totalGames + 1,
-        wins: player.wins + (isWinner ? 1 : 0),
-        losses: player.losses + (isWinner ? 0 : 1),
-        elo: newELO,
-        lastPlayed: new Date(),
-        level: playerInfo.level || player.level // Updated to include player level
-      };
-      
-      await this.savePlayer(updatedPlayer);
-      
-      // Create match player record
-      const matchPlayer: DBMatchPlayer = {
-        id: generateUUID(),
-        matchId: match.id,
-        playerId: player.id,
-        team: playerInfo.team,
-        heroId: playerInfo.heroId,
-        heroName: playerInfo.heroName,
-        heroRoles: playerInfo.heroRoles,
-        kills: playerInfo.kills,
-        deaths: playerInfo.deaths,
-        assists: playerInfo.assists,
-        goldEarned: playerInfo.goldEarned,
-        minionKills: playerInfo.minionKills,
-        level: playerInfo.level, // Updated to include player level
-        deviceId: this.getDeviceId()
-      };
-      
-      await this.saveMatchPlayer(matchPlayer);
-    });
-    
-    await Promise.all(playerUpdatePromises);
-    
-    return match.id;
-  }
+    await this.saveMatchPlayer(matchPlayer);
+  });
+  
+  await Promise.all(playerUpdatePromises);
+  
+  return match.id;
+}
 
   /**
    * Get player statistics including favorite heroes and roles
