@@ -16,7 +16,6 @@ const TABLES = {
 const INITIAL_ELO = 1200;
 
 // Constants for ELO calculation
-const K_FACTOR = 40; // How much ELO changes per match (higher = faster changes)
 
 // Player database model
 export interface DBPlayer {

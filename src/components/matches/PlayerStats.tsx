@@ -465,10 +465,11 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
           About Player Rankings
         </h4>
         <p>
-          Players are ranked based on their Elo rating, which reflects their performance against other players and teams. 
-          It takes roughly 20 matches for each players rating to start to stabilise. Rankings are calculated based on match wins and losses, 
-          with players winning more points if they beat higher ranked players, and losing more points if they lose to lower ranked players. 
-          This implementation combines both the expected team performance and individual contribution metrics.
+          Players are ranked based on their Elo rating, which reflects their performance against other players. 
+          It takes roughly 20 matches for ratings to stabilise. Rankings are calculated based on match wins and losses, 
+          with players winning more points if their team beat higher ranked teams, and losing more points if they lose to lower ranked teams. 
+
+       
         </p>
         
       </div>
