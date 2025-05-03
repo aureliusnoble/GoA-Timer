@@ -637,117 +637,136 @@ private async getAllMatchPlayers(): Promise<DBMatchPlayer[]> {
       };
     });
   }
-
-  /**
-   * Recalculate all player statistics based on current match history
-   */
-  private async recalculatePlayerStats(): Promise<void> {
-    try {
-      // 1. Get all players and reset their stats
-      const players = await this.getAllPlayers();
+/**
+ * Recalculate all player statistics based on current match history
+ * This completely resets and rebuilds all player stats from scratch
+ * based on chronological match data
+ */
+private async recalculatePlayerStats(): Promise<void> {
+  try {
+    console.log("Starting player statistics recalculation...");
+    
+    // 1. Get all players and reset their stats
+    const players = await this.getAllPlayers();
+    console.log(`Found ${players.length} players for recalculation`);
+    
+    // Reset all player stats to initial values (keep names, IDs, created dates, and levels)
+    const resetPlayers = players.map(player => ({
+      ...player,
+      totalGames: 0,
+      wins: 0,
+      losses: 0,
+      elo: INITIAL_ELO, // Reset to initial ELO
+      // Keep level as-is since it's manually set
+    }));
+    
+    // Save reset players
+    for (const player of resetPlayers) {
+      await this.savePlayer(player);
+    }
+    
+    // 2. Get all matches sorted by date (oldest first) to ensure chronological processing
+    let allMatches = await this.getAllMatches();
+    allMatches.sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      return dateA - dateB;
+    });
+    
+    console.log(`Processing ${allMatches.length} matches in chronological order`);
+    
+    // 3. Replay all matches to recalculate stats
+    for (const match of allMatches) {
+      // Get match players
+      const matchPlayers = await this.getMatchPlayers(match.id);
       
-      // Reset all player stats to initial values (keep names, IDs, and created dates)
-      const resetPlayers = players.map(player => ({
-        ...player,
-        totalGames: 0,
-        wins: 0,
-        losses: 0,
-        elo: INITIAL_ELO,
-        // Keep level as-is since it's manually set
-      }));
+      // Group players by team
+      const titanPlayers: string[] = [];
+      const atlanteanPlayers: string[] = [];
       
-      // Save reset players
-      for (const player of resetPlayers) {
-        await this.savePlayer(player);
-      }
-      
-      // 2. Get all matches sorted by date (oldest first)
-      let allMatches = await this.getAllMatches();
-      allMatches.sort((a, b) => {
-        const dateA = new Date(a.date).getTime();
-        const dateB = new Date(b.date).getTime();
-        return dateA - dateB;
+      matchPlayers.forEach(mp => {
+        if (mp.team === Team.Titans) {
+          titanPlayers.push(mp.playerId);
+        } else {
+          atlanteanPlayers.push(mp.playerId);
+        }
       });
       
-      // 3. Replay all matches to recalculate stats
-      for (const match of allMatches) {
-        // Get match players
-        const matchPlayers = await this.getMatchPlayers(match.id);
-        
-        // Group players by team
-        const titanPlayers: string[] = [];
-        const atlanteanPlayers: string[] = [];
-        
-        matchPlayers.forEach(mp => {
-          if (mp.team === Team.Titans) {
-            titanPlayers.push(mp.playerId);
-          } else {
-            atlanteanPlayers.push(mp.playerId);
-          }
-        });
-        
-        // Get current player records
-        const currentPlayers: DBPlayer[] = [];
-        for (const mp of matchPlayers) {
-          const player = await this.getPlayer(mp.playerId);
-          if (player) {
-            currentPlayers.push(player);
-          }
-        }
-        
-        // Skip if any player is missing (should not happen)
-        if (currentPlayers.length !== matchPlayers.length) {
-          console.warn(`Skipping match ${match.id} due to missing player records`);
-          continue;
-        }
-        
-        // Calculate team average ELOs
-        const titanPlayerRecords = currentPlayers.filter(p => 
-          titanPlayers.includes(p.id)
-        );
-        
-        const atlanteanPlayerRecords = currentPlayers.filter(p => 
-          atlanteanPlayers.includes(p.id)
-        );
-        
-        const titanAvgELO = titanPlayerRecords.length > 0 
-          ? titanPlayerRecords.reduce((sum, p) => sum + p.elo, 0) / titanPlayerRecords.length
-          : INITIAL_ELO;
-          
-        const atlanteanAvgELO = atlanteanPlayerRecords.length > 0 
-          ? atlanteanPlayerRecords.reduce((sum, p) => sum + p.elo, 0) / atlanteanPlayerRecords.length
-          : INITIAL_ELO;
-        
-        // Update each player's stats
-        for (const player of currentPlayers) {
-          const mp = matchPlayers.find(m => m.playerId === player.id);
-          if (!mp) continue;
-          
-          const isWinner = mp.team === match.winningTeam;
-          const opponentAvgELO = mp.team === Team.Titans ? atlanteanAvgELO : titanAvgELO;
-          
-          // Calculate new ELO
-          const newELO = this.calculateNewELO(player.elo, opponentAvgELO, isWinner);
-          
-          // Update player record
-          const updatedPlayer: DBPlayer = {
-            ...player,
-            totalGames: player.totalGames + 1,
-            wins: player.wins + (isWinner ? 1 : 0),
-            losses: player.losses + (isWinner ? 0 : 1),
-            elo: newELO,
-            lastPlayed: new Date(match.date)
-          };
-          
-          await this.savePlayer(updatedPlayer);
+      // Get current player records with their CURRENT ELO values
+      const currentPlayers: DBPlayer[] = [];
+      for (const mp of matchPlayers) {
+        const player = await this.getPlayer(mp.playerId);
+        if (player) {
+          currentPlayers.push(player);
         }
       }
       
-    } catch (error) {
-      console.error('Error recalculating player stats:', error);
-      throw error;
+      // Skip if any player is missing (should not happen)
+      if (currentPlayers.length !== matchPlayers.length) {
+        console.warn(`Skipping match ${match.id} due to missing player records`);
+        continue;
+      }
+      
+      // Calculate team average ELOs using CURRENT player ELO values
+      const titanPlayerRecords = currentPlayers.filter(p => 
+        titanPlayers.includes(p.id)
+      );
+      
+      const atlanteanPlayerRecords = currentPlayers.filter(p => 
+        atlanteanPlayers.includes(p.id)
+      );
+      
+      const titanAvgELO = titanPlayerRecords.length > 0 
+        ? titanPlayerRecords.reduce((sum, p) => sum + p.elo, 0) / titanPlayerRecords.length
+        : INITIAL_ELO;
+        
+      const atlanteanAvgELO = atlanteanPlayerRecords.length > 0 
+        ? atlanteanPlayerRecords.reduce((sum, p) => sum + p.elo, 0) / atlanteanPlayerRecords.length
+        : INITIAL_ELO;
+      
+      console.log(`Match ${match.id} - Titans Avg ELO: ${titanAvgELO.toFixed(2)}, Atlanteans Avg ELO: ${atlanteanAvgELO.toFixed(2)}`);
+      
+      // Update each player's stats based on this match
+      for (const player of currentPlayers) {
+        const mp = matchPlayers.find(m => m.playerId === player.id);
+        if (!mp) continue;
+        
+        const wasWinner = mp.team === match.winningTeam;
+        
+        // Calculate new ELO based on balanced approach
+        const playerTeamAvgELO = mp.team === Team.Titans ? titanAvgELO : atlanteanAvgELO;
+        const opponentTeamAvgELO = mp.team === Team.Titans ? atlanteanAvgELO : titanAvgELO;
+        
+        const newELO = this.calculateNewELO(
+          player.elo, 
+          playerTeamAvgELO,
+          opponentTeamAvgELO, 
+          wasWinner
+        );
+        
+        // Update player record
+        const updatedPlayer: DBPlayer = {
+          ...player,
+          totalGames: player.totalGames + 1,
+          wins: player.wins + (wasWinner ? 1 : 0),
+          losses: player.losses + (wasWinner ? 0 : 1),
+          elo: newELO,
+          lastPlayed: new Date(match.date)
+        };
+        
+        console.log(`Updated player ${player.id}: ELO ${player.elo} -> ${newELO} (${wasWinner ? 'Win' : 'Loss'})`);
+        
+        // Save updated player
+        await this.savePlayer(updatedPlayer);
+      }
     }
+    
+    console.log("Player statistics recalculation completed successfully");
+  } catch (error) {
+    console.error('Error recalculating player stats:', error);
+    throw error;
   }
+}
 
   /**
    * Save a match player record
