@@ -381,7 +381,7 @@ async getHeroStats(): Promise<any[]> {
       
       // Calculate best teammates (highest win rate when played together)
       const bestTeammates = Array.from(hero.teammates.entries())
-        .filter(([_, stats]) => stats.games >= 2) // Minimum 2 games together
+        .filter(([_, stats]) => stats.games >= 1) // Minimum 2 games together
         .map(([teammateId, stats]) => {
           // Find the hero record for this teammate
           const teammateHero = heroMap.get(teammateId);
@@ -401,7 +401,7 @@ async getHeroStats(): Promise<any[]> {
       
       // Calculate best matchups (highest win rate against)
       const bestAgainst = Array.from(hero.opponents.entries())
-        .filter(([_, stats]) => stats.games >= 2) // Minimum 2 games against
+        .filter(([_, stats]) => stats.games >= 1) // Minimum 2 games against
         .map(([opponentId, stats]) => {
           // Find the hero record for this opponent
           const opponentHero = heroMap.get(opponentId);
@@ -421,7 +421,7 @@ async getHeroStats(): Promise<any[]> {
       
       // Calculate worst matchups (lowest win rate against)
       const worstAgainst = Array.from(hero.opponents.entries())
-        .filter(([_, stats]) => stats.games >= 2) // Minimum 2 games against
+        .filter(([_, stats]) => stats.games >= 1) // Minimum 2 games against
         .map(([opponentId, stats]) => {
           // Find the hero record for this opponent
           const opponentHero = heroMap.get(opponentId);
