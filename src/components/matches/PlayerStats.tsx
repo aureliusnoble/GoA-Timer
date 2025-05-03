@@ -186,9 +186,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
       case 'kdRatio': // Changed from kda to kdRatio
         comparison = a.kdRatio - b.kdRatio;
         break;
-      case 'rank': // New sorting option by rank
-        comparison = a.rank - b.rank;
-        break;
+    
       default:
         comparison = 0;
     }
@@ -241,16 +239,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
           
           {/* Sort Buttons */}
           <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => handleSort('rank')}
-              className={`px-3 py-1 rounded ${
-                sortBy === 'rank' 
-                  ? 'bg-blue-600 hover:bg-blue-500' 
-                  : 'bg-gray-600 hover:bg-gray-500'
-              }`}
-            >
-              Rank {sortBy === 'rank' && (sortOrder === 'asc' ? '↑' : '↓')}
-            </button>
+   
             <button
               onClick={() => handleSort('elo')}
               className={`px-3 py-1 rounded ${
@@ -259,7 +248,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
                   : 'bg-gray-600 hover:bg-gray-500'
               }`}
             >
-              ELO {sortBy === 'elo' && (sortOrder === 'asc' ? '↑' : '↓')}
+              Rank {sortBy === 'elo' && (sortOrder === 'asc' ? '↑' : '↓')}
             </button>
             <button
               onClick={() => handleSort('games')}
