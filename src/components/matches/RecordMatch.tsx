@@ -851,14 +851,14 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
                     className="bg-gray-700 hover:bg-gray-600 rounded-lg p-3 cursor-pointer transition-colors flex flex-col items-center"
                   >
                     <div className="w-16 h-16 bg-gray-800 rounded-full overflow-hidden mb-2">
-                      <img
-                        src={`heroes/${hero.name.toLowerCase().replace(/\s+/g, '')}.png`}
-                        alt={hero.name}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = 'https://via.placeholder.com/64?text=Hero';
-                        }}
-                      />
+  <img
+  src={hero.icon}
+  alt={hero.name}
+  className="w-full h-full object-cover"
+  onError={(e) => {
+    (e.target as HTMLImageElement).src = 'https://via.placeholder.com/64?text=Hero';
+  }}
+/>
                     </div>
                     <div className="text-center">
                       <div className="font-medium">{hero.name}</div>

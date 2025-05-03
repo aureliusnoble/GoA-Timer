@@ -1,6 +1,6 @@
 // src/components/matches/PlayerStats.tsx
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Search, Award, TrendingUp, Users, Swords, Info } from 'lucide-react';
+import { ChevronLeft, Search, TrendingUp, Users, Swords, Info, Trophy, Medal, Hexagon } from 'lucide-react';
 import { DBPlayer } from '../../services/DatabaseService';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
@@ -21,7 +21,42 @@ interface PlayerWithStats extends DBPlayer {
   averageGold: number;
   averageMinionKills: number;
   hasCombatStats: boolean; // New field to track if player has any combat stats
+  rank: number; // New field for player ranking
 }
+
+// Component to display player rank with distinctive styling
+const RankDisplay: React.FC<{ rank: number; elo: number }> = ({ rank, elo }) => {
+  // Determine icon and styling based on rank
+  let icon;
+  let rankClass;
+  
+  if (rank === 1) {
+    // Gold trophy for 1st place
+    icon = <Trophy size={18} className="mr-2 text-yellow-300" />;
+    rankClass = "text-yellow-300 font-bold";
+  } else if (rank === 2) {
+    // Silver medal for 2nd place
+    icon = <Medal size={18} className="mr-2 text-gray-300" />;
+    rankClass = "text-gray-300 font-bold";
+  } else if (rank === 3) {
+    // Bronze medal for 3rd place
+    icon = <Medal size={18} className="mr-2 text-amber-600" />;
+    rankClass = "text-amber-600 font-bold";
+  } else {
+    // Everyone else (4+) gets a blue hexagon icon
+    icon = <Hexagon size={18} className="mr-2 text-blue-400" />;
+    rankClass = "text-blue-400 font-medium";
+  }
+  
+  return (
+    <div className="flex items-center">
+      {icon}
+      <span className={rankClass}>
+        #{rank} <span className="ml-1 text-sm text-gray-400">({elo})</span>
+      </span>
+    </div>
+  );
+};
 
 const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
   const { playSound } = useSound();
@@ -73,7 +108,8 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
               kdRatio: parseFloat(kdRatio.toFixed(2)),
               averageGold: player.totalGames > 0 ? Math.round(gold / player.totalGames) : 0,
               averageMinionKills: player.totalGames > 0 ? Math.round(minionKills / player.totalGames) : 0,
-              hasCombatStats
+              hasCombatStats,
+              rank: 0 // Initial placeholder, will be assigned below
             };
           })
         );
@@ -81,7 +117,33 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
         // Filter out players with no match data (totalGames === 0)
         const playersWithMatches = playersWithStats.filter(player => player.totalGames > 0);
         
-        setPlayers(playersWithMatches);
+        // Sort players by ELO to assign ranks
+        const sortedByElo = [...playersWithMatches].sort((a, b) => b.elo - a.elo);
+        
+        // Assign ranks based on ELO (handling ties)
+        let currentRank = 1;
+        let currentElo = sortedByElo.length > 0 ? sortedByElo[0].elo : 0;
+        let tieCount = 0;
+        
+        const playersWithRanks = sortedByElo.map((player, index) => {
+          // If this player has a different ELO from the previous one
+          if (player.elo !== currentElo) {
+            // The new rank is the current position plus 1 (accounting for tied players)
+            currentRank = index + 1;
+            currentElo = player.elo;
+            tieCount = 0;
+          } else {
+            // For tied players, they get the same rank
+            tieCount++;
+          }
+          
+          return {
+            ...player,
+            rank: currentRank
+          };
+        });
+        
+        setPlayers(playersWithRanks);
       } catch (error) {
         console.error('Error loading player stats:', error);
       } finally {
@@ -124,6 +186,9 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
       case 'kdRatio': // Changed from kda to kdRatio
         comparison = a.kdRatio - b.kdRatio;
         break;
+      case 'rank': // New sorting option by rank
+        comparison = a.rank - b.rank;
+        break;
       default:
         comparison = 0;
     }
@@ -144,17 +209,6 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
       setSortBy(field);
       setSortOrder('desc');
     }
-  };
-  
-  // Helper function to show ELO tier
-  const getELOTier = (elo: number): { tier: string; color: string } => {
-    if (elo >= 2000) return { tier: 'Grandmaster', color: 'text-purple-400' };
-    if (elo >= 1800) return { tier: 'Master', color: 'text-indigo-400' };
-    if (elo >= 1600) return { tier: 'Diamond', color: 'text-blue-400' };
-    if (elo >= 1400) return { tier: 'Platinum', color: 'text-teal-400' };
-    if (elo >= 1200) return { tier: 'Gold', color: 'text-yellow-400' };
-    if (elo >= 1000) return { tier: 'Silver', color: 'text-gray-400' };
-    return { tier: 'Bronze', color: 'text-orange-400' };
   };
   
   return (
@@ -187,6 +241,16 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
           
           {/* Sort Buttons */}
           <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => handleSort('rank')}
+              className={`px-3 py-1 rounded ${
+                sortBy === 'rank' 
+                  ? 'bg-blue-600 hover:bg-blue-500' 
+                  : 'bg-gray-600 hover:bg-gray-500'
+              }`}
+            >
+              Rank {sortBy === 'rank' && (sortOrder === 'asc' ? '↑' : '↓')}
+            </button>
             <button
               onClick={() => handleSort('elo')}
               className={`px-3 py-1 rounded ${
@@ -252,22 +316,36 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
           {sortedPlayers.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {sortedPlayers.map((player) => {
-                const eloTier = getELOTier(player.elo);
-                
                 return (
-                  <div key={player.id} className="bg-gray-700 rounded-lg overflow-hidden shadow-md">
-                    {/* Player Header */}
-                    <div className="px-5 py-4 bg-gray-800 flex justify-between items-center">
-                      <h3 className="text-xl font-bold truncate">{player.name}</h3>
+                  <div key={player.id} className="bg-gray-700 rounded-lg overflow-hidden shadow-md relative">
+                    {/* Player Header - Adjusted for triangle badge */}
+                    <div className="px-5 py-4 bg-gray-800 flex justify-between items-center relative">
+                      <h3 className={`text-xl font-bold truncate ${player.rank <= 3 ? 'ml-10' : ''}`}>
+                        {player.name}
+                      </h3>
                       <div className="flex items-center">
-                        <EnhancedTooltip text={`ELO Rating: ${player.elo}`}>
-                          <div className={`flex items-center ${eloTier.color}`}>
-                            <Award size={18} className="mr-1" />
-                            <span>{eloTier.tier}</span>
+                        <EnhancedTooltip text={`Rank #${player.rank} - ELO: ${player.elo}`}>
+                          <div>
+                            <RankDisplay rank={player.rank} elo={player.elo} />
                           </div>
                         </EnhancedTooltip>
                       </div>
                     </div>
+                    
+                    {/* Top 3 Indicator */}
+                    {player.rank <= 3 && (
+                      <div className={`absolute top-0 left-0 w-0 h-0 z-10
+                        border-t-[50px] border-r-[50px] 
+                        ${player.rank === 1 
+                          ? 'border-t-yellow-500 border-r-transparent' 
+                          : player.rank === 2 
+                            ? 'border-t-gray-400 border-r-transparent' 
+                            : 'border-t-amber-600 border-r-transparent'}`}>
+                        <span className="absolute top-[-45px] left-[5px] font-bold text-black">
+                          {player.rank}
+                        </span>
+                      </div>
+                    )}
                     
                     {/* Player Stats */}
                     <div className="p-4">
@@ -380,26 +458,18 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
         </div>
       )}
       
-      {/* ELO Information */}
+      {/* Ranking Information */}
       <div className="mt-8 p-4 bg-gray-700/50 rounded-lg text-sm text-gray-300">
         <h4 className="font-medium mb-2 flex items-center">
           <Info size={16} className="mr-2 text-blue-400" />
-          About ELO Ratings
+          About Player Rankings
         </h4>
         <p>
-          ELO ratings are calculated based on match results and opponent skill. Players start at 1200 ELO.
-          Higher ratings indicate stronger players. Ratings are used for team balancing in Match Maker. These
-          ratings are calculated relative to your player group.
+          Players are ranked based on their ELO rating, which reflects their performance against other players.
+          Rankings are calculated based on match wins and losses, with players winning more points if they beat
+          higher ranked players, and losing more points if they lose to lower ranked players.
         </p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
-          <div className="text-purple-400">Grandmaster: 2000+</div>
-          <div className="text-indigo-400">Master: 1800-1999</div>
-          <div className="text-blue-400">Diamond: 1600-1799</div>
-          <div className="text-teal-400">Platinum: 1400-1599</div>
-          <div className="text-yellow-400">Gold: 1200-1399</div>
-          <div className="text-gray-400">Silver: 1000-1199</div>
-          <div className="text-orange-400">Bronze: &lt;1000</div>
-        </div>
+        
       </div>
     </div>
   );

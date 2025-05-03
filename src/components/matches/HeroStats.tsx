@@ -241,8 +241,8 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
       >
         <div className="w-12 h-12 rounded-full overflow-hidden mb-1">
           <img 
-            src={heroData.icon || `heroes/${heroData.heroName.toLowerCase()}.png`} 
-            alt={heroData.heroName}
+            src={hero.icon} 
+            alt={hero.name}
             className="w-full h-full object-cover"
             onError={(e) => {
               (e.target as HTMLImageElement).src = 'https://via.placeholder.com/48?text=Hero';
@@ -405,122 +405,128 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
           {/* Hero Cards Grid */}
           {filteredHeroes.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {filteredHeroes.map((hero) => (
-                <div key={hero.heroId} className="bg-gray-700 rounded-lg overflow-hidden shadow-md">
-                  {/* Hero Header */}
-                  <div 
-                    className="px-5 py-4 bg-gray-800 flex items-center cursor-pointer"
-                    onMouseEnter={(e) => handleHeroMouseEnter(getHeroById(hero.heroId)!, e)}
-                    onMouseLeave={handleHeroMouseLeave}
-                    onClick={(e) => handleHeroClick(getHeroById(hero.heroId)!, e)}
-                  >
-                    <div className="w-16 h-16 bg-gray-900 rounded-full overflow-hidden mr-4 flex-shrink-0">
-                      <img 
-                        src={hero.icon || `heroes/${hero.heroName.toLowerCase()}.png`} 
-                        alt={hero.heroName}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = 'https://via.placeholder.com/64?text=Hero';
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold">{hero.heroName}</h3>
-                      <div className="text-sm text-gray-300">{hero.roles.join(' • ')}</div>
-                      <div className="text-xs text-blue-400 mt-1">
-                        {hero.expansion} • Complexity: {hero.complexity}
+              {filteredHeroes.map((hero) => {
+                // Find the complete hero data to get the correct icon path
+                const fullHero = getHeroById(hero.heroId);
+                const iconPath = fullHero?.icon || hero.icon || `heroes/${hero.heroName.toLowerCase().replace(/\s+/g, '')}.png`;
+                
+                return (
+                  <div key={hero.heroId} className="bg-gray-700 rounded-lg overflow-hidden shadow-md">
+                    {/* Hero Header */}
+                    <div 
+                      className="px-5 py-4 bg-gray-800 flex items-center cursor-pointer"
+                      onMouseEnter={(e) => handleHeroMouseEnter(getHeroById(hero.heroId)!, e)}
+                      onMouseLeave={handleHeroMouseLeave}
+                      onClick={(e) => handleHeroClick(getHeroById(hero.heroId)!, e)}
+                    >
+                      <div className="w-16 h-16 bg-gray-900 rounded-full overflow-hidden mr-4 flex-shrink-0">
+                        <img 
+                          src={iconPath} 
+                          alt={hero.heroName}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = 'https://via.placeholder.com/64?text=Hero';
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold">{hero.heroName}</h3>
+                        <div className="text-sm text-gray-300">{hero.roles.join(' • ')}</div>
+                        <div className="text-xs text-blue-400 mt-1">
+                          {hero.expansion} • Complexity: {hero.complexity}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  
-                  {/* Hero Stats */}
-                  <div className="p-4">
-                    {/* Win/Loss Stats */}
-                    <div className="mb-4">
-                      <div className="flex justify-between items-center mb-2">
-                        <div className="text-sm text-gray-400 flex items-center">
-                          <span>Win Rate</span>
-                          <EnhancedTooltip text="Percentage of games won with this hero" position="right">
+                    
+                    {/* Hero Stats */}
+                    <div className="p-4">
+                      {/* Win/Loss Stats */}
+                      <div className="mb-4">
+                        <div className="flex justify-between items-center mb-2">
+                          <div className="text-sm text-gray-400 flex items-center">
+                            <span>Win Rate</span>
+                            <EnhancedTooltip text="Percentage of games won with this hero" position="right">
+                              <Info size={14} className="ml-1 text-gray-500 cursor-help" />
+                            </EnhancedTooltip>
+                          </div>
+                          <div className="font-medium">{hero.winRate.toFixed(1)}%</div>
+                        </div>
+                        <div className="h-2 bg-red-600 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-green-500" 
+                            style={{ width: `${hero.winRate}%` }}
+                          ></div>
+                        </div>
+                        <div className="flex justify-between mt-1 text-xs text-gray-400">
+                          <span>Wins: {hero.wins}</span>
+                          <span>Losses: {hero.losses}</span>
+                          <span>Total: {hero.totalGames}</span>
+                        </div>
+                      </div>
+                      
+                      {/* Best Teammates Section */}
+                      <div className="mb-4">
+                        <div className="flex items-center mb-2">
+                          <h4 className="font-semibold text-sm">Best Teammates</h4>
+                          <EnhancedTooltip text="Heroes that have the highest win rate when played together with this hero" position="right" maxWidth="max-w-md">
                             <Info size={14} className="ml-1 text-gray-500 cursor-help" />
                           </EnhancedTooltip>
                         </div>
-                        <div className="font-medium">{hero.winRate.toFixed(1)}%</div>
-                      </div>
-                      <div className="h-2 bg-red-600 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-green-500" 
-                          style={{ width: `${hero.winRate}%` }}
-                        ></div>
-                      </div>
-                      <div className="flex justify-between mt-1 text-xs text-gray-400">
-                        <span>Wins: {hero.wins}</span>
-                        <span>Losses: {hero.losses}</span>
-                        <span>Total: {hero.totalGames}</span>
-                      </div>
-                    </div>
-                    
-                    {/* Best Teammates Section */}
-                    <div className="mb-4">
-                      <div className="flex items-center mb-2">
-                        <h4 className="font-semibold text-sm">Best Teammates</h4>
-                        <EnhancedTooltip text="Heroes that have the highest win rate when played together with this hero" position="right" maxWidth="max-w-md">
-                          <Info size={14} className="ml-1 text-gray-500 cursor-help" />
-                        </EnhancedTooltip>
+                        
+                        {hero.bestTeammates.length > 0 ? (
+                          <div className="grid grid-cols-3 gap-2">
+                            {hero.bestTeammates.map(teammate => 
+                              renderHeroIcon(teammate)
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-gray-500 italic">No data available</div>
+                        )}
                       </div>
                       
-                      {hero.bestTeammates.length > 0 ? (
-                        <div className="grid grid-cols-3 gap-2">
-                          {hero.bestTeammates.map(teammate => 
-                            renderHeroIcon(teammate)
-                          )}
+                      {/* Best Against Section */}
+                      <div className="mb-4">
+                        <div className="flex items-center mb-2">
+                          <h4 className="font-semibold text-sm">Best Against</h4>
+                          <EnhancedTooltip text="Heroes that this hero has the highest win rate against" position="right" maxWidth="max-w-md">
+                            <Info size={14} className="ml-1 text-gray-500 cursor-help" />
+                          </EnhancedTooltip>
                         </div>
-                      ) : (
-                        <div className="text-sm text-gray-500 italic">No data available</div>
-                      )}
-                    </div>
-                    
-                    {/* Best Against Section */}
-                    <div className="mb-4">
-                      <div className="flex items-center mb-2">
-                        <h4 className="font-semibold text-sm">Best Against</h4>
-                        <EnhancedTooltip text="Heroes that this hero has the highest win rate against" position="right" maxWidth="max-w-md">
-                          <Info size={14} className="ml-1 text-gray-500 cursor-help" />
-                        </EnhancedTooltip>
+                        
+                        {hero.bestAgainst.length > 0 ? (
+                          <div className="grid grid-cols-3 gap-2">
+                            {hero.bestAgainst.map(opponent => 
+                              renderHeroIcon(opponent)
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-gray-500 italic">No data available</div>
+                        )}
                       </div>
                       
-                      {hero.bestAgainst.length > 0 ? (
-                        <div className="grid grid-cols-3 gap-2">
-                          {hero.bestAgainst.map(opponent => 
-                            renderHeroIcon(opponent)
-                          )}
+                      {/* Worst Against Section */}
+                      <div>
+                        <div className="flex items-center mb-2">
+                          <h4 className="font-semibold text-sm">Countered By</h4>
+                          <EnhancedTooltip text="Heroes that this hero has the lowest win rate against" position="right" maxWidth="max-w-md">
+                            <Info size={14} className="ml-1 text-gray-500 cursor-help" />
+                          </EnhancedTooltip>
                         </div>
-                      ) : (
-                        <div className="text-sm text-gray-500 italic">No data available</div>
-                      )}
-                    </div>
-                    
-                    {/* Worst Against Section */}
-                    <div>
-                      <div className="flex items-center mb-2">
-                        <h4 className="font-semibold text-sm">Countered By</h4>
-                        <EnhancedTooltip text="Heroes that this hero has the lowest win rate against" position="right" maxWidth="max-w-md">
-                          <Info size={14} className="ml-1 text-gray-500 cursor-help" />
-                        </EnhancedTooltip>
+                        
+                        {hero.worstAgainst.length > 0 ? (
+                          <div className="grid grid-cols-3 gap-2">
+                            {hero.worstAgainst.map(opponent => 
+                              renderHeroIcon(opponent)
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-gray-500 italic">No data available</div>
+                        )}
                       </div>
-                      
-                      {hero.worstAgainst.length > 0 ? (
-                        <div className="grid grid-cols-3 gap-2">
-                          {hero.worstAgainst.map(opponent => 
-                            renderHeroIcon(opponent)
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-sm text-gray-500 italic">No data available</div>
-                      )}
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-64 text-center">
