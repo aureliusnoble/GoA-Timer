@@ -9,9 +9,10 @@ import CollapsibleFeedback from './components/common/CollapsibleFeedback';
 import SoundToggle from './components/common/SoundToggle';
 import AudioInitializer from './components/common/AudioInitializer';
 import VictoryScreen from './components/VictoryScreen';
-import ResumeGamePrompt from './components/common/ResumeGamePrompt'; // Import ResumeGamePrompt
-import { gameStorageService } from './services/GameStorageService'; // Import gameStorageService
+import ResumeGamePrompt from './components/common/ResumeGamePrompt';
+import { gameStorageService } from './services/GameStorageService';
 import { SoundProvider, useSound } from './context/SoundContext';
+import { ConnectionProvider } from './context/ConnectionContext'; // Import ConnectionProvider
 import { PlayerRoundStats } from './components/EndOfRoundAssistant';
 import { 
   Hero, 
@@ -1896,7 +1897,9 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
 function App() {
   return (
     <SoundProvider>
-      <AppContent />
+      <ConnectionProvider> {/* Add ConnectionProvider here */}
+        <AppContent />
+      </ConnectionProvider>
     </SoundProvider>
   );
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, AlertCircle, AlertTriangle } from 'lucide-react';
-import { Team, Player } from '../types';
+import { Team } from '../types';
 import { useSound } from '../context/SoundContext';
 
 interface PlayerNameInputProps {

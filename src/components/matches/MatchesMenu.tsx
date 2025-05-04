@@ -1,9 +1,11 @@
-// src/components/matches/MatchesMenu.tsx
+// src/components/matches/MatchesMenu.tsx (Updated)
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Users, History, Shield, Download, Upload, Trash2, Info, AlertTriangle, Shuffle, FileText } from 'lucide-react';
+import { ChevronLeft, Users, History, Shield, Download, Upload, Trash2, Info, AlertTriangle, Shuffle, FileText, Share2, Wifi } from 'lucide-react';
 import EnhancedTooltip from '../common/EnhancedTooltip';
+import { ConnectionModal } from '../common/ConnectionModal';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
+import { useConnection } from '../../context/ConnectionContext';
 
 export type MatchesView = 'menu' | 'player-stats' | 'hero-stats' | 'match-history' | 'match-maker' | 'record-match';
 
@@ -14,10 +16,14 @@ interface MatchesMenuProps {
 
 const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
   const { playSound } = useSound();
+  const { connectionState } = useConnection();
   const [hasData, setHasData] = useState<boolean>(false);
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
+  
+  // State for P2P connection modal
+  const [showConnectionModal, setShowConnectionModal] = useState<boolean>(false);
   
   // State for import options
   const [showImportOptions, setShowImportOptions] = useState<boolean>(false);
@@ -43,6 +49,17 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
   const handleBack = () => {
     playSound('buttonClick');
     onBack();
+  };
+  
+  // Handle opening P2P connection modal
+  const handleOpenConnectionModal = () => {
+    playSound('buttonClick');
+    setShowConnectionModal(true);
+  };
+  
+  // Handle closing P2P connection modal
+  const handleCloseConnectionModal = () => {
+    setShowConnectionModal(false);
   };
   
   // Handle exporting match data
@@ -252,7 +269,7 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
           )}
         </div>
         
-        {/* NEW: Record Match */}
+        {/* Record Match */}
         <div 
           className="bg-gray-700 hover:bg-gray-600 rounded-lg p-6 cursor-pointer transition-colors"
           onClick={() => handleNavigate('record-match')}
@@ -300,12 +317,43 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
         <div className="flex items-center mb-4">
           <h3 className="text-xl font-bold">Data Management</h3>
           <EnhancedTooltip 
-            text="Import and export features allow you to transfer your match data between devices or merge game records from different devices."
+            text="Share, import, and export features allow you to transfer your match data between devices or merge game records from different devices."
             position="right"
             maxWidth="max-w-md"
           >
             <Info size={16} className="ml-2 text-blue-400 cursor-help" />
           </EnhancedTooltip>
+        </div>
+        
+        {/* NEW: P2P Sync Call-to-Action */}
+        <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4 mb-6">
+          <div className="flex items-start">
+            <div className="mr-3 p-2 bg-blue-800 rounded-full flex-shrink-0">
+              <Share2 size={24} className="text-blue-300" />
+            </div>
+            <div className="flex-grow">
+              <h4 className="font-semibold text-lg text-blue-300 mb-1">Direct Data Sharing</h4>
+              <p className="text-sm text-gray-300 mb-3">
+                Share game data directly between devices with a simple connection code.
+              </p>
+              <button
+                onClick={handleOpenConnectionModal}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg flex items-center"
+              >
+                {connectionState.isConnected ? (
+                  <>
+                    <Wifi size={16} className="mr-2 text-green-300" />
+                    <span>Connected</span>
+                  </>
+                ) : (
+                  <>
+                    <Share2 size={16} className="mr-2" />
+                    <span>Connect and Share</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
         
         {/* Import Options Panel - Show when showImportOptions is true */}
@@ -460,12 +508,19 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
                 Match data is stored locally on this device using your browser's storage.
               </p>
               <p>
-                Use the Export feature to save your data and the Import feature to transfer it between devices or merge records from different devices (e.g. with friends).
+                Use the direct P2P sharing, export feature to save your data, or the import feature to transfer
+                it between devices or merge records from different devices.
               </p>
             </div>
           </div>
         </div>
       </div>
+      
+      {/* P2P Connection Modal */}
+      <ConnectionModal 
+        isOpen={showConnectionModal}
+        onClose={handleCloseConnectionModal}
+      />
     </div>
   );
 };
