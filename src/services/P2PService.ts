@@ -11,6 +11,8 @@ export interface ConnectionState {
   connectionCode: string | null;
   isHost: boolean;
   peerCount: number;
+  // Added new field to track detailed status
+  detailedStatus?: string;
 }
 
 /**
@@ -38,9 +40,12 @@ export class P2PService {
     error: null,
     connectionCode: null,
     isHost: false,
-    peerCount: 0
+    peerCount: 0,
+    detailedStatus: 'Initialized'
   };
   private options: P2POptions;
+  private reconnectAttempts: number = 0;
+  private maxReconnectAttempts: number = 3;
   
   constructor(options: P2POptions = {}) {
     this.options = {
@@ -52,6 +57,8 @@ export class P2PService {
     if (options.onData) {
       this.dataListeners.add(options.onData);
     }
+    
+    this.logConnectionStatus("P2PService initialized");
   }
   
   /**
@@ -65,7 +72,8 @@ export class P2PService {
     this.updateState({
       isHost: true,
       isConnecting: true,
-      connectionCode
+      connectionCode,
+      detailedStatus: "Initializing as host"
     });
     
     // Return the code immediately so UI can show it
@@ -90,6 +98,7 @@ export class P2PService {
         this.peer.on('open', (id) => {
           clearTimeout(timeout);
           this.log('Host initialized with ID:', id);
+          this.logConnectionStatus("Host peer opened, waiting for connections");
           
           // Set up connection listeners
           this.setupPeerListeners();
@@ -103,6 +112,7 @@ export class P2PService {
           // If the ID is taken, try again with a new code
           if (err.type === 'unavailable-id') {
             this.log('Connection code already in use, generating new one');
+            this.logConnectionStatus("Connection code in use, retrying");
             this.initAsHost().then(resolve).catch(reject);
             return;
           }
@@ -132,7 +142,8 @@ export class P2PService {
     this.updateState({
       isHost: false,
       isConnecting: true,
-      connectionCode
+      connectionCode,
+      detailedStatus: `Connecting to host: ${connectionCode}`
     });
     
     return new Promise((resolve, reject) => {
@@ -145,7 +156,8 @@ export class P2PService {
           reject(new Error('PeerJS initialization timeout'));
           this.updateState({
             isConnecting: false,
-            error: 'Connection timed out. Please try again.'
+            error: 'Connection timed out. Please try again.',
+            detailedStatus: 'Connection timeout'
           });
         }, 15000); // 15 seconds timeout
         
@@ -156,6 +168,7 @@ export class P2PService {
         
         this.peer.on('open', (myId) => {
           this.log('Initialized with ID:', myId);
+          this.logConnectionStatus(`Client peer opened with ID ${myId}, connecting to ${connectionCode}`);
           
           // Set up general peer event listeners
           this.setupPeerListeners();
@@ -169,6 +182,7 @@ export class P2PService {
           
           // Connect to the host using their connection code
           try {
+            this.log(`Attempting to connect to host ${connectionCode}`);
             const conn = this.peer.connect(connectionCode, {
               reliable: true,
               serialization: 'json'
@@ -206,20 +220,40 @@ export class P2PService {
    * @returns True if sent successfully, false otherwise
    */
   public send(data: any): boolean {
-    if (this.connections.size === 0) {
+    // Log verbose connection status before sending
+    this.logConnectionStatus(`Attempting to send data, connections: ${this.connections.size}`);
+    
+    // Validate connections before sending
+    if (!this.validateConnections()) {
       this.updateState({
-        error: 'Cannot send data: not connected to any peers'
+        error: 'Cannot send data: not connected to any peers',
+        detailedStatus: 'No active connections for sending'
       });
       return false;
     }
     
     try {
+      let sentCount = 0;
       // Send to all connections
       for (const conn of this.connections.values()) {
         if (conn.open) {
+          this.log(`Sending data to peer: ${conn.peer}`);
           conn.send(data);
+          sentCount++;
+        } else {
+          this.log(`Connection to ${conn.peer} exists but is not open, skipping`);
         }
       }
+      
+      if (sentCount === 0) {
+        this.updateState({
+          error: 'Cannot send data: all connections are closed',
+          detailedStatus: 'All connections closed'
+        });
+        return false;
+      }
+      
+      this.log(`Successfully sent data to ${sentCount} peer(s)`);
       return true;
     } catch (error) {
       this.handleError('Failed to send data', error);
@@ -254,6 +288,7 @@ export class P2PService {
    * Disconnect from all peers and clean up resources
    */
   public disconnect(): void {
+    this.log('Disconnecting from all peers');
     this.cleanupPeer();
     
     this.updateState({
@@ -261,8 +296,35 @@ export class P2PService {
       isConnected: false,
       connectionCode: null,
       error: null,
-      peerCount: 0
+      peerCount: 0,
+      detailedStatus: 'Disconnected'
     });
+  }
+  
+  /**
+   * Validate that we have at least one active connection
+   * @returns True if there's at least one active connection
+   */
+  private validateConnections(): boolean {
+    if (this.connections.size === 0) {
+      this.log('No connections in the connections map');
+      return false;
+    }
+    
+    // Check if any connections are actually open
+    let hasOpenConnection = false;
+    for (const conn of this.connections.values()) {
+      if (conn.open) {
+        hasOpenConnection = true;
+        break;
+      }
+    }
+    
+    if (!hasOpenConnection) {
+      this.log('No open connections found despite having connection objects');
+    }
+    
+    return hasOpenConnection;
   }
   
   /**
@@ -274,24 +336,38 @@ export class P2PService {
     // Handle incoming connections (when acting as host)
     this.peer.on('connection', (conn) => {
       this.log('Incoming connection from peer:', conn.peer);
+      this.logConnectionStatus(`Incoming connection from: ${conn.peer}`);
       this.handleIncomingConnection(conn);
     });
     
     this.peer.on('disconnected', () => {
       this.log('Disconnected from PeerJS server');
+      this.logConnectionStatus('Disconnected from signaling server, attempting reconnect');
       
       // Try to reconnect to the signaling server
-      if (this.peer) {
+      if (this.peer && this.reconnectAttempts < this.maxReconnectAttempts) {
+        this.reconnectAttempts++;
+        this.log(`Attempting reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
         this.peer.reconnect();
+      } else if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+        this.log('Max reconnect attempts reached, giving up');
+        this.updateState({
+          isConnected: false,
+          isConnecting: false,
+          error: 'Connection lost and could not reconnect automatically',
+          detailedStatus: 'Max reconnect attempts reached'
+        });
       }
     });
     
     this.peer.on('close', () => {
       this.log('Peer connection closed');
+      this.logConnectionStatus('Peer closed');
       this.updateState({
         isConnected: false,
         isConnecting: false,
-        peerCount: 0
+        peerCount: 0,
+        detailedStatus: 'Peer connection closed'
       });
     });
     
@@ -305,18 +381,18 @@ export class P2PService {
    * @param conn The PeerJS DataConnection
    */
   private handleIncomingConnection(conn: DataConnection): void {
-    // Save the connection
+    this.log(`Handling incoming connection from ${conn.peer}`);
+    
+    // Save the connection immediately
     this.connections.set(conn.peer, conn);
+    this.log(`Added connection to map, current size: ${this.connections.size}`);
     
     conn.on('open', () => {
       this.log('Connection opened to peer:', conn.peer);
+      this.logConnectionStatus(`Connection opened with peer: ${conn.peer}`);
       
-      this.updateState({
-        isConnecting: false,
-        isConnected: true,
-        error: null,
-        peerCount: this.connections.size
-      });
+      // Update the connection status
+      this.updateConnectionStateFromMap();
     });
     
     conn.on('data', (data) => {
@@ -326,16 +402,42 @@ export class P2PService {
     
     conn.on('close', () => {
       this.log('Connection closed from peer:', conn.peer);
+      this.logConnectionStatus(`Connection closed from peer: ${conn.peer}`);
       this.connections.delete(conn.peer);
+      this.log(`Removed connection from map, current size: ${this.connections.size}`);
       
-      this.updateState({
-        peerCount: this.connections.size,
-        isConnected: this.connections.size > 0
-      });
+      // Update connection status after removing the connection
+      this.updateConnectionStateFromMap();
     });
     
     conn.on('error', (err) => {
       this.handleError(`Connection error with peer ${conn.peer}`, err);
+      
+      // Try to remove this problematic connection
+      this.connections.delete(conn.peer);
+      this.log(`Removed errored connection, current size: ${this.connections.size}`);
+      
+      // Update connection status
+      this.updateConnectionStateFromMap();
+    });
+  }
+  
+  /**
+   * Update connection state based on the connections map
+   */
+  private updateConnectionStateFromMap(): void {
+    const openConnections = [...this.connections.values()].filter(conn => conn.open).length;
+    
+    this.log(`Updating connection state based on map: ${openConnections} open connections`);
+    
+    this.updateState({
+      isConnected: openConnections > 0,
+      isConnecting: false,
+      error: null,
+      peerCount: openConnections,
+      detailedStatus: openConnections > 0 
+        ? `Connected with ${openConnections} peer(s)` 
+        : 'No active connections'
     });
   }
   
@@ -355,19 +457,20 @@ export class P2PService {
       reject(new Error('Connection timeout'));
     }, 15000);
     
+    // Log the connection attempt
+    this.log(`Attempting outgoing connection to ${conn.peer}`);
+    
     conn.on('open', () => {
       clearTimeout(timeout);
       this.log('Connection opened to host:', conn.peer);
+      this.logConnectionStatus(`Connection opened to host: ${conn.peer}`);
       
       // Save the connection
       this.connections.set(conn.peer, conn);
+      this.log(`Added connection to map, current size: ${this.connections.size}`);
       
-      this.updateState({
-        isConnecting: false,
-        isConnected: true,
-        error: null,
-        peerCount: this.connections.size
-      });
+      // Update state based on map contents
+      this.updateConnectionStateFromMap();
       
       resolve();
     });
@@ -379,18 +482,26 @@ export class P2PService {
     
     conn.on('close', () => {
       this.log('Connection closed from host:', conn.peer);
+      this.logConnectionStatus(`Connection closed from host: ${conn.peer}`);
       this.connections.delete(conn.peer);
+      this.log(`Removed connection from map, current size: ${this.connections.size}`);
       
-      this.updateState({
-        peerCount: this.connections.size,
-        isConnected: this.connections.size > 0
-      });
+      // Update state based on map contents
+      this.updateConnectionStateFromMap();
     });
     
     conn.on('error', (err) => {
       clearTimeout(timeout);
       this.handleError(`Connection error with host ${conn.peer}`, err);
-      reject(err);
+      
+      // Clean up problematic connection
+      this.connections.delete(conn.peer);
+      this.log(`Removed errored connection, current size: ${this.connections.size}`);
+      
+      // Update state
+      this.updateConnectionStateFromMap();
+      
+      reject(err instanceof Error ? err : new Error(String(err)));
     });
   }
   
@@ -398,25 +509,33 @@ export class P2PService {
    * Clean up peer and connections
    */
   private cleanupPeer(): void {
+    this.log(`Cleaning up peer and ${this.connections.size} connections`);
+    
     // Close all active connections
     for (const conn of this.connections.values()) {
       try {
+        this.log(`Closing connection to ${conn.peer}`);
         conn.close();
       } catch (e) {
-        // Ignore errors during cleanup
+        this.log(`Error closing connection: ${e}`);
       }
     }
     this.connections.clear();
+    this.log('Cleared all connections from map');
     
     // Close and destroy peer
     if (this.peer) {
       try {
+        this.log('Destroying peer instance');
         this.peer.destroy();
       } catch (e) {
-        // Ignore errors during cleanup
+        this.log(`Error destroying peer: ${e}`);
       }
       this.peer = null;
     }
+    
+    // Reset reconnect counter
+    this.reconnectAttempts = 0;
   }
   
   /**
@@ -426,30 +545,38 @@ export class P2PService {
    */
   private handleError(message: string, error: any): void {
     let errorMessage: string;
+    let detailedStatus: string;
     
     // Extract more specific error information from PeerJS errors
     if (error && typeof error === 'object' && error.type) {
       switch (error.type) {
         case 'peer-unavailable':
           errorMessage = `${message}: The connection code is invalid or the host is no longer available`;
+          detailedStatus = 'Host unavailable';
           break;
         case 'disconnected':
           errorMessage = `${message}: Connection to signaling server lost`;
+          detailedStatus = 'Signaling server disconnected';
           break;
         case 'server-error':
           errorMessage = `${message}: WebRTC server error`;
+          detailedStatus = 'WebRTC server error';
           break;
         case 'socket-error':
           errorMessage = `${message}: Network connection issue`;
+          detailedStatus = 'Network connection issue';
           break;
         case 'socket-closed':
           errorMessage = `${message}: Connection closed unexpectedly`;
+          detailedStatus = 'Connection closed unexpectedly';
           break;
         default:
           errorMessage = `${message}: ${error.type || error.message || 'Unknown error'}`;
+          detailedStatus = `Error: ${error.type || 'Unknown'}`;
       }
     } else {
       errorMessage = `${message}: ${error?.message || error || 'Unknown error'}`;
+      detailedStatus = 'Unknown error occurred';
     }
     
     this.log('ERROR:', errorMessage, error);
@@ -457,7 +584,8 @@ export class P2PService {
     // Update connection state to not connecting
     this.updateState({
       isConnecting: false,
-      error: errorMessage
+      error: errorMessage,
+      detailedStatus: detailedStatus
     });
   }
   
@@ -478,6 +606,14 @@ export class P2PService {
       ...this.connectionState,
       ...updates
     };
+    
+    // Log significant state changes
+    if (updates.isConnected !== undefined || 
+        updates.isConnecting !== undefined || 
+        updates.error !== undefined ||
+        updates.peerCount !== undefined) {
+      this.log(`State updated: connected=${this.connectionState.isConnected}, connecting=${this.connectionState.isConnecting}, peers=${this.connectionState.peerCount}, error=${this.connectionState.error ? 'yes' : 'no'}`);
+    }
     
     // Notify via options callback if provided
     if (this.options.onConnectionStateChange) {
@@ -522,10 +658,18 @@ export class P2PService {
   }
   
   /**
+   * Log detailed connection status
+   */
+  private logConnectionStatus(status: string): void {
+    this.log(`CONNECTION STATUS: ${status} (connections: ${this.connections.size}, connected: ${this.connectionState.isConnected})`);
+  }
+  
+  /**
    * Conditional logger
    */
   private log(...args: any[]): void {
-    if (this.options.debug) {
+    // Always log connection errors for debugging
+    if (args[0] === 'ERROR:' || this.options.debug) {
       console.log('[P2PService]', ...args);
     }
   }

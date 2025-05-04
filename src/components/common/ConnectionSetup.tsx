@@ -1,6 +1,6 @@
 // src/components/common/ConnectionSetup.tsx
 import React, { useState, useEffect } from 'react';
-import { Share2, Link, Wifi, WifiOff, Copy, Check, HelpCircle, X, Loader2, ArrowUpCircle, ArrowDownCircle, AlertTriangle } from 'lucide-react';
+import { Share2, Link, Wifi, WifiOff, Copy, Check, HelpCircle, X, Loader2, ArrowUpCircle, ArrowDownCircle, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useConnection } from '../../context/ConnectionContext';
 import { useSound } from '../../context/SoundContext';
 
@@ -27,6 +27,7 @@ export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose, onDat
   const [codeCopied, setCodeCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [isCodeValid, setIsCodeValid] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   
   // Format and validate join code
   useEffect(() => {
@@ -48,11 +49,14 @@ export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose, onDat
   const handleHostSession = async () => {
     try {
       playSound('buttonClick');
-      console.log("[P2P] Initiating host session...");
+      console.log("[ConnectionSetup] Initiating host session...");
+      setIsRetrying(true);
       const code = await initAsHost();
-      console.log("[P2P] Host session created with code:", code);
+      setIsRetrying(false);
+      console.log("[ConnectionSetup] Host session created with code:", code);
     } catch (err) {
-      console.error("[P2P] Failed to host session:", err);
+      setIsRetrying(false);
+      console.error("[ConnectionSetup] Failed to host session:", err);
     }
   };
   
@@ -62,17 +66,21 @@ export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose, onDat
     
     try {
       playSound('buttonClick');
-      console.log("[P2P] Joining session with code:", joinCode);
+      console.log("[ConnectionSetup] Joining session with code:", joinCode);
+      setIsRetrying(true);
       await connect(joinCode);
-      console.log("[P2P] Successfully joined session");
+      setIsRetrying(false);
+      console.log("[ConnectionSetup] Successfully joined session");
     } catch (err) {
-      console.error("[P2P] Failed to join session:", err);
+      setIsRetrying(false);
+      console.error("[ConnectionSetup] Failed to join session:", err);
     }
   };
   
   // Handle disconnecting
   const handleDisconnect = () => {
     playSound('buttonClick');
+    console.log("[ConnectionSetup] Disconnecting from session");
     disconnect();
   };
   
@@ -80,9 +88,10 @@ export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose, onDat
   const handleSendData = async () => {
     try {
       playSound('buttonClick');
+      console.log("[ConnectionSetup] Sending data...");
       await sendData();
     } catch (err) {
-      console.error("Failed to send data:", err);
+      console.error("[ConnectionSetup] Failed to send data:", err);
     }
   };
   
@@ -90,21 +99,24 @@ export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose, onDat
   const handleRequestData = async () => {
     try {
       playSound('buttonClick');
+      console.log("[ConnectionSetup] Requesting data...");
       await requestData();
     } catch (err) {
-      console.error("Failed to request data:", err);
+      console.error("[ConnectionSetup] Failed to request data:", err);
     }
   };
   
   // Handle confirming a data operation
   const handleConfirmOperation = () => {
     playSound('buttonClick');
+    console.log("[ConnectionSetup] Confirming data operation");
     confirmDataOperation();
   };
   
   // Handle rejecting a data operation
   const handleRejectOperation = () => {
     playSound('buttonClick');
+    console.log("[ConnectionSetup] Rejecting data operation");
     rejectDataOperation();
   };
   
@@ -145,12 +157,24 @@ export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose, onDat
   // Determine if we need to show the confirmation UI
   const showConfirmationUI = syncProgress.status === 'pending-confirmation';
   
+  // Show detailed connection status if available
+  const detailedStatus = connectionState.detailedStatus;
+  
   // Effect to trigger the onDataReceived callback when data sync completes
   useEffect(() => {
     if (syncProgress.status === 'complete' && onDataReceived) {
+      console.log("[ConnectionSetup] Data sync completed, calling onDataReceived");
       onDataReceived();
     }
   }, [syncProgress.status, onDataReceived]);
+  
+  // Debug logging for connections and sync status
+  useEffect(() => {
+    console.log("[ConnectionSetup] Connection state update:", 
+                connectionState.isConnected ? 'connected' : 'disconnected',
+                'peers:', connectionState.peerCount,
+                'status:', syncProgress.status);
+  }, [connectionState.isConnected, connectionState.peerCount, syncProgress.status]);
   
   return (
     <div className="bg-gray-800 p-6 rounded-lg shadow-lg w-full max-w-md mx-auto">
@@ -178,12 +202,39 @@ export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose, onDat
           <div>
             <div className="font-medium">Connection Error</div>
             <div className="text-sm mt-1">{connectionState.error}</div>
-            <button
-              onClick={connectionState.isHost ? handleHostSession : handleDisconnect}
-              className="mt-2 px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-white text-sm"
-            >
-              {connectionState.isHost ? "Try Again" : "Start Over"}
-            </button>
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={connectionState.isHost ? handleHostSession : handleDisconnect}
+                className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-white text-sm"
+              >
+                {connectionState.isHost ? "Try Again" : "Start Over"}
+              </button>
+              {/* Added a manual reconnect button for peer connection */}
+              {!connectionState.isHost && (
+                <button
+                  onClick={() => connect(joinCode || connectionState.connectionCode || '')}
+                  className="px-3 py-1 bg-blue-700 hover:bg-blue-600 rounded text-white text-sm flex items-center"
+                  disabled={(!joinCode && !connectionState.connectionCode) || isRetrying}
+                >
+                  {isRetrying ? (
+                    <Loader2 size={14} className="mr-1 animate-spin" />
+                  ) : (
+                    <RefreshCw size={14} className="mr-1" />
+                  )}
+                  Reconnect
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Connection detailed status (if available) */}
+      {detailedStatus && !connectionState.error && connectionState.isConnecting && (
+        <div className="mb-4 p-2 bg-blue-900/30 border border-blue-500 rounded-lg text-blue-300 text-sm">
+          <div className="flex items-center">
+            <div className="w-2 h-2 rounded-full bg-blue-400 mr-2 animate-pulse"></div>
+            {detailedStatus}
           </div>
         </div>
       )}
@@ -202,9 +253,19 @@ export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose, onDat
           <button 
             className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg flex items-center justify-center"
             onClick={handleHostSession}
+            disabled={isRetrying}
           >
-            <Share2 size={18} className="mr-2" />
-            Create New Connection
+            {isRetrying ? (
+              <>
+                <Loader2 size={18} className="mr-2 animate-spin" />
+                Creating Connection...
+              </>
+            ) : (
+              <>
+                <Share2 size={18} className="mr-2" />
+                Create New Connection
+              </>
+            )}
           </button>
           
           <div className="relative flex items-center py-2">
@@ -221,17 +282,22 @@ export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose, onDat
               onChange={handleJoinCodeChange}
               className="flex-grow px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-center font-mono text-lg uppercase tracking-wider"
               maxLength={12}
+              disabled={isRetrying}
             />
             <button 
               className={`py-3 px-4 ${
-                isCodeValid 
+                isCodeValid && !isRetrying
                   ? 'bg-green-600 hover:bg-green-500' 
                   : 'bg-gray-600 cursor-not-allowed'
               } text-white rounded-lg flex-shrink-0 flex items-center justify-center`}
               onClick={handleJoinSession}
-              disabled={!isCodeValid}
+              disabled={!isCodeValid || isRetrying}
             >
-              Join
+              {isRetrying ? (
+                <Loader2 size={18} className="animate-spin" />
+              ) : (
+                "Join"
+              )}
             </button>
           </div>
         </div>
@@ -314,7 +380,7 @@ export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose, onDat
             <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
             <span>
               {connectionState.isHost 
-                ? 'Hosting Connection' 
+                ? `Hosting Connection (${connectionState.peerCount} ${connectionState.peerCount === 1 ? 'peer' : 'peers'} connected)` 
                 : 'Connected to Host'}
             </span>
           </div>
@@ -455,19 +521,55 @@ export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose, onDat
                   <Check size={18} className="text-green-500 mr-2 mt-0.5" />
                   <p className="text-green-300">{syncProgress.message}</p>
                 </div>
+                <div className="mt-2 text-right">
+                  <button
+                    onClick={() => { 
+                      // Reset sync status so the user can perform another operation
+                      rejectDataOperation();
+                    }}
+                    className="px-3 py-1 bg-green-800 hover:bg-green-700 rounded text-sm"
+                  >
+                    Done
+                  </button>
+                </div>
               </div>
             )}
             
             {/* Sync Error State */}
             {syncProgress.status === 'error' && (
               <div className="p-3 bg-red-900/30 border border-red-500 rounded-lg">
-                <p className="text-red-300">{syncProgress.message}</p>
-                <button
-                  onClick={() => window.location.reload()}
-                  className="mt-2 w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center justify-center"
-                >
-                  Try Again
-                </button>
+                <div className="flex items-start">
+                  <AlertTriangle size={18} className="text-red-500 mr-2 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-red-300">{syncProgress.message}</p>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        onClick={() => {
+                          // Reset sync status so the user can try again
+                          rejectDataOperation();
+                        }}
+                        className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+                      >
+                        Dismiss
+                      </button>
+                      {syncProgress.error?.includes('connection') && (
+                        <button
+                          onClick={() => {
+                            // Try reconnecting
+                            if (connectionState.connectionCode) {
+                              rejectDataOperation();
+                              connect(connectionState.connectionCode);
+                            }
+                          }}
+                          className="px-3 py-1 bg-blue-700 hover:bg-blue-600 rounded text-sm flex items-center"
+                        >
+                          <RefreshCw size={14} className="mr-1" />
+                          Reconnect
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>

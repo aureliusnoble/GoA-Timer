@@ -7,9 +7,10 @@ import dbService, { ExportData } from './DatabaseService';
  */
 export interface SyncProgress {
   percent: number;
-  status: 'idle' | 'preparing' | 'sending' | 'receiving' | 'processing' | 'complete' | 'error' | 'pending-confirmation' | 'awaiting-confirmation';
+  status: 'idle' | 'preparing' | 'sending' | 'receiving' | 'processing' | 'complete' | 'error' | 'pending-confirmation' | 'awaiting-confirmation' | 'reconnecting';
   message: string;
   isDataRequest?: boolean; // Indicates if this is a request for data (true) or a send of data (false)
+  error?: string; // Added for detailed error reporting
 }
 
 /**
@@ -32,7 +33,11 @@ export enum SyncMessageType {
   CHUNK_ACK = 'db-sync-chunk-ack',
   COMPLETE = 'db-sync-complete',
   ERROR = 'db-sync-error',
-  INFO = 'db-sync-info'
+  INFO = 'db-sync-info',
+  
+  // Health check messages
+  HEALTHCHECK = 'db-sync-healthcheck',
+  HEALTHCHECK_RESPONSE = 'db-sync-healthcheck-response'
 }
 
 /**
@@ -53,7 +58,7 @@ interface SyncMessage {
 export class DatabaseSyncService {
   private p2pService: P2PService;
   private onProgressCallback: ((progress: SyncProgress) => void) | null = null;
-  private chunkSize = 100 * 1024; // 100KB chunks
+  private chunkSize = 10 * 1024; // Reduced chunk size to 10KB for better reliability
   private syncInProgress = false;
   private receivedChunks: Map<number, string> = new Map();
   private totalExpectedChunks = 0;
@@ -64,9 +69,16 @@ export class DatabaseSyncService {
     status: 'idle',
     message: 'Ready to sync'
   };
+  // Retry-related properties
+  private retryCount = 0;
+  private maxRetries = 5; // Increased retry attempts
+  private chunkRetryCount: Map<number, number> = new Map();
+  private maxChunkRetries = 3;
+  private healthcheckInterval: ReturnType<typeof setInterval> | null = null;
   
   constructor(p2pService: P2PService) {
     this.p2pService = p2pService;
+    console.log('[DatabaseSyncService] Initialized');
     
     // Listen for sync messages
     this.p2pService.onData(this.handleSyncMessage.bind(this));
@@ -76,26 +88,53 @@ export class DatabaseSyncService {
    * Request database sync from connected peer(s)
    */
   public async requestData(): Promise<void> {
-    if (!this.p2pService.getState().isConnected) {
+    console.log('[DatabaseSyncService] requestData called');
+    
+    const connectionState = this.p2pService.getState();
+    console.log('[DatabaseSyncService] Current connection state:', 
+                 connectionState.isConnected ? 'connected' : 'disconnected',
+                 'peers:', connectionState.peerCount);
+                 
+    if (!connectionState.isConnected) {
+      console.error('[DatabaseSyncService] Not connected to any peers');
       this.updateProgress({
         percent: 0,
         status: 'error',
-        message: 'Not connected to any peers'
+        message: 'Not connected to any peers',
+        error: 'Connection is not active'
       });
       throw new Error('Not connected to any peers');
     }
     
     if (this.syncInProgress) {
+      console.error('[DatabaseSyncService] Sync already in progress');
       this.updateProgress({
         percent: 0,
         status: 'error',
-        message: 'Sync already in progress'
+        message: 'Sync already in progress',
+        error: 'Sync operation is already running'
       });
       throw new Error('Sync already in progress');
     }
     
+    // Send a health check message first to verify the connection is active
+    const isHealthy = await this.performConnectionHealthCheck();
+    if (!isHealthy) {
+      console.error('[DatabaseSyncService] Connection health check failed');
+      this.updateProgress({
+        percent: 0,
+        status: 'error',
+        message: 'Connection health check failed. Try disconnecting and reconnecting.',
+        error: 'Connection health check failed'
+      });
+      throw new Error('Connection health check failed');
+    }
+    
     this.syncInProgress = true;
     this.currentOperationId = this.generateOperationId();
+    this.retryCount = 0;
+    
+    console.log('[DatabaseSyncService] Starting data request with operation ID:', this.currentOperationId);
     
     // Update progress to show we're waiting for confirmation
     this.updateProgress({
@@ -106,38 +145,83 @@ export class DatabaseSyncService {
     });
     
     // Send data request message
-    this.p2pService.send({
+    const sendResult = this.p2pService.send({
       type: SyncMessageType.REQUEST_DATA,
       payload: {
         operationId: this.currentOperationId
       }
     });
+    
+    // If send fails immediately, update progress and throw
+    if (!sendResult) {
+      console.error('[DatabaseSyncService] Failed to send data request');
+      this.syncInProgress = false;
+      this.currentOperationId = null;
+      this.updateProgress({
+        percent: 0,
+        status: 'error',
+        message: 'Failed to send data request. Try reconnecting.',
+        error: 'Message sending failed'
+      });
+      throw new Error('Failed to send data request');
+    }
+    
+    // Start healthcheck interval
+    this.startHealthcheckInterval();
   }
   
   /**
    * Send database data to connected peer(s)
    */
   public async sendData(): Promise<void> {
-    if (!this.p2pService.getState().isConnected) {
+    console.log('[DatabaseSyncService] sendData called');
+    
+    const connectionState = this.p2pService.getState();
+    console.log('[DatabaseSyncService] Current connection state:', 
+                 connectionState.isConnected ? 'connected' : 'disconnected',
+                 'peers:', connectionState.peerCount);
+                 
+    if (!connectionState.isConnected) {
+      console.error('[DatabaseSyncService] Not connected to any peers');
       this.updateProgress({
         percent: 0,
         status: 'error',
-        message: 'Not connected to any peers'
+        message: 'Not connected to any peers',
+        error: 'Connection is not active'
       });
       throw new Error('Not connected to any peers');
     }
     
     if (this.syncInProgress) {
+      console.error('[DatabaseSyncService] Sync already in progress');
       this.updateProgress({
         percent: 0,
         status: 'error',
-        message: 'Sync already in progress'
+        message: 'Sync already in progress',
+        error: 'Sync operation is already running'
       });
       throw new Error('Sync already in progress');
     }
     
+    // Send a health check message first to verify the connection is active
+    const isHealthy = await this.performConnectionHealthCheck();
+    if (!isHealthy) {
+      console.error('[DatabaseSyncService] Connection health check failed');
+      this.updateProgress({
+        percent: 0,
+        status: 'error',
+        message: 'Connection health check failed. Try disconnecting and reconnecting.',
+        error: 'Connection health check failed'
+      });
+      throw new Error('Connection health check failed');
+    }
+    
     this.syncInProgress = true;
     this.currentOperationId = this.generateOperationId();
+    this.retryCount = 0;
+    this.chunkRetryCount.clear();
+    
+    console.log('[DatabaseSyncService] Starting data send with operation ID:', this.currentOperationId);
     
     // Update progress to show we're waiting for confirmation
     this.updateProgress({
@@ -148,32 +232,159 @@ export class DatabaseSyncService {
     });
     
     // Send data request message
-    this.p2pService.send({
+    const sendResult = this.p2pService.send({
       type: SyncMessageType.SEND_DATA_REQUEST,
       payload: {
         operationId: this.currentOperationId
       }
     });
+    
+    // If send fails immediately, update progress and throw
+    if (!sendResult) {
+      console.error('[DatabaseSyncService] Failed to send data request');
+      this.syncInProgress = false;
+      this.currentOperationId = null;
+      this.updateProgress({
+        percent: 0,
+        status: 'error',
+        message: 'Failed to send data request. Try reconnecting.',
+        error: 'Message sending failed'
+      });
+      throw new Error('Failed to send data request');
+    }
+    
+    // Start healthcheck interval
+    this.startHealthcheckInterval();
+  }
+  
+  /**
+   * Perform a connection health check
+   * @returns Promise resolving to true if connection is healthy
+   */
+  private async performConnectionHealthCheck(): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      console.log('[DatabaseSyncService] Performing connection health check');
+      
+      // Set a timeout for the health check
+      const timeout = setTimeout(() => {
+        console.error('[DatabaseSyncService] Health check timed out');
+        resolve(false);
+      }, 5000);
+      
+      // Create a one-time listener for the health check response
+      const healthCheckListener = (message: any) => {
+        if (message && message.type === SyncMessageType.HEALTHCHECK_RESPONSE) {
+          console.log('[DatabaseSyncService] Received health check response');
+          clearTimeout(timeout);
+          // Remove the temporary listener
+          this.p2pService.removeDataListener(healthCheckListener);
+          resolve(true);
+        }
+      };
+      
+      // Add the listener
+      this.p2pService.onData(healthCheckListener);
+      
+      // Send the health check message
+      const sendResult = this.p2pService.send({
+        type: SyncMessageType.HEALTHCHECK
+      });
+      
+      // If send fails immediately, fail the health check
+      if (!sendResult) {
+        console.error('[DatabaseSyncService] Failed to send health check');
+        clearTimeout(timeout);
+        this.p2pService.removeDataListener(healthCheckListener);
+        resolve(false);
+      }
+    });
+  }
+  
+  /**
+   * Start a healthcheck interval to detect connection issues
+   */
+  private startHealthcheckInterval(): void {
+    // Clear any existing interval
+    this.stopHealthcheckInterval();
+    
+    // Set a new interval
+    this.healthcheckInterval = setInterval(() => {
+      // Only check if sync is in progress
+      if (this.syncInProgress && 
+         (this.currentProgress.status === 'awaiting-confirmation' || 
+          this.currentProgress.status === 'pending-confirmation')) {
+        
+        console.log('[DatabaseSyncService] Performing periodic health check');
+        this.performConnectionHealthCheck().then(isHealthy => {
+          if (!isHealthy) {
+            console.error('[DatabaseSyncService] Periodic health check failed');
+            // Only show error if we're still in a waiting state
+            if (this.currentProgress.status === 'awaiting-confirmation' || 
+                this.currentProgress.status === 'pending-confirmation') {
+              this.updateProgress({
+                percent: 0,
+                status: 'error',
+                message: 'Connection was lost while waiting for confirmation',
+                error: 'Connection health check failed'
+              });
+              this.syncInProgress = false;
+              this.currentOperationId = null;
+              this.stopHealthcheckInterval();
+            }
+          }
+        });
+      } else {
+        // If no longer in these states, stop the interval
+        this.stopHealthcheckInterval();
+      }
+    }, 10000); // Check every 10 seconds
+  }
+  
+  /**
+   * Stop the healthcheck interval
+   */
+  private stopHealthcheckInterval(): void {
+    if (this.healthcheckInterval) {
+      clearInterval(this.healthcheckInterval);
+      this.healthcheckInterval = null;
+    }
   }
   
   /**
    * Confirm a data operation (sending or receiving)
    */
   public confirmDataOperation(): void {
+    console.log('[DatabaseSyncService] confirmDataOperation called, current status:', this.currentProgress.status);
+    
     if (this.currentProgress.status === 'pending-confirmation') {
       const isDataRequest = this.currentProgress.isDataRequest;
       
       if (isDataRequest) {
         // We're being asked to send data
+        console.log('[DatabaseSyncService] Confirming data request, sending data');
         this.handleSendDataAfterConfirmation();
       } else {
         // We're being asked to receive data
-        this.p2pService.send({
+        console.log('[DatabaseSyncService] Confirming data send request, ready to receive');
+        const sendResult = this.p2pService.send({
           type: SyncMessageType.SEND_DATA_CONFIRM,
           payload: {
             operationId: this.currentOperationId
           }
         });
+        
+        if (!sendResult) {
+          console.error('[DatabaseSyncService] Failed to send confirmation');
+          this.updateProgress({
+            percent: 0,
+            status: 'error',
+            message: 'Failed to send confirmation. Try reconnecting.',
+            error: 'Message sending failed'
+          });
+          this.syncInProgress = false;
+          this.currentOperationId = null;
+          return;
+        }
         
         this.updateProgress({
           percent: 0,
@@ -181,6 +392,8 @@ export class DatabaseSyncService {
           message: 'Preparing to receive data'
         });
       }
+    } else {
+      console.warn('[DatabaseSyncService] confirmDataOperation called when not in pending-confirmation state');
     }
   }
   
@@ -188,34 +401,49 @@ export class DatabaseSyncService {
    * Reject a data operation (sending or receiving)
    */
   public rejectDataOperation(): void {
+    console.log('[DatabaseSyncService] rejectDataOperation called, current status:', this.currentProgress.status);
+    
     if (this.currentProgress.status === 'pending-confirmation') {
       const isDataRequest = this.currentProgress.isDataRequest;
       
       if (isDataRequest) {
         // Reject request to send data
-        this.p2pService.send({
+        console.log('[DatabaseSyncService] Rejecting data request');
+        const sendResult = this.p2pService.send({
           type: SyncMessageType.REQUEST_REJECT,
           payload: {
             operationId: this.currentOperationId
           }
         });
+        
+        if (!sendResult) {
+          console.warn('[DatabaseSyncService] Failed to send rejection, but continuing with local state reset');
+        }
       } else {
         // Reject incoming data
-        this.p2pService.send({
+        console.log('[DatabaseSyncService] Rejecting data send request');
+        const sendResult = this.p2pService.send({
           type: SyncMessageType.SEND_DATA_REJECT,
           payload: {
             operationId: this.currentOperationId
           }
         });
+        
+        if (!sendResult) {
+          console.warn('[DatabaseSyncService] Failed to send rejection, but continuing with local state reset');
+        }
       }
     } else if (this.currentProgress.status === 'awaiting-confirmation') {
-      // Cancel our own request or send operation
+      console.log('[DatabaseSyncService] Cancelling our own operation while awaiting confirmation');
       // No need to send a message, just reset state
+    } else {
+      console.warn('[DatabaseSyncService] rejectDataOperation called when not in expected state');
     }
     
-    // Reset the sync state
+    // Reset the sync state regardless of message send success
     this.syncInProgress = false;
     this.currentOperationId = null;
+    this.stopHealthcheckInterval();
     
     // Update progress to idle
     this.updateProgress({
@@ -232,14 +460,26 @@ export class DatabaseSyncService {
     this.onProgressCallback = callback;
   }
   
-
   /**
    * Handle incoming sync messages
    */
   private handleSyncMessage(message: SyncMessage): void {
-    if (!message || !message.type) return;
+    if (!message || !message.type) {
+      console.warn('[DatabaseSyncService] Received malformed message:', message);
+      return;
+    }
+    
+    console.log('[DatabaseSyncService] Received message type:', message.type);
     
     switch (message.type) {
+      // Health check messages
+      case SyncMessageType.HEALTHCHECK:
+        console.log('[DatabaseSyncService] Responding to health check');
+        this.p2pService.send({
+          type: SyncMessageType.HEALTHCHECK_RESPONSE
+        });
+        break;
+      
       // Handle data request
       case SyncMessageType.REQUEST_DATA:
         this.handleDataRequest(message.payload);
@@ -277,22 +517,29 @@ export class DatabaseSyncService {
         break;
       case SyncMessageType.CHUNK_ACK:
         // This is handled in the sendLargeData promise
+        console.log('[DatabaseSyncService] Received chunk acknowledgment');
         break;
       
       // Handle errors and info messages
       case SyncMessageType.ERROR:
+        console.error('[DatabaseSyncService] Received error from peer:', message.payload?.message);
         this.updateProgress({
           percent: 0,
           status: 'error',
-          message: `Peer error: ${message.payload?.message || 'Unknown error'}`
+          message: `Peer error: ${message.payload?.message || 'Unknown error'}`,
+          error: message.payload?.message
         });
         this.syncInProgress = false;
         this.currentOperationId = null;
+        this.stopHealthcheckInterval();
         break;
       
       case SyncMessageType.INFO:
-        console.log('[Sync] Info from peer:', message.payload);
+        console.log('[DatabaseSyncService] Info from peer:', message.payload);
         break;
+        
+      default:
+        console.warn('[DatabaseSyncService] Received unknown message type:', message.type);
     }
   }
   
@@ -300,8 +547,11 @@ export class DatabaseSyncService {
    * Handle a request for data from a peer
    */
   private handleDataRequest(payload: any): void {
+    console.log('[DatabaseSyncService] Handling data request:', payload);
+    
     if (this.syncInProgress) {
       // Reject the request if we're already in a sync
+      console.warn('[DatabaseSyncService] Rejecting data request because sync is already in progress');
       this.p2pService.send({
         type: SyncMessageType.REQUEST_REJECT,
         payload: {
@@ -316,6 +566,8 @@ export class DatabaseSyncService {
     this.syncInProgress = true;
     this.currentOperationId = payload?.operationId;
     
+    console.log('[DatabaseSyncService] Set up for data request, operation ID:', this.currentOperationId);
+    
     // Update progress to show confirmation request
     this.updateProgress({
       percent: 0,
@@ -329,11 +581,16 @@ export class DatabaseSyncService {
    * Handle confirmation of our data request
    */
   private handleDataRequestConfirmation(payload: any): void {
+    console.log('[DatabaseSyncService] Handling data request confirmation:', payload);
+    
     // Verify this is for our current operation
     if (payload?.operationId !== this.currentOperationId) {
-      console.warn('Received confirmation for unknown operation:', payload?.operationId);
+      console.warn('[DatabaseSyncService] Received confirmation for unknown operation:', payload?.operationId);
       return;
     }
+    
+    // Stop healthcheck as we're moving to the next phase
+    this.stopHealthcheckInterval();
     
     // Update progress
     this.updateProgress({
@@ -347,17 +604,23 @@ export class DatabaseSyncService {
    * Handle rejection of our data request
    */
   private handleDataRequestRejection(payload: any): void {
+    console.log('[DatabaseSyncService] Handling data request rejection:', payload);
+    
     // Verify this is for our current operation
     if (payload?.operationId !== this.currentOperationId) {
-      console.warn('Received rejection for unknown operation:', payload?.operationId);
+      console.warn('[DatabaseSyncService] Received rejection for unknown operation:', payload?.operationId);
       return;
     }
+    
+    // Stop healthcheck interval
+    this.stopHealthcheckInterval();
     
     // Update progress and reset state
     this.updateProgress({
       percent: 0,
       status: 'error',
-      message: 'Data request was declined by the other device'
+      message: 'Data request was declined by the other device',
+      error: 'Request rejected by peer'
     });
     
     this.syncInProgress = false;
@@ -368,8 +631,11 @@ export class DatabaseSyncService {
    * Handle a request to send data to us
    */
   private handleSendDataRequest(payload: any): void {
+    console.log('[DatabaseSyncService] Handling send data request:', payload);
+    
     if (this.syncInProgress) {
       // Reject the request if we're already in a sync
+      console.warn('[DatabaseSyncService] Rejecting send data request because sync is already in progress');
       this.p2pService.send({
         type: SyncMessageType.SEND_DATA_REJECT,
         payload: {
@@ -384,6 +650,8 @@ export class DatabaseSyncService {
     this.syncInProgress = true;
     this.currentOperationId = payload?.operationId;
     
+    console.log('[DatabaseSyncService] Set up for send data request, operation ID:', this.currentOperationId);
+    
     // Update progress to show confirmation request
     this.updateProgress({
       percent: 0,
@@ -397,11 +665,16 @@ export class DatabaseSyncService {
    * Handle confirmation of our request to send data
    */
   private handleSendDataConfirmation(payload: any): void {
+    console.log('[DatabaseSyncService] Handling send data confirmation:', payload);
+    
     // Verify this is for our current operation
     if (payload?.operationId !== this.currentOperationId) {
-      console.warn('Received confirmation for unknown operation:', payload?.operationId);
+      console.warn('[DatabaseSyncService] Received confirmation for unknown operation:', payload?.operationId);
       return;
     }
+    
+    // Stop healthcheck as we're moving to the next phase
+    this.stopHealthcheckInterval();
     
     // Start sending data
     this.handleSendDataAfterConfirmation();
@@ -411,17 +684,23 @@ export class DatabaseSyncService {
    * Handle rejection of our request to send data
    */
   private handleSendDataRejection(payload: any): void {
+    console.log('[DatabaseSyncService] Handling send data rejection:', payload);
+    
     // Verify this is for our current operation
     if (payload?.operationId !== this.currentOperationId) {
-      console.warn('Received rejection for unknown operation:', payload?.operationId);
+      console.warn('[DatabaseSyncService] Received rejection for unknown operation:', payload?.operationId);
       return;
     }
+    
+    // Stop healthcheck interval
+    this.stopHealthcheckInterval();
     
     // Update progress and reset state
     this.updateProgress({
       percent: 0,
       status: 'error',
-      message: 'Your data send was declined by the other device'
+      message: 'Your data send was declined by the other device',
+      error: 'Send request rejected by peer'
     });
     
     this.syncInProgress = false;
@@ -432,6 +711,7 @@ export class DatabaseSyncService {
    * Send data after confirmation has been received
    */
   private async handleSendDataAfterConfirmation(): Promise<void> {
+    console.log('[DatabaseSyncService] Handling send data after confirmation');
     this.transferStartTime = Date.now();
     
     this.updateProgress({
@@ -441,34 +721,20 @@ export class DatabaseSyncService {
     });
     
     try {
+      // Reset chunk retry tracking
+      this.chunkRetryCount.clear();
+      
       // Export database data
+      console.log('[DatabaseSyncService] Exporting database data');
       const exportData = await dbService.exportData();
       
       // Convert to JSON string
       const dataString = JSON.stringify(exportData);
+      console.log(`[DatabaseSyncService] Exported data size: ${this.formatDataSize(dataString.length)}`);
       
-      // For small data, send directly
-      if (dataString.length < this.chunkSize) {
-        this.updateProgress({
-          percent: 40,
-          status: 'sending',
-          message: 'Sending data directly'
-        });
-        
-        this.p2pService.send({
-          type: SyncMessageType.DATA,
-          payload: exportData
-        });
-        
-        this.updateProgress({
-          percent: 100,
-          status: 'complete',
-          message: `Data sent successfully (${this.formatDataSize(dataString.length)})`
-        });
-      } else {
-        // For larger data, send in chunks
-        await this.sendLargeData(dataString);
-      }
+      // Always use chunked transfer for reliability, regardless of size
+      console.log('[DatabaseSyncService] Using chunked transfer for data sending');
+      await this.sendLargeData(dataString);
       
       // Reset sync state with a delay to show completion message
       setTimeout(() => {
@@ -476,8 +742,9 @@ export class DatabaseSyncService {
         this.currentOperationId = null;
       }, 3000);
     } catch (error) {
-      console.error('Error handling data send:', error);
+      console.error('[DatabaseSyncService] Error handling data send:', error);
       
+      // Try to notify the other side
       this.p2pService.send({
         type: SyncMessageType.ERROR,
         payload: {
@@ -485,19 +752,45 @@ export class DatabaseSyncService {
         }
       });
       
+      // If we can retry the whole operation
+      if (this.retryCount < this.maxRetries) {
+        this.retryCount++;
+        console.log(`[DatabaseSyncService] Retrying entire send operation (${this.retryCount}/${this.maxRetries})`);
+        
+        this.updateProgress({
+          percent: 0,
+          status: 'reconnecting',
+          message: `Connection issue, retrying entire operation (${this.retryCount}/${this.maxRetries})...`
+        });
+        
+        // Verify connection health before retrying
+        const isHealthy = await this.performConnectionHealthCheck();
+        if (isHealthy) {
+          // Give a moment before retrying
+          setTimeout(() => {
+            this.handleSendDataAfterConfirmation();
+          }, 2000);
+          return;
+        } else {
+          console.error('[DatabaseSyncService] Connection health check failed before retry');
+        }
+      }
+      
       this.updateProgress({
         percent: 0,
         status: 'error',
-        message: `Error preparing data: ${error}`
+        message: `Error preparing or sending data: ${error}`,
+        error: String(error)
       });
       
       this.syncInProgress = false;
       this.currentOperationId = null;
+      this.stopHealthcheckInterval();
     }
   }
   
   /**
-   * Send large data in chunks
+   * Send large data in chunks with robust error handling
    */
   private async sendLargeData(dataString: string): Promise<void> {
     try {
@@ -505,40 +798,98 @@ export class DatabaseSyncService {
       const totalChunks = Math.ceil(dataString.length / this.chunkSize);
       let sentChunks = 0;
       
+      console.log(`[DatabaseSyncService] Preparing to send data in ${totalChunks} chunks (${this.formatDataSize(dataString.length)})`);
+      
       this.updateProgress({
         percent: 10,
         status: 'sending',
         message: `Preparing to send data in ${totalChunks} chunks (${this.formatDataSize(dataString.length)})`
       });
       
-      // Send each chunk with confirmation
+      // Send each chunk with retry logic
       for (let i = 0; i < totalChunks; i++) {
         const start = i * this.chunkSize;
         const end = Math.min(dataString.length, start + this.chunkSize);
         const chunk = dataString.substring(start, end);
         
-        // Send the chunk
-        this.p2pService.send({
-          type: SyncMessageType.CHUNK,
-          chunkId: i,
-          totalChunks,
-          payload: chunk,
-          isLast: i === totalChunks - 1
-        });
+        // Track retries for this specific chunk
+        let chunkAttempts = this.chunkRetryCount.get(i) || 0;
+        let chunkSent = false;
         
-        sentChunks++;
+        while (!chunkSent && chunkAttempts < this.maxChunkRetries) {
+          console.log(`[DatabaseSyncService] Sending chunk ${i+1}/${totalChunks} (attempt ${chunkAttempts+1}/${this.maxChunkRetries})`);
+          
+          try {
+            // Verify connection before sending chunk
+            if (chunkAttempts > 0) {
+              // Only do health check on retry attempts to avoid slowing down initial sends
+              const isHealthy = await this.performConnectionHealthCheck();
+              if (!isHealthy) {
+                console.error(`[DatabaseSyncService] Connection health check failed before sending chunk ${i+1}`);
+                throw new Error("Connection health check failed");
+              }
+            }
+            
+            // Send the chunk
+            const sendResult = this.p2pService.send({
+              type: SyncMessageType.CHUNK,
+              chunkId: i,
+              totalChunks,
+              payload: chunk,
+              isLast: i === totalChunks - 1
+            });
+            
+            if (!sendResult) {
+              console.error(`[DatabaseSyncService] Failed to send chunk ${i+1}/${totalChunks}`);
+              throw new Error(`Failed to send chunk ${i+1}/${totalChunks}`);
+            }
+            
+            // If we get here, the chunk was sent successfully
+            chunkSent = true;
+            sentChunks++;
+            
+            // Update progress
+            this.updateProgress({
+              percent: 10 + Math.floor((sentChunks / totalChunks) * 80),
+              status: 'sending',
+              message: `Sending data: chunk ${sentChunks}/${totalChunks}`
+            });
+            
+          } catch (error) {
+            chunkAttempts++;
+            this.chunkRetryCount.set(i, chunkAttempts);
+            console.error(`[DatabaseSyncService] Error sending chunk ${i+1}, attempt ${chunkAttempts}:`, error);
+            
+            if (chunkAttempts < this.maxChunkRetries) {
+              // Update progress to indicate retrying
+              this.updateProgress({
+                percent: 10 + Math.floor((sentChunks / totalChunks) * 80),
+                status: 'reconnecting',
+                message: `Retrying chunk ${i+1}/${totalChunks} (attempt ${chunkAttempts}/${this.maxChunkRetries})...`
+              });
+              
+              // Wait a bit before retry, increasing delay with each attempt
+              const retryDelay = 500 * chunkAttempts;
+              console.log(`[DatabaseSyncService] Waiting ${retryDelay}ms before retry...`);
+              await new Promise(resolve => setTimeout(resolve, retryDelay));
+            } else {
+              // Max retries exceeded for this chunk
+              console.error(`[DatabaseSyncService] Max retries exceeded for chunk ${i+1}`);
+              throw new Error(`Failed to send chunk ${i+1} after ${chunkAttempts} attempts`);
+            }
+          }
+        }
         
-        this.updateProgress({
-          percent: 10 + Math.floor((sentChunks / totalChunks) * 80),
-          status: 'sending',
-          message: `Sending data: chunk ${sentChunks}/${totalChunks}`
-        });
+        // If all retries failed for this chunk, the error would have thrown and we wouldn't reach here
         
-        // Wait a bit between chunks to avoid flooding
+        // Wait between chunks to avoid network congestion
+        // More delay between chunks for reliability
         if (i < totalChunks - 1) {
-          await new Promise(resolve => setTimeout(resolve, 50));
+          await new Promise(resolve => setTimeout(resolve, 200));
         }
       }
+      
+      console.log(`[DatabaseSyncService] Successfully sent all ${sentChunks} chunks`);
       
       this.updateProgress({
         percent: 100,
@@ -546,23 +897,22 @@ export class DatabaseSyncService {
         message: `Data sent successfully in ${sentChunks} chunks (${this.formatDataSize(dataString.length)})`
       });
     } catch (error) {
-      console.error('Error sending large data:', error);
+      console.error('[DatabaseSyncService] Error sending large data:', error);
       
-      this.p2pService.send({
-        type: SyncMessageType.ERROR,
-        payload: {
-          message: `Send error: ${error}`
-        }
-      });
+      // Try to notify the other side if possible
+      try {
+        this.p2pService.send({
+          type: SyncMessageType.ERROR,
+          payload: {
+            message: `Send error: ${error}`
+          }
+        });
+      } catch (e) {
+        // Ignore errors sending the error notification
+      }
       
-      this.updateProgress({
-        percent: 0,
-        status: 'error',
-        message: `Error sending data: ${error}`
-      });
-      
-      this.syncInProgress = false;
-      this.currentOperationId = null;
+      // Throw the error to be handled by the caller
+      throw error;
     }
   }
   
@@ -570,6 +920,8 @@ export class DatabaseSyncService {
    * Handle direct data transfer (non-chunked)
    */
   private async handleDirectData(data: ExportData): Promise<void> {
+    console.log('[DatabaseSyncService] Handling direct data transfer');
+    
     this.updateProgress({
       percent: 50,
       status: 'receiving',
@@ -591,16 +943,18 @@ export class DatabaseSyncService {
         this.currentOperationId = null;
       }, 3000);
     } catch (error) {
-      console.error('Error handling direct data:', error);
+      console.error('[DatabaseSyncService] Error handling direct data:', error);
       
       this.updateProgress({
         percent: 0,
         status: 'error',
-        message: `Error importing data: ${error}`
+        message: `Error importing data: ${error}`,
+        error: String(error)
       });
       
       this.syncInProgress = false;
       this.currentOperationId = null;
+      this.stopHealthcheckInterval();
     }
   }
   
@@ -611,8 +965,11 @@ export class DatabaseSyncService {
     if (message.chunkId === undefined || 
         message.totalChunks === undefined || 
         !message.payload) {
+      console.warn('[DatabaseSyncService] Received malformed chunk message');
       return;
     }
+    
+    console.log(`[DatabaseSyncService] Received chunk ${message.chunkId + 1}/${message.totalChunks}`);
     
     // Store chunk information
     this.totalExpectedChunks = message.totalChunks;
@@ -630,6 +987,7 @@ export class DatabaseSyncService {
     
     // Check if all chunks received
     if (this.receivedChunks.size === this.totalExpectedChunks) {
+      console.log('[DatabaseSyncService] All chunks received, reassembling');
       // Reassemble chunks
       this.reassembleAndProcessChunks();
     }
@@ -656,7 +1014,10 @@ export class DatabaseSyncService {
         completeData += chunk;
       }
       
+      console.log(`[DatabaseSyncService] Reassembled data size: ${this.formatDataSize(completeData.length)}`);
+      
       // Parse JSON
+      console.log('[DatabaseSyncService] Parsing JSON data');
       const data = JSON.parse(completeData) as ExportData;
       
       this.updateProgress({
@@ -684,16 +1045,18 @@ export class DatabaseSyncService {
         this.currentOperationId = null;
       }, 3000);
     } catch (error) {
-      console.error('Error reassembling chunks:', error);
+      console.error('[DatabaseSyncService] Error reassembling chunks:', error);
       
       this.updateProgress({
         percent: 0,
         status: 'error',
-        message: `Error processing received data: ${error}`
+        message: `Error processing received data: ${error}`,
+        error: String(error)
       });
       
       this.syncInProgress = false;
       this.currentOperationId = null;
+      this.stopHealthcheckInterval();
       this.receivedChunks.clear();
       this.totalExpectedChunks = 0;
     }
@@ -707,19 +1070,24 @@ export class DatabaseSyncService {
       // Validate data structure
       this.validateExportData(data);
       
+      console.log('[DatabaseSyncService] Importing data with merge mode');
+      
       // Import using merge mode
       await dbService.importData(data, 'merge');
       
       const duration = ((Date.now() - this.transferStartTime) / 1000).toFixed(1);
+      console.log(`[DatabaseSyncService] Data merged successfully in ${duration}s`);
+      
       this.updateProgress({
         percent: 100,
         status: 'complete',
         message: `Data successfully merged in ${duration}s`
       });
     } catch (error) {
-      console.error('Error importing data:', error);
+      console.error('[DatabaseSyncService] Error importing data:', error);
       this.syncInProgress = false;
       this.currentOperationId = null;
+      this.stopHealthcheckInterval();
       throw error;
     }
   }
@@ -732,6 +1100,8 @@ export class DatabaseSyncService {
       throw new Error('No data received');
     }
     
+    console.log('[DatabaseSyncService] Validating export data structure');
+    
     // Check for required fields
     if (!data.players || !Array.isArray(data.players) ||
         !data.matches || !Array.isArray(data.matches) ||
@@ -739,7 +1109,10 @@ export class DatabaseSyncService {
       throw new Error('Invalid data format: missing required collections');
     }
     
-    // Basic validation passed
+    console.log('[DatabaseSyncService] Export data validation passed');
+    
+    // Additional logging for debugging
+    console.log(`[DatabaseSyncService] Data contains: ${data.players.length} players, ${data.matches.length} matches, ${data.matchPlayers.length} match players`);
   }
   
   /**
@@ -759,6 +1132,8 @@ export class DatabaseSyncService {
    * Update progress and notify callback
    */
   private updateProgress(progress: SyncProgress): void {
+    console.log(`[DatabaseSyncService] Progress update: ${progress.status} - ${progress.message}`);
+    
     // Store the current progress
     this.currentProgress = progress;
     
