@@ -14,7 +14,10 @@ interface ConnectionContextType {
   disconnect: () => void;
   
   // Sync methods
-  requestSync: () => Promise<void>;
+  sendData: () => Promise<void>;
+  requestData: () => Promise<void>;
+  confirmDataOperation: () => void;
+  rejectDataOperation: () => void;
 }
 
 // Default sync progress state
@@ -39,7 +42,10 @@ const ConnectionContext = createContext<ConnectionContextType>({
   initAsHost: async () => '',
   connect: async () => {},
   disconnect: () => {},
-  requestSync: async () => {}
+  sendData: async () => {},
+  requestData: async () => {},
+  confirmDataOperation: () => {},
+  rejectDataOperation: () => {}
 });
 
 // Hook for accessing connection context
@@ -48,12 +54,14 @@ export const useConnection = () => useContext(ConnectionContext);
 interface ConnectionProviderProps {
   children: React.ReactNode;
   onDataReceived?: (data: any) => void;
+  onSyncCompleted?: () => void;
   debug?: boolean;
 }
 
 export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({ 
   children, 
   onDataReceived,
+  onSyncCompleted,
   debug = false
 }) => {
   // Initialize services
@@ -83,13 +91,26 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
       }
     };
     
+    // Handle sync progress changes
+    const handleSyncProgress = (progress: SyncProgress) => {
+      setSyncProgress(progress);
+      
+      // Call onSyncCompleted when sync is complete
+      if (progress.status === 'complete' && onSyncCompleted) {
+        // Add a slight delay to allow the UI to update first
+        setTimeout(() => {
+          onSyncCompleted();
+        }, 500);
+      }
+    };
+    
     // Set up connection state change handler
     if (p2pService) {
       p2pService.onConnectionStateChange = handleConnectionStateChange;
     }
     
     // Set up sync progress handler
-    dbSyncService.onProgress(setSyncProgress);
+    dbSyncService.onProgress(handleSyncProgress);
     
     // Check URL for connection code
     const checkUrlForCode = () => {
@@ -120,8 +141,7 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
         p2pService.disconnect();
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [p2pService, dbSyncService, syncProgress.status, onSyncCompleted]);
   
   /**
    * Initialize as host with a new connection code
@@ -172,15 +192,41 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
   };
   
   /**
-   * Request sync from connected peer(s)
+   * Send data to connected peer(s)
    */
-  const requestSync = async (): Promise<void> => {
+  const sendData = async (): Promise<void> => {
     try {
-      await dbSyncService.requestSync();
+      await dbSyncService.sendData();
     } catch (error) {
-      console.error('Sync request error:', error);
+      console.error('Send data error:', error);
       throw error;
     }
+  };
+  
+  /**
+   * Request data from connected peer(s)
+   */
+  const requestData = async (): Promise<void> => {
+    try {
+      await dbSyncService.requestData();
+    } catch (error) {
+      console.error('Request data error:', error);
+      throw error;
+    }
+  };
+  
+  /**
+   * Confirm a data operation (send or receive)
+   */
+  const confirmDataOperation = () => {
+    dbSyncService.confirmDataOperation();
+  };
+  
+  /**
+   * Reject a data operation (send or receive)
+   */
+  const rejectDataOperation = () => {
+    dbSyncService.rejectDataOperation();
   };
   
   // Provide connection context to children
@@ -192,7 +238,10 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
         initAsHost,
         connect,
         disconnect,
-        requestSync
+        sendData,
+        requestData,
+        confirmDataOperation,
+        rejectDataOperation
       }}
     >
       {children}

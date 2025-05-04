@@ -1,15 +1,26 @@
 // src/components/common/ConnectionSetup.tsx
 import React, { useState, useEffect } from 'react';
-import { Share2, Link, Wifi, WifiOff, Copy, Check, HelpCircle, X, Loader2 } from 'lucide-react';
+import { Share2, Link, Wifi, WifiOff, Copy, Check, HelpCircle, X, Loader2, ArrowUpCircle, ArrowDownCircle, AlertTriangle } from 'lucide-react';
 import { useConnection } from '../../context/ConnectionContext';
 import { useSound } from '../../context/SoundContext';
 
 interface ConnectionSetupProps {
   onClose?: () => void;
+  onDataReceived?: () => void;
 }
 
-export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose }) => {
-  const { connectionState, syncProgress, initAsHost, connect, disconnect, requestSync } = useConnection();
+export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose, onDataReceived }) => {
+  const { 
+    connectionState, 
+    syncProgress, 
+    initAsHost, 
+    connect, 
+    disconnect, 
+    sendData,
+    requestData,
+    confirmDataOperation,
+    rejectDataOperation
+  } = useConnection();
   const { playSound } = useSound();
   
   const [joinCode, setJoinCode] = useState('');
@@ -65,14 +76,36 @@ export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose }) => 
     disconnect();
   };
   
-  // Handle requesting sync
-  const handleRequestSync = async () => {
+  // Handle sending data
+  const handleSendData = async () => {
     try {
       playSound('buttonClick');
-      await requestSync();
+      await sendData();
     } catch (err) {
-      console.error("Failed to request sync:", err);
+      console.error("Failed to send data:", err);
     }
+  };
+  
+  // Handle requesting data
+  const handleRequestData = async () => {
+    try {
+      playSound('buttonClick');
+      await requestData();
+    } catch (err) {
+      console.error("Failed to request data:", err);
+    }
+  };
+  
+  // Handle confirming a data operation
+  const handleConfirmOperation = () => {
+    playSound('buttonClick');
+    confirmDataOperation();
+  };
+  
+  // Handle rejecting a data operation
+  const handleRejectOperation = () => {
+    playSound('buttonClick');
+    rejectDataOperation();
   };
   
   // Handle copying connection code
@@ -105,6 +138,19 @@ export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose }) => 
     playSound('buttonClick');
     if (onClose) onClose();
   };
+  
+  // Determine if we're waiting for a confirmation
+  const isAwaitingConfirmation = syncProgress.status === 'awaiting-confirmation';
+  
+  // Determine if we need to show the confirmation UI
+  const showConfirmationUI = syncProgress.status === 'pending-confirmation';
+  
+  // Effect to trigger the onDataReceived callback when data sync completes
+  useEffect(() => {
+    if (syncProgress.status === 'complete' && onDataReceived) {
+      onDataReceived();
+    }
+  }, [syncProgress.status, onDataReceived]);
   
   return (
     <div className="bg-gray-800 p-6 rounded-lg shadow-lg w-full max-w-md mx-auto">
@@ -309,47 +355,88 @@ export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose }) => 
               Share Match Data
             </h3>
             
-            {syncProgress.status === 'idle' ? (
+            {/* Confirmation UI - Shown when user needs to confirm an operation */}
+            {showConfirmationUI && (
+              <div className="bg-yellow-900/30 border border-yellow-600 rounded-lg p-4 mb-4">
+                <div className="flex items-start">
+                  <AlertTriangle size={18} className="text-yellow-500 mr-2 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <h4 className="font-medium text-yellow-400 mb-1">
+                      {syncProgress.message}
+                    </h4>
+                    <p className="text-sm text-gray-300 mb-3">
+                      Do you want to {syncProgress.isDataRequest ? 'send' : 'receive'} match data?
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleConfirmOperation}
+                        className="px-3 py-1 bg-green-600 hover:bg-green-500 rounded"
+                      >
+                        {syncProgress.isDataRequest ? 'Send Data' : 'Receive Data'}
+                      </button>
+                      <button
+                        onClick={handleRejectOperation}
+                        className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded"
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Sync Idle State - Ready to send/request */}
+            {syncProgress.status === 'idle' && !showConfirmationUI && !isAwaitingConfirmation && (
               <div>
                 <p className="text-sm text-gray-300 mb-3">
-                  Get match history, player stats, and game data from the connected device.
+                  Exchange match history, player stats, and game data with the connected device.
                 </p>
                 
-                <button
-                  onClick={handleRequestSync}
-                  className="w-full py-2 bg-green-600 hover:bg-green-500 rounded-lg flex items-center justify-center"
-                >
-                  <Share2 size={16} className="mr-2" />
-                  Request Game Data
-                </button>
-              </div>
-            ) : syncProgress.status === 'complete' ? (
-              <div className="p-3 bg-green-900/30 border border-green-600 rounded-lg mb-4">
-                <div className="flex items-start">
-                  <Check size={18} className="text-green-500 mr-2 mt-0.5" />
-                  <p className="text-green-300">{syncProgress.message}</p>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    onClick={handleSendData}
+                    className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg flex items-center justify-center"
+                  >
+                    <ArrowUpCircle size={16} className="mr-2" />
+                    Send My Data
+                  </button>
+                  
+                  <button
+                    onClick={handleRequestData}
+                    className="flex-1 py-2 bg-green-600 hover:bg-green-500 rounded-lg flex items-center justify-center"
+                  >
+                    <ArrowDownCircle size={16} className="mr-2" />
+                    Request Data
+                  </button>
                 </div>
-                
-                {/* New: Button to start another sync */}
-                <button
-                  onClick={handleRequestSync}
-                  className="mt-3 w-full py-2 bg-green-600 hover:bg-green-500 rounded-lg flex items-center justify-center"
-                >
-                  <Share2 size={16} className="mr-2" />
-                  Request More Data
-                </button>
               </div>
-            ) : syncProgress.status === 'error' ? (
-              <div className="p-3 bg-red-900/30 border border-red-500 rounded-lg">
-                <p className="text-red-300">{syncProgress.message}</p>
-                <button
-                  onClick={handleRequestSync}
-                  className="mt-2 w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center justify-center"
-                >
-                  Try Again
-                </button>
+            )}
+            
+            {/* Awaiting Confirmation State */}
+            {isAwaitingConfirmation && (
+              <div className="p-3 bg-blue-900/30 border border-blue-600 rounded-lg mb-4">
+                <div className="flex items-start">
+                  <Loader2 size={18} className="text-blue-500 mr-2 mt-0.5 animate-spin" />
+                  <div>
+                    <p className="text-blue-300">{syncProgress.message}</p>
+                    <p className="text-sm text-gray-400 mt-1">Waiting for the other device to respond...</p>
+                    <button
+                      onClick={handleRejectOperation}
+                      className="mt-2 px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
               </div>
-            ) : (
+            )}
+            
+            {/* Sync in Progress State */}
+            {(syncProgress.status === 'preparing' || 
+              syncProgress.status === 'sending' || 
+              syncProgress.status === 'receiving' || 
+              syncProgress.status === 'processing') && (
               <div className="space-y-2">
                 <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
                   <div 
@@ -358,6 +445,29 @@ export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose }) => 
                   ></div>
                 </div>
                 <p className="text-center text-sm">{syncProgress.message}</p>
+              </div>
+            )}
+            
+            {/* Sync Complete State */}
+            {syncProgress.status === 'complete' && (
+              <div className="p-3 bg-green-900/30 border border-green-600 rounded-lg mb-4">
+                <div className="flex items-start">
+                  <Check size={18} className="text-green-500 mr-2 mt-0.5" />
+                  <p className="text-green-300">{syncProgress.message}</p>
+                </div>
+              </div>
+            )}
+            
+            {/* Sync Error State */}
+            {syncProgress.status === 'error' && (
+              <div className="p-3 bg-red-900/30 border border-red-500 rounded-lg">
+                <p className="text-red-300">{syncProgress.message}</p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="mt-2 w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center justify-center"
+                >
+                  Try Again
+                </button>
               </div>
             )}
           </div>

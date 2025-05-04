@@ -7,15 +7,26 @@ import dbService, { ExportData } from './DatabaseService';
  */
 export interface SyncProgress {
   percent: number;
-  status: 'idle' | 'preparing' | 'sending' | 'receiving' | 'processing' | 'complete' | 'error';
+  status: 'idle' | 'preparing' | 'sending' | 'receiving' | 'processing' | 'complete' | 'error' | 'pending-confirmation' | 'awaiting-confirmation';
   message: string;
+  isDataRequest?: boolean; // Indicates if this is a request for data (true) or a send of data (false)
 }
 
 /**
  * Message types for P2P sync protocol
  */
 export enum SyncMessageType {
-  REQUEST = 'db-sync-request',
+  // Data request messages
+  REQUEST_DATA = 'db-sync-request-data',
+  REQUEST_CONFIRM = 'db-sync-request-confirm',
+  REQUEST_REJECT = 'db-sync-request-reject',
+  
+  // Data send messages
+  SEND_DATA_REQUEST = 'db-sync-send-data-request',
+  SEND_DATA_CONFIRM = 'db-sync-send-data-confirm',
+  SEND_DATA_REJECT = 'db-sync-send-data-reject',
+  
+  // Data transfer messages
   DATA = 'db-sync-data',
   CHUNK = 'db-sync-chunk',
   CHUNK_ACK = 'db-sync-chunk-ack',
@@ -47,6 +58,12 @@ export class DatabaseSyncService {
   private receivedChunks: Map<number, string> = new Map();
   private totalExpectedChunks = 0;
   private transferStartTime = 0;
+  private currentOperationId: string | null = null;
+  private currentProgress: SyncProgress = {
+    percent: 0,
+    status: 'idle',
+    message: 'Ready to sync'
+  };
   
   constructor(p2pService: P2PService) {
     this.p2pService = p2pService;
@@ -58,7 +75,7 @@ export class DatabaseSyncService {
   /**
    * Request database sync from connected peer(s)
    */
-  public async requestSync(): Promise<void> {
+  public async requestData(): Promise<void> {
     if (!this.p2pService.getState().isConnected) {
       this.updateProgress({
         percent: 0,
@@ -78,17 +95,133 @@ export class DatabaseSyncService {
     }
     
     this.syncInProgress = true;
-    this.transferStartTime = Date.now();
+    this.currentOperationId = this.generateOperationId();
     
+    // Update progress to show we're waiting for confirmation
     this.updateProgress({
       percent: 0,
-      status: 'preparing',
-      message: 'Requesting data from peer'
+      status: 'awaiting-confirmation',
+      message: 'Waiting for the other device to approve data request',
+      isDataRequest: true
     });
     
-    // Send sync request
+    // Send data request message
     this.p2pService.send({
-      type: SyncMessageType.REQUEST
+      type: SyncMessageType.REQUEST_DATA,
+      payload: {
+        operationId: this.currentOperationId
+      }
+    });
+  }
+  
+  /**
+   * Send database data to connected peer(s)
+   */
+  public async sendData(): Promise<void> {
+    if (!this.p2pService.getState().isConnected) {
+      this.updateProgress({
+        percent: 0,
+        status: 'error',
+        message: 'Not connected to any peers'
+      });
+      throw new Error('Not connected to any peers');
+    }
+    
+    if (this.syncInProgress) {
+      this.updateProgress({
+        percent: 0,
+        status: 'error',
+        message: 'Sync already in progress'
+      });
+      throw new Error('Sync already in progress');
+    }
+    
+    this.syncInProgress = true;
+    this.currentOperationId = this.generateOperationId();
+    
+    // Update progress to show we're waiting for confirmation
+    this.updateProgress({
+      percent: 0,
+      status: 'awaiting-confirmation',
+      message: 'Waiting for the other device to accept data',
+      isDataRequest: false
+    });
+    
+    // Send data request message
+    this.p2pService.send({
+      type: SyncMessageType.SEND_DATA_REQUEST,
+      payload: {
+        operationId: this.currentOperationId
+      }
+    });
+  }
+  
+  /**
+   * Confirm a data operation (sending or receiving)
+   */
+  public confirmDataOperation(): void {
+    if (this.currentProgress.status === 'pending-confirmation') {
+      const isDataRequest = this.currentProgress.isDataRequest;
+      
+      if (isDataRequest) {
+        // We're being asked to send data
+        this.handleSendDataAfterConfirmation();
+      } else {
+        // We're being asked to receive data
+        this.p2pService.send({
+          type: SyncMessageType.SEND_DATA_CONFIRM,
+          payload: {
+            operationId: this.currentOperationId
+          }
+        });
+        
+        this.updateProgress({
+          percent: 0,
+          status: 'preparing',
+          message: 'Preparing to receive data'
+        });
+      }
+    }
+  }
+  
+  /**
+   * Reject a data operation (sending or receiving)
+   */
+  public rejectDataOperation(): void {
+    if (this.currentProgress.status === 'pending-confirmation') {
+      const isDataRequest = this.currentProgress.isDataRequest;
+      
+      if (isDataRequest) {
+        // Reject request to send data
+        this.p2pService.send({
+          type: SyncMessageType.REQUEST_REJECT,
+          payload: {
+            operationId: this.currentOperationId
+          }
+        });
+      } else {
+        // Reject incoming data
+        this.p2pService.send({
+          type: SyncMessageType.SEND_DATA_REJECT,
+          payload: {
+            operationId: this.currentOperationId
+          }
+        });
+      }
+    } else if (this.currentProgress.status === 'awaiting-confirmation') {
+      // Cancel our own request or send operation
+      // No need to send a message, just reset state
+    }
+    
+    // Reset the sync state
+    this.syncInProgress = false;
+    this.currentOperationId = null;
+    
+    // Update progress to idle
+    this.updateProgress({
+      percent: 0,
+      status: 'idle',
+      message: 'Ready to sync'
     });
   }
   
@@ -99,6 +232,7 @@ export class DatabaseSyncService {
     this.onProgressCallback = callback;
   }
   
+
   /**
    * Handle incoming sync messages
    */
@@ -106,31 +240,56 @@ export class DatabaseSyncService {
     if (!message || !message.type) return;
     
     switch (message.type) {
-      case SyncMessageType.REQUEST:
-        this.handleSyncRequest();
+      // Handle data request
+      case SyncMessageType.REQUEST_DATA:
+        this.handleDataRequest(message.payload);
         break;
-        
+      
+      // Handle data request confirmation/rejection
+      case SyncMessageType.REQUEST_CONFIRM:
+        this.handleDataRequestConfirmation(message.payload);
+        break;
+      case SyncMessageType.REQUEST_REJECT:
+        this.handleDataRequestRejection(message.payload);
+        break;
+      
+      // Handle data send request
+      case SyncMessageType.SEND_DATA_REQUEST:
+        this.handleSendDataRequest(message.payload);
+        break;
+      
+      // Handle data send confirmation/rejection
+      case SyncMessageType.SEND_DATA_CONFIRM:
+        this.handleSendDataConfirmation(message.payload);
+        break;
+      case SyncMessageType.SEND_DATA_REJECT:
+        this.handleSendDataRejection(message.payload);
+        break;
+      
+      // Handle direct data transfer
       case SyncMessageType.DATA:
         this.handleDirectData(message.payload);
         break;
-        
+      
+      // Handle chunked data transfer
       case SyncMessageType.CHUNK:
         this.handleDataChunk(message);
         break;
-        
       case SyncMessageType.CHUNK_ACK:
         // This is handled in the sendLargeData promise
         break;
-        
+      
+      // Handle errors and info messages
       case SyncMessageType.ERROR:
         this.updateProgress({
           percent: 0,
           status: 'error',
-          message: `Peer error: ${message.payload || 'Unknown error'}`
+          message: `Peer error: ${message.payload?.message || 'Unknown error'}`
         });
         this.syncInProgress = false;
+        this.currentOperationId = null;
         break;
-        
+      
       case SyncMessageType.INFO:
         console.log('[Sync] Info from peer:', message.payload);
         break;
@@ -138,18 +297,141 @@ export class DatabaseSyncService {
   }
   
   /**
-   * Handle sync request by sending database data
+   * Handle a request for data from a peer
    */
-  private async handleSyncRequest(): Promise<void> {
+  private handleDataRequest(payload: any): void {
     if (this.syncInProgress) {
+      // Reject the request if we're already in a sync
       this.p2pService.send({
-        type: SyncMessageType.ERROR,
-        payload: 'Sync already in progress'
+        type: SyncMessageType.REQUEST_REJECT,
+        payload: {
+          operationId: payload?.operationId,
+          message: 'Sync already in progress'
+        }
       });
       return;
     }
     
+    // Set up state for this operation
     this.syncInProgress = true;
+    this.currentOperationId = payload?.operationId;
+    
+    // Update progress to show confirmation request
+    this.updateProgress({
+      percent: 0,
+      status: 'pending-confirmation',
+      message: 'The connected device is requesting your match data',
+      isDataRequest: true
+    });
+  }
+  
+  /**
+   * Handle confirmation of our data request
+   */
+  private handleDataRequestConfirmation(payload: any): void {
+    // Verify this is for our current operation
+    if (payload?.operationId !== this.currentOperationId) {
+      console.warn('Received confirmation for unknown operation:', payload?.operationId);
+      return;
+    }
+    
+    // Update progress
+    this.updateProgress({
+      percent: 0,
+      status: 'preparing',
+      message: 'Request approved, receiving data...'
+    });
+  }
+  
+  /**
+   * Handle rejection of our data request
+   */
+  private handleDataRequestRejection(payload: any): void {
+    // Verify this is for our current operation
+    if (payload?.operationId !== this.currentOperationId) {
+      console.warn('Received rejection for unknown operation:', payload?.operationId);
+      return;
+    }
+    
+    // Update progress and reset state
+    this.updateProgress({
+      percent: 0,
+      status: 'error',
+      message: 'Data request was declined by the other device'
+    });
+    
+    this.syncInProgress = false;
+    this.currentOperationId = null;
+  }
+  
+  /**
+   * Handle a request to send data to us
+   */
+  private handleSendDataRequest(payload: any): void {
+    if (this.syncInProgress) {
+      // Reject the request if we're already in a sync
+      this.p2pService.send({
+        type: SyncMessageType.SEND_DATA_REJECT,
+        payload: {
+          operationId: payload?.operationId,
+          message: 'Sync already in progress'
+        }
+      });
+      return;
+    }
+    
+    // Set up state for this operation
+    this.syncInProgress = true;
+    this.currentOperationId = payload?.operationId;
+    
+    // Update progress to show confirmation request
+    this.updateProgress({
+      percent: 0,
+      status: 'pending-confirmation',
+      message: 'The connected device wants to send you match data',
+      isDataRequest: false
+    });
+  }
+  
+  /**
+   * Handle confirmation of our request to send data
+   */
+  private handleSendDataConfirmation(payload: any): void {
+    // Verify this is for our current operation
+    if (payload?.operationId !== this.currentOperationId) {
+      console.warn('Received confirmation for unknown operation:', payload?.operationId);
+      return;
+    }
+    
+    // Start sending data
+    this.handleSendDataAfterConfirmation();
+  }
+  
+  /**
+   * Handle rejection of our request to send data
+   */
+  private handleSendDataRejection(payload: any): void {
+    // Verify this is for our current operation
+    if (payload?.operationId !== this.currentOperationId) {
+      console.warn('Received rejection for unknown operation:', payload?.operationId);
+      return;
+    }
+    
+    // Update progress and reset state
+    this.updateProgress({
+      percent: 0,
+      status: 'error',
+      message: 'Your data send was declined by the other device'
+    });
+    
+    this.syncInProgress = false;
+    this.currentOperationId = null;
+  }
+  
+  /**
+   * Send data after confirmation has been received
+   */
+  private async handleSendDataAfterConfirmation(): Promise<void> {
     this.transferStartTime = Date.now();
     
     this.updateProgress({
@@ -188,13 +470,19 @@ export class DatabaseSyncService {
         await this.sendLargeData(dataString);
       }
       
-      this.syncInProgress = false;
+      // Reset sync state with a delay to show completion message
+      setTimeout(() => {
+        this.syncInProgress = false;
+        this.currentOperationId = null;
+      }, 3000);
     } catch (error) {
-      console.error('Error handling sync request:', error);
+      console.error('Error handling data send:', error);
       
       this.p2pService.send({
         type: SyncMessageType.ERROR,
-        payload: `Export error: ${error}`
+        payload: {
+          message: `Export error: ${error}`
+        }
       });
       
       this.updateProgress({
@@ -204,6 +492,7 @@ export class DatabaseSyncService {
       });
       
       this.syncInProgress = false;
+      this.currentOperationId = null;
     }
   }
   
@@ -256,17 +545,14 @@ export class DatabaseSyncService {
         status: 'complete',
         message: `Data sent successfully in ${sentChunks} chunks (${this.formatDataSize(dataString.length)})`
       });
-      
-      // Reset sync flag with delay to allow user to see completion message
-      setTimeout(() => {
-        this.syncInProgress = false;
-      }, 3000);
     } catch (error) {
       console.error('Error sending large data:', error);
       
       this.p2pService.send({
         type: SyncMessageType.ERROR,
-        payload: `Send error: ${error}`
+        payload: {
+          message: `Send error: ${error}`
+        }
       });
       
       this.updateProgress({
@@ -276,6 +562,7 @@ export class DatabaseSyncService {
       });
       
       this.syncInProgress = false;
+      this.currentOperationId = null;
     }
   }
   
@@ -301,6 +588,7 @@ export class DatabaseSyncService {
       // Reset sync flag with delay to allow user to see completion message
       setTimeout(() => {
         this.syncInProgress = false;
+        this.currentOperationId = null;
       }, 3000);
     } catch (error) {
       console.error('Error handling direct data:', error);
@@ -312,6 +600,7 @@ export class DatabaseSyncService {
       });
       
       this.syncInProgress = false;
+      this.currentOperationId = null;
     }
   }
   
@@ -392,6 +681,7 @@ export class DatabaseSyncService {
       // Reset sync flag with delay to allow user to see completion message
       setTimeout(() => {
         this.syncInProgress = false;
+        this.currentOperationId = null;
       }, 3000);
     } catch (error) {
       console.error('Error reassembling chunks:', error);
@@ -403,6 +693,7 @@ export class DatabaseSyncService {
       });
       
       this.syncInProgress = false;
+      this.currentOperationId = null;
       this.receivedChunks.clear();
       this.totalExpectedChunks = 0;
     }
@@ -425,16 +716,10 @@ export class DatabaseSyncService {
         status: 'complete',
         message: `Data successfully merged in ${duration}s`
       });
-      
-      // Reset sync status to allow for another sync after a delay
-      setTimeout(() => {
-        if (this.syncInProgress) {
-          this.syncInProgress = false;
-        }
-      }, 3000); // Reset after 3 seconds so user can see completion message
     } catch (error) {
       console.error('Error importing data:', error);
       this.syncInProgress = false;
+      this.currentOperationId = null;
       throw error;
     }
   }
@@ -474,8 +759,19 @@ export class DatabaseSyncService {
    * Update progress and notify callback
    */
   private updateProgress(progress: SyncProgress): void {
+    // Store the current progress
+    this.currentProgress = progress;
+    
+    // Notify callback if set
     if (this.onProgressCallback) {
       this.onProgressCallback(progress);
     }
+  }
+  
+  /**
+   * Generate a unique operation ID
+   */
+  private generateOperationId(): string {
+    return 'op_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
   }
 }

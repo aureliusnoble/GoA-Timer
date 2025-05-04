@@ -6,11 +6,13 @@ import { useSound } from '../../context/SoundContext';
 interface ConnectionModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onDataReceived?: () => void;
 }
 
 export const ConnectionModal: React.FC<ConnectionModalProps> = ({ 
   isOpen, 
-  onClose 
+  onClose,
+  onDataReceived
 }) => {
   const { playSound } = useSound();
   const modalRef = useRef<HTMLDivElement>(null);
@@ -62,7 +64,7 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
         ref={modalRef}
         className="max-w-md w-full"
       >
-        <ConnectionSetup onClose={handleClose} />
+        <ConnectionSetup onClose={handleClose} onDataReceived={onDataReceived} />
       </div>
     </div>
   );

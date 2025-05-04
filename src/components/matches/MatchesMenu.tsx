@@ -1,4 +1,4 @@
-// src/components/matches/MatchesMenu.tsx (Updated)
+// src/components/matches/MatchesMenu.tsx
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, Users, History, Shield, Download, Upload, Trash2, Info, AlertTriangle, Shuffle, FileText, Share2, Wifi } from 'lucide-react';
 import EnhancedTooltip from '../common/EnhancedTooltip';
@@ -29,14 +29,15 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
   const [showImportOptions, setShowImportOptions] = useState<boolean>(false);
   const [importMode, setImportMode] = useState<'replace' | 'merge'>('replace');
   
+  // Check if we have any match data
+  const checkForMatchData = async () => {
+    const hasMatchData = await dbService.hasMatchData();
+    setHasData(hasMatchData);
+  };
+  
   // Check if we have any match data on component mount
   useEffect(() => {
-    const checkData = async () => {
-      const hasMatchData = await dbService.hasMatchData();
-      setHasData(hasMatchData);
-    };
-    
-    checkData();
+    checkForMatchData();
   }, []);
   
   // Handle menu navigation with sound
@@ -60,6 +61,12 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
   // Handle closing P2P connection modal
   const handleCloseConnectionModal = () => {
     setShowConnectionModal(false);
+  };
+  
+  // Handle P2P data received - refresh the hasData state
+  const handleDataReceived = () => {
+    console.log("Data received, refreshing match data status");
+    checkForMatchData();
   };
   
   // Handle exporting match data
@@ -134,7 +141,8 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
         
         if (success) {
           playSound('phaseChange');
-          setHasData(true);
+          // Check for data after import
+          await checkForMatchData();
           setImportError(null);
           setShowImportOptions(false); // Hide options after successful import
         } else {
@@ -325,7 +333,7 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
           </EnhancedTooltip>
         </div>
         
-        {/* NEW: P2P Sync Call-to-Action */}
+        {/* P2P Sync Call-to-Action */}
         <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4 mb-6">
           <div className="flex items-start">
             <div className="mr-3 p-2 bg-blue-800 rounded-full flex-shrink-0">
@@ -520,6 +528,7 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
       <ConnectionModal 
         isOpen={showConnectionModal}
         onClose={handleCloseConnectionModal}
+        onDataReceived={handleDataReceived}
       />
     </div>
   );
