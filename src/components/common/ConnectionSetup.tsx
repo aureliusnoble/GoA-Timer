@@ -37,9 +37,11 @@ export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose }) => 
   const handleHostSession = async () => {
     try {
       playSound('buttonClick');
-      await initAsHost();
+      console.log("[P2P] Initiating host session...");
+      const code = await initAsHost();
+      console.log("[P2P] Host session created with code:", code);
     } catch (err) {
-      console.error("Failed to host session:", err);
+      console.error("[P2P] Failed to host session:", err);
     }
   };
   
@@ -49,9 +51,11 @@ export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose }) => 
     
     try {
       playSound('buttonClick');
+      console.log("[P2P] Joining session with code:", joinCode);
       await connect(joinCode);
+      console.log("[P2P] Successfully joined session");
     } catch (err) {
-      console.error("Failed to join session:", err);
+      console.error("[P2P] Failed to join session:", err);
     }
   };
   
@@ -123,8 +127,18 @@ export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose }) => 
       
       {/* Error message */}
       {connectionState.error && (
-        <div className="mb-4 p-3 bg-red-900/30 border border-red-500 rounded-lg text-red-300">
-          {connectionState.error}
+        <div className="mb-4 p-3 bg-red-900/30 border border-red-500 rounded-lg text-red-300 flex items-start">
+          <span className="flex-shrink-0 mr-2">⚠️</span>
+          <div>
+            <div className="font-medium">Connection Error</div>
+            <div className="text-sm mt-1">{connectionState.error}</div>
+            <button
+              onClick={connectionState.isHost ? handleHostSession : handleDisconnect}
+              className="mt-2 px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-white text-sm"
+            >
+              {connectionState.isHost ? "Try Again" : "Start Over"}
+            </button>
+          </div>
         </div>
       )}
       
@@ -175,12 +189,69 @@ export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose }) => 
             </button>
           </div>
         </div>
-      ) : connectionState.isConnecting ? (
+      ) : connectionState.isConnecting && !connectionState.connectionCode ? (
         <div className="text-center py-4">
           <Loader2 className="animate-spin mx-auto mb-4" size={48} />
-          <p className="text-lg">Establishing connection...</p>
+          <p className="text-lg mb-2">Establishing connection...</p>
+          <p className="text-sm text-gray-400 mb-4">
+            {connectionState.isHost 
+              ? "Creating secure connection code..." 
+              : "Connecting to remote device..."}
+          </p>
           <button 
-            className="mt-4 px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg"
+            className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg"
+            onClick={handleDisconnect}
+          >
+            Cancel
+          </button>
+        </div>
+      ) : connectionState.connectionCode && !connectionState.isConnected ? (
+        // Show code while waiting for connection
+        <div className="space-y-4">
+          <div className="flex justify-center mb-2">
+            <Loader2 className="animate-spin text-blue-400" size={48} />
+          </div>
+          
+          {/* Connection Status */}
+          <div className="flex items-center justify-center text-lg font-medium mb-2">
+            <span>
+              {connectionState.isHost 
+                ? 'Waiting for Connection' 
+                : 'Connecting to Host...'}
+            </span>
+          </div>
+          
+          {/* Connection Code (for host) */}
+          {connectionState.isHost && connectionState.connectionCode && (
+            <div className="mb-4">
+              <label className="block text-sm text-gray-400 mb-1">
+                Share this code with others:
+              </label>
+              <div className="flex">
+                <div className="flex-grow py-3 px-4 bg-gray-700 border border-gray-600 rounded-l-lg text-center font-mono text-xl tracking-wider">
+                  {connectionState.connectionCode}
+                </div>
+                <button
+                  onClick={handleCopyCode}
+                  className="px-3 bg-blue-600 hover:bg-blue-500 rounded-r-lg flex items-center"
+                  title="Copy code"
+                >
+                  {codeCopied ? <Check size={18} /> : <Copy size={18} />}
+                </button>
+              </div>
+              
+              <button
+                onClick={handleCopyLink}
+                className="mt-2 w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center justify-center"
+              >
+                <Link size={16} className="mr-2" />
+                {linkCopied ? 'Link Copied!' : 'Copy as Link'}
+              </button>
+            </div>
+          )}
+          
+          <button 
+            className="w-full py-2 bg-red-600 hover:bg-red-500 rounded-lg"
             onClick={handleDisconnect}
           >
             Cancel
@@ -253,11 +324,20 @@ export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose }) => 
                 </button>
               </div>
             ) : syncProgress.status === 'complete' ? (
-              <div className="p-3 bg-green-900/30 border border-green-600 rounded-lg">
+              <div className="p-3 bg-green-900/30 border border-green-600 rounded-lg mb-4">
                 <div className="flex items-start">
                   <Check size={18} className="text-green-500 mr-2 mt-0.5" />
                   <p className="text-green-300">{syncProgress.message}</p>
                 </div>
+                
+                {/* New: Button to start another sync */}
+                <button
+                  onClick={handleRequestSync}
+                  className="mt-3 w-full py-2 bg-green-600 hover:bg-green-500 rounded-lg flex items-center justify-center"
+                >
+                  <Share2 size={16} className="mr-2" />
+                  Request More Data
+                </button>
               </div>
             ) : syncProgress.status === 'error' ? (
               <div className="p-3 bg-red-900/30 border border-red-500 rounded-lg">

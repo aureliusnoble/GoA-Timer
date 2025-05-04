@@ -508,8 +508,8 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
                 Match data is stored locally on this device using your browser's storage.
               </p>
               <p>
-                Use the direct P2P sharing, export feature to save your data, or the import feature to transfer
-                it between devices or merge records from different devices.
+                Use direct data sharing, or manually import and export data to transfer
+                match records between devices or merge records from different devices (e.g. with friends).
               </p>
             </div>
           </div>

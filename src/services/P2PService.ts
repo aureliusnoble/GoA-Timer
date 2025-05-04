@@ -61,12 +61,17 @@ export class P2PService {
   public async initAsHost(): Promise<string> {
     const connectionCode = this.generateConnectionCode();
     
+    // Immediately update state with connection code
     this.updateState({
       isHost: true,
       isConnecting: true,
       connectionCode
     });
     
+    // Return the code immediately so UI can show it
+    this.log('Generated connection code:', connectionCode);
+    
+    // Then continue establishing the actual connection
     return new Promise((resolve, reject) => {
       try {
         // Clean up any existing peer

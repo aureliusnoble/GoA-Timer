@@ -256,6 +256,11 @@ export class DatabaseSyncService {
         status: 'complete',
         message: `Data sent successfully in ${sentChunks} chunks (${this.formatDataSize(dataString.length)})`
       });
+      
+      // Reset sync flag with delay to allow user to see completion message
+      setTimeout(() => {
+        this.syncInProgress = false;
+      }, 3000);
     } catch (error) {
       console.error('Error sending large data:', error);
       
@@ -269,6 +274,8 @@ export class DatabaseSyncService {
         status: 'error',
         message: `Error sending data: ${error}`
       });
+      
+      this.syncInProgress = false;
     }
   }
   
@@ -291,7 +298,10 @@ export class DatabaseSyncService {
         message: 'Data received and merged successfully'
       });
       
-      this.syncInProgress = false;
+      // Reset sync flag with delay to allow user to see completion message
+      setTimeout(() => {
+        this.syncInProgress = false;
+      }, 3000);
     } catch (error) {
       console.error('Error handling direct data:', error);
       
@@ -378,7 +388,11 @@ export class DatabaseSyncService {
       // Clear received chunks
       this.receivedChunks.clear();
       this.totalExpectedChunks = 0;
-      this.syncInProgress = false;
+      
+      // Reset sync flag with delay to allow user to see completion message
+      setTimeout(() => {
+        this.syncInProgress = false;
+      }, 3000);
     } catch (error) {
       console.error('Error reassembling chunks:', error);
       
@@ -389,6 +403,8 @@ export class DatabaseSyncService {
       });
       
       this.syncInProgress = false;
+      this.receivedChunks.clear();
+      this.totalExpectedChunks = 0;
     }
   }
   
@@ -409,8 +425,16 @@ export class DatabaseSyncService {
         status: 'complete',
         message: `Data successfully merged in ${duration}s`
       });
+      
+      // Reset sync status to allow for another sync after a delay
+      setTimeout(() => {
+        if (this.syncInProgress) {
+          this.syncInProgress = false;
+        }
+      }, 3000); // Reset after 3 seconds so user can see completion message
     } catch (error) {
       console.error('Error importing data:', error);
+      this.syncInProgress = false;
       throw error;
     }
   }
