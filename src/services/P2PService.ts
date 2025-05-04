@@ -127,92 +127,165 @@ export class P2PService {
     });
   }
   
-  /**
-   * Connect to an existing session using a connection code
-   * @param connectionCode The host's connection code to join
-   * @returns Promise that resolves when connection is established
-   */
-  public async connect(connectionCode: string): Promise<void> {
-    if (!connectionCode) {
-      throw new Error('Connection code is required');
+
+/**
+ * Connect to an existing session using a connection code
+ * @param connectionCode The host's connection code to join
+ * @returns Promise that resolves when connection is established
+ */
+public async connect(connectionCode: string): Promise<void> {
+  if (!connectionCode) {
+    throw new Error('Connection code is required');
+  }
+  
+  connectionCode = connectionCode.trim().toUpperCase();
+  
+  // Check if we're already connected to this peer
+  if (this.connectionState.isConnected && 
+      this.connectionState.connectionCode === connectionCode &&
+      this.connections.size > 0) {
+    
+    console.log('Already connected to', connectionCode);
+    
+    // Just validate the connection is actually working
+    const isHealthy = await this.checkConnectionHealth();
+    if (isHealthy) {
+      console.log('Connection is healthy, no need to reconnect');
+      return;
+    } else {
+      console.log('Connection is not healthy despite appearing connected, will reconnect');
+      // Clean up before attempting a new connection
+      this.cleanupPeer();
     }
-    
-    connectionCode = connectionCode.trim().toUpperCase();
-    
-    this.updateState({
-      isHost: false,
-      isConnecting: true,
-      connectionCode,
-      detailedStatus: `Connecting to host: ${connectionCode}`
-    });
-    
-    return new Promise((resolve, reject) => {
-      try {
-        // Clean up any existing peer
-        this.cleanupPeer();
-        
-        // Connection timeout
-        const timeout = setTimeout(() => {
-          reject(new Error('PeerJS initialization timeout'));
-          this.updateState({
-            isConnecting: false,
-            error: 'Connection timed out. Please try again.',
-            detailedStatus: 'Connection timeout'
-          });
-        }, 15000); // 15 seconds timeout
-        
-        // Create peer with random ID
-        this.peer = new Peer({
-          debug: this.options.debug ? 2 : 0
+  }
+  
+  this.updateState({
+    isHost: false,
+    isConnecting: true,
+    connectionCode,
+    detailedStatus: `Connecting to host: ${connectionCode}`
+  });
+  
+  return new Promise((resolve, reject) => {
+    try {
+      // Clean up any existing peer
+      this.cleanupPeer();
+      
+      // Connection timeout
+      const timeout = setTimeout(() => {
+        reject(new Error('PeerJS initialization timeout'));
+        this.updateState({
+          isConnecting: false,
+          error: 'Connection timed out. Please try again.',
+          detailedStatus: 'Connection timeout'
         });
+      }, 15000); // 15 seconds timeout
+      
+      // Create peer with random ID
+      this.peer = new Peer({
+        debug: this.options.debug ? 2 : 0
+      });
+      
+      this.peer.on('open', (myId) => {
+        this.log('Initialized with ID:', myId);
+        this.logConnectionStatus(`Client peer opened with ID ${myId}, connecting to ${connectionCode}`);
         
-        this.peer.on('open', (myId) => {
-          this.log('Initialized with ID:', myId);
-          this.logConnectionStatus(`Client peer opened with ID ${myId}, connecting to ${connectionCode}`);
-          
-          // Set up general peer event listeners
-          this.setupPeerListeners();
-          
-          // Make sure peer is still available before connecting
-          if (!this.peer) {
-            clearTimeout(timeout);
-            reject(new Error('Peer connection was lost'));
-            return;
-          }
-          
-          // Connect to the host using their connection code
-          try {
-            this.log(`Attempting to connect to host ${connectionCode}`);
-            const conn = this.peer.connect(connectionCode, {
-              reliable: true,
-              serialization: 'json'
-            });
-            
-            this.handleOutgoingConnection(conn, () => {
-              clearTimeout(timeout);
-              resolve();
-            }, (err) => {
-              clearTimeout(timeout);
-              reject(err);
-            });
-          } catch (err) {
-            clearTimeout(timeout);
-            this.handleError('Failed to connect to peer', err);
-            reject(err);
-          }
-        });
+        // Set up general peer event listeners
+        this.setupPeerListeners();
         
-        this.peer.on('error', (err) => {
+        // Make sure peer is still available before connecting
+        if (!this.peer) {
           clearTimeout(timeout);
-          this.handleError('Connection error', err);
+          reject(new Error('Peer connection was lost'));
+          return;
+        }
+        
+        // Connect to the host using their connection code
+        try {
+          this.log(`Attempting to connect to host ${connectionCode}`);
+          const conn = this.peer.connect(connectionCode, {
+            reliable: true,
+            serialization: 'json'
+          });
+          
+          this.handleOutgoingConnection(conn, () => {
+            clearTimeout(timeout);
+            resolve();
+          }, (err) => {
+            clearTimeout(timeout);
+            reject(err);
+          });
+        } catch (err) {
+          clearTimeout(timeout);
+          this.handleError('Failed to connect to peer', err);
           reject(err);
-        });
-      } catch (error) {
-        this.handleError('Failed to connect', error);
-        reject(error);
+        }
+      });
+      
+      this.peer.on('error', (err) => {
+        clearTimeout(timeout);
+        this.handleError('Connection error', err);
+        reject(err);
+      });
+    } catch (error) {
+      this.handleError('Failed to connect', error);
+      reject(error);
+    }
+  });
+}
+
+
+/**
+ * Check if current connections are healthy
+ * @returns True if connections are healthy
+ */
+private async checkConnectionHealth(): Promise<boolean> {
+  // If no connections, health check fails
+  if (this.connections.size === 0) {
+    return false;
+  }
+  
+  try {
+    // Send a ping/pong message to verify connection
+    return new Promise((resolve) => {
+      // Set timeout for health check
+      const timeout = setTimeout(() => {
+        this.log('Health check timed out');
+        resolve(false);
+      }, 3000);
+      
+      // Create one-time listener for health check response
+      const responseHandler = (data: any) => {
+        if (data && data.type === 'health-check-response') {
+          clearTimeout(timeout);
+          // Remove listener
+          this.removeDataListener(responseHandler);
+          resolve(true);
+        }
+      };
+      
+      // Add listener
+      this.onData(responseHandler);
+      
+      // Send health check request to all connections
+      const sendSuccess = this.send({
+        type: 'health-check-request',
+        timestamp: Date.now()
+      });
+      
+      // If send fails immediately, connection is not healthy
+      if (!sendSuccess) {
+        clearTimeout(timeout);
+        this.removeDataListener(responseHandler);
+        resolve(false);
       }
     });
+  } catch (error) {
+    this.log('Error during health check:', error);
+    return false;
   }
+}
+
   
   /**
    * Send data to all connected peers

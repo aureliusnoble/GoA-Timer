@@ -106,12 +106,34 @@ export const ConnectionSetup: React.FC<ConnectionSetupProps> = ({ onClose, onDat
     }
   };
   
-  // Handle confirming a data operation
-  const handleConfirmOperation = () => {
-    playSound('buttonClick');
-    console.log("[ConnectionSetup] Confirming data operation");
-    confirmDataOperation();
-  };
+
+// Handle confirming a data operation
+const handleConfirmOperation = () => {
+  playSound('buttonClick');
+  console.log("[ConnectionSetup] Confirming data operation");
+  
+  // Verify connection before confirming
+  if (!connectionState.isConnected) {
+    console.error("[ConnectionSetup] Cannot confirm - not connected");
+    // Try a quick reconnection if we have a code
+    if (connectionState.connectionCode) {
+      console.log("[ConnectionSetup] Attempting reconnection before confirming");
+      connect(connectionState.connectionCode)
+        .then(() => {
+          // If reconnection succeeds, try confirming after a short delay
+          setTimeout(() => {
+            confirmDataOperation();
+          }, 1000);
+        })
+        .catch(err => {
+          console.error("[ConnectionSetup] Reconnection failed:", err);
+        });
+    }
+    return;
+  }
+  
+  confirmDataOperation();
+};
   
   // Handle rejecting a data operation
   const handleRejectOperation = () => {

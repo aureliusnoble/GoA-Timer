@@ -373,52 +373,165 @@ export class DatabaseSyncService {
     }
   }
   
+  
   /**
-   * Confirm a data operation (sending or receiving)
-   */
-  public confirmDataOperation(): void {
-    console.log('[DatabaseSyncService] confirmDataOperation called, current status:', this.currentProgress.status);
-    
-    if (this.currentProgress.status === 'pending-confirmation') {
-      const isDataRequest = this.currentProgress.isDataRequest;
+ * Confirm a data operation (sending or receiving)
+ */
+public confirmDataOperation(): void {
+  console.log('[DatabaseSyncService] confirmDataOperation called, current status:', this.currentProgress.status);
+  
+  if (this.currentProgress.status === 'pending-confirmation') {
+    // Verify connection state before proceeding
+    const connectionState = this.p2pService.getState();
+    if (!connectionState.isConnected || connectionState.peerCount === 0) {
+      console.error('[DatabaseSyncService] Cannot confirm - connection lost');
       
-      if (isDataRequest) {
-        // We're being asked to send data
-        console.log('[DatabaseSyncService] Confirming data request, sending data');
-        this.handleSendDataAfterConfirmation();
-      } else {
-        // We're being asked to receive data
-        console.log('[DatabaseSyncService] Confirming data send request, ready to receive');
-        const sendResult = this.p2pService.send({
-          type: SyncMessageType.SEND_DATA_CONFIRM,
-          payload: {
-            operationId: this.currentOperationId
+      // Try to reconnect if we have a connection code
+      const connectionCode = connectionState.connectionCode;
+      if (connectionCode) {
+        this.attemptReconnection(connectionCode).then(success => {
+          if (success) {
+            console.log('[DatabaseSyncService] Reconnection successful, retrying confirm');
+            // Wait a moment for reconnection to stabilize
+            setTimeout(() => this.confirmDataOperation(), 1000);
+          } else {
+            this.updateProgress({
+              percent: 0,
+              status: 'error',
+              message: 'Connection lost and reconnection failed. Please try again.',
+              error: 'Reconnection failed'
+            });
+            this.syncInProgress = false;
+            this.currentOperationId = null;
           }
         });
+      } else {
+        this.updateProgress({
+          percent: 0,
+          status: 'error',
+          message: 'Connection lost. Please reconnect and try again.',
+          error: 'Connection lost'
+        });
+        this.syncInProgress = false;
+        this.currentOperationId = null;
+      }
+      return;
+    }
+    
+    const isDataRequest = this.currentProgress.isDataRequest;
+    
+    if (isDataRequest) {
+      // We're being asked to send data
+      console.log('[DatabaseSyncService] Confirming data request, sending data');
+      this.handleSendDataAfterConfirmation();
+    } else {
+      // We're being asked to receive data
+      console.log('[DatabaseSyncService] Confirming data send request, ready to receive');
+      const sendResult = this.p2pService.send({
+        type: SyncMessageType.SEND_DATA_CONFIRM,
+        payload: {
+          operationId: this.currentOperationId
+        }
+      });
+      
+      if (!sendResult) {
+        console.error('[DatabaseSyncService] Failed to send confirmation');
         
-        if (!sendResult) {
-          console.error('[DatabaseSyncService] Failed to send confirmation');
-          this.updateProgress({
-            percent: 0,
-            status: 'error',
-            message: 'Failed to send confirmation. Try reconnecting.',
-            error: 'Message sending failed'
+        // Try to reconnect
+        const connectionCode = this.p2pService.getState().connectionCode;
+        if (connectionCode) {
+          this.attemptReconnection(connectionCode).then(success => {
+            if (success) {
+              console.log('[DatabaseSyncService] Reconnection successful, retrying confirm');
+              setTimeout(() => this.confirmDataOperation(), 1000);
+            } else {
+              this.updateProgress({
+                percent: 0,
+                status: 'error',
+                message: 'Failed to send confirmation and reconnection failed. Please try again.',
+                error: 'Confirmation failed'
+              });
+              this.syncInProgress = false;
+              this.currentOperationId = null;
+            }
           });
-          this.syncInProgress = false;
-          this.currentOperationId = null;
           return;
         }
         
         this.updateProgress({
           percent: 0,
-          status: 'preparing',
-          message: 'Preparing to receive data'
+          status: 'error',
+          message: 'Failed to send confirmation. Try reconnecting.',
+          error: 'Message sending failed'
         });
+        this.syncInProgress = false;
+        this.currentOperationId = null;
+        return;
       }
-    } else {
-      console.warn('[DatabaseSyncService] confirmDataOperation called when not in pending-confirmation state');
+      
+      this.updateProgress({
+        percent: 0,
+        status: 'preparing',
+        message: 'Preparing to receive data'
+      });
     }
+  } else {
+    console.warn('[DatabaseSyncService] confirmDataOperation called when not in pending-confirmation state');
   }
+}
+
+/**
+ * Attempt reconnection with the provided code
+ * @param code The connection code to reconnect with
+ * @returns Promise resolving to true if reconnection successful
+ */
+private async attemptReconnection(code: string): Promise<boolean> {
+  this.updateProgress({
+    percent: 0,
+    status: 'reconnecting',
+    message: 'Connection lost - attempting to reconnect...'
+  });
+  
+  console.log(`[DatabaseSyncService] Attempting to reconnect with code: ${code}`);
+  
+  try {
+    // First verify connection is actually disconnected
+    const currentState = this.p2pService.getState();
+    if (currentState.isConnected && currentState.peerCount > 0) {
+      console.log('[DatabaseSyncService] Already connected, no need to reconnect');
+      return true;
+    }
+    
+    // Try up to 3 reconnection attempts
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      console.log(`[DatabaseSyncService] Reconnection attempt ${attempt}/3`);
+      
+      // Add increasing delay between attempts
+      if (attempt > 1) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      }
+      
+      try {
+        await this.p2pService.connect(code);
+        
+        // Verify connection was successful
+        const newState = this.p2pService.getState();
+        if (newState.isConnected && newState.peerCount > 0) {
+          console.log('[DatabaseSyncService] Reconnection successful');
+          return true;
+        }
+      } catch (error) {
+        console.error(`[DatabaseSyncService] Reconnection attempt ${attempt} failed:`, error);
+      }
+    }
+    
+    console.error('[DatabaseSyncService] All reconnection attempts failed');
+    return false;
+  } catch (error) {
+    console.error('[DatabaseSyncService] Error during reconnection:', error);
+    return false;
+  }
+}
   
   /**
    * Reject a data operation (sending or receiving)

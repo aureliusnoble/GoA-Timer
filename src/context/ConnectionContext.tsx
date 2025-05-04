@@ -96,7 +96,7 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
     }
   }, [onDataReceived]);
   
-  // Set up event handlers
+  // Set up event handlers (PRIMARY FIX: removed syncProgress.status from dependencies)
   useEffect(() => {
     console.log('[ConnectionContext] Setting up event handlers');
     
@@ -109,8 +109,11 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
         
       setConnectionState(state);
       
-      // Reset sync progress when disconnected
-      if (!state.isConnected && syncProgress.status !== 'idle') {
+      // Reset sync progress when disconnected, but only if not in middle of operation
+      if (!state.isConnected && 
+          syncProgress.status !== 'idle' && 
+          syncProgress.status !== 'pending-confirmation' &&
+          syncProgress.status !== 'awaiting-confirmation') {
         console.log('[ConnectionContext] Resetting sync progress due to disconnection');
         setSyncProgress(defaultSyncProgress);
       }
@@ -120,15 +123,6 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
     const handleSyncProgress = (progress: SyncProgress) => {
       console.log('[ConnectionContext] Sync progress:', progress.status, progress.message);
       setSyncProgress(progress);
-      
-      // Call onSyncCompleted when sync is complete
-      if (progress.status === 'complete' && onSyncCompleted) {
-        console.log('[ConnectionContext] Sync completed, triggering callback');
-        // Add a slight delay to allow the UI to update first
-        setTimeout(() => {
-          onSyncCompleted();
-        }, 500);
-      }
     };
     
     // Set up connection state change handler
@@ -158,7 +152,7 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
     // Check on mount
     checkUrlForCode();
     
-    // Cleanup on unmount
+    // Cleanup on unmount ONLY
     return () => {
       console.log('[ConnectionContext] Cleanup - removing event handlers');
       
@@ -169,7 +163,18 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
         p2pService.disconnect();
       }
     };
-  }, [p2pService, dbSyncService, syncProgress.status, onSyncCompleted, handleDataReceived]);
+  }, [p2pService, dbSyncService, onSyncCompleted, handleDataReceived]); // REMOVED syncProgress.status
+  
+  // Separate effect for handling sync completion
+  useEffect(() => {
+    if (syncProgress.status === 'complete' && onSyncCompleted) {
+      console.log('[ConnectionContext] Sync completed, triggering callback');
+      // Add a slight delay to allow the UI to update first
+      setTimeout(() => {
+        onSyncCompleted();
+      }, 500);
+    }
+  }, [syncProgress.status, onSyncCompleted]);
   
   /**
    * Initialize as host with a new connection code
@@ -285,6 +290,19 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
    */
   const confirmDataOperation = () => {
     console.log('[ConnectionContext] Confirming data operation');
+    
+    // Verify connection state before proceeding
+    if (!connectionState.isConnected) {
+      console.error('[ConnectionContext] Cannot confirm operation - not connected');
+      setSyncProgress({
+        percent: 0,
+        status: 'error',
+        message: 'Cannot confirm - connection lost. Please reconnect and try again.',
+        error: 'Connection lost'
+      });
+      return;
+    }
+    
     dbSyncService.confirmDataOperation();
   };
   
