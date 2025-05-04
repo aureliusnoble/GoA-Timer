@@ -265,16 +265,18 @@ export class DatabaseSyncService {
     return new Promise<boolean>((resolve) => {
       console.log('[DatabaseSyncService] Performing connection health check');
       
-      // Set a timeout for the health check
+      // Increase timeout from 5000ms to 8000ms for more reliability
       const timeout = setTimeout(() => {
         console.error('[DatabaseSyncService] Health check timed out');
+        // Remove the temporary listener before resolving
+        this.p2pService.removeDataListener(healthCheckListener);
         resolve(false);
-      }, 5000);
+      }, 8000);
       
       // Create a one-time listener for the health check response
       const healthCheckListener = (message: any) => {
         if (message && message.type === SyncMessageType.HEALTHCHECK_RESPONSE) {
-          console.log('[DatabaseSyncService] Received health check response');
+          console.log('[DatabaseSyncService] Received health check response in listener');
           clearTimeout(timeout);
           // Remove the temporary listener
           this.p2pService.removeDataListener(healthCheckListener);
@@ -282,7 +284,7 @@ export class DatabaseSyncService {
         }
       };
       
-      // Add the listener
+      // Add the listener before sending the message
       this.p2pService.onData(healthCheckListener);
       
       // Send the health check message
@@ -307,9 +309,9 @@ export class DatabaseSyncService {
     // Clear any existing interval
     this.stopHealthcheckInterval();
     
-    // Set a new interval
+    // Set a new interval with longer delay (20 seconds instead of 10)
     this.healthcheckInterval = setInterval(() => {
-      // Only check if sync is in progress
+      // Only check if sync is in progress and we're still waiting for confirmation
       if (this.syncInProgress && 
          (this.currentProgress.status === 'awaiting-confirmation' || 
           this.currentProgress.status === 'pending-confirmation')) {
@@ -318,26 +320,47 @@ export class DatabaseSyncService {
         this.performConnectionHealthCheck().then(isHealthy => {
           if (!isHealthy) {
             console.error('[DatabaseSyncService] Periodic health check failed');
-            // Only show error if we're still in a waiting state
+            
+            // Add a retry attempt before failing completely
+            if (this.retryCount < this.maxRetries) {
+              this.retryCount++;
+              console.log(`[DatabaseSyncService] Retrying health check (${this.retryCount}/${this.maxRetries})`);
+              
+              // Update progress to show retry
+              this.updateProgress({
+                percent: 0,
+                status: 'reconnecting',
+                message: `Connection issue detected, retrying (${this.retryCount}/${this.maxRetries})...`,
+                isDataRequest: this.currentProgress.isDataRequest
+              });
+              
+              // Don't fail immediately, give it a chance to recover
+              return;
+            }
+            
+            // Only show error if we're still in a waiting state after max retries
             if (this.currentProgress.status === 'awaiting-confirmation' || 
                 this.currentProgress.status === 'pending-confirmation') {
               this.updateProgress({
                 percent: 0,
                 status: 'error',
                 message: 'Connection was lost while waiting for confirmation',
-                error: 'Connection health check failed'
+                error: 'Connection health check failed after multiple attempts'
               });
               this.syncInProgress = false;
               this.currentOperationId = null;
               this.stopHealthcheckInterval();
             }
+          } else {
+            // Reset retry count on successful health check
+            this.retryCount = 0;
           }
         });
       } else {
         // If no longer in these states, stop the interval
         this.stopHealthcheckInterval();
       }
-    }, 10000); // Check every 10 seconds
+    }, 20000); // Check every 20 seconds instead of 10
   }
   
   /**
@@ -478,6 +501,12 @@ export class DatabaseSyncService {
         this.p2pService.send({
           type: SyncMessageType.HEALTHCHECK_RESPONSE
         });
+        break;
+      
+      case SyncMessageType.HEALTHCHECK_RESPONSE:
+        // This response is already handled by the health check promise
+        console.log('[DatabaseSyncService] Received health check response');
+        // No action needed here as the specific listener in performConnectionHealthCheck handles this
         break;
       
       // Handle data request
