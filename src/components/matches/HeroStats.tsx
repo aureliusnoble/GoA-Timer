@@ -1,6 +1,6 @@
 // src/components/matches/HeroStats.tsx
-import React, { useState, useEffect} from 'react';
-import { ChevronLeft, Search, Info, Filter, ChevronDown, ChevronUp, Shield } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ChevronLeft, Search, Info, Filter, ChevronDown, ChevronUp, Shield, Printer } from 'lucide-react';
 import { Hero } from '../../types';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
@@ -90,6 +90,12 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
   const handleBack = () => {
     playSound('buttonClick');
     onBack();
+  };
+
+  // Handle print function
+  const handlePrint = () => {
+    playSound('buttonClick');
+    window.print();
   };
 
   // Handle sort button click
@@ -255,21 +261,136 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
     );
   };
 
+  // Add Print-Specific CSS
+  useEffect(() => {
+    // Create a style element for print styles
+    const style = document.createElement('style');
+    style.type = 'text/css';
+    style.media = 'print';
+    // CSS to maintain dark theme for printing
+    style.innerHTML = `
+      @media print {
+        @page {
+          size: auto;
+          margin: 0mm;
+          scale: 0.5;
+        }
+        
+        /* Fix for background colors and gradient */
+        html, body {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+          color-adjust: exact !important;
+          background-color: #1f2937 !important;
+        }
+        
+        /* Force the app container to extend */
+        #root {
+          position: relative;
+          min-height: 100vh;
+        }
+        
+        /* Create a pseudo-element with the gradient background that extends full height */
+        #root::before {
+          content: "";
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          z-index: -1;
+          min-height: 100vh;
+          background: #1f2937 !important; /* Match your app's gradient or background */
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        
+        /* Make component backgrounds preserve their color */
+        .bg-gray-700, .bg-gray-800, .bg-gray-900, 
+        .bg-blue-900, .bg-red-900, .bg-gray-700\\/50, 
+        .bg-blue-900\\/30, .bg-green-900\\/30 {
+          background-color: inherit !important;
+          box-shadow: inset 0 0 0 1000px rgba(55, 65, 81, 0.8) !important; /* gray-700 with opacity */
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        
+        /* Target specific background colors to ensure they print correctly */
+        .bg-gray-800 {
+          box-shadow: inset 0 0 0 1000px rgba(31, 41, 55, 0.9) !important; /* gray-800 with opacity */
+        }
+        
+        .bg-gray-900 {
+          box-shadow: inset 0 0 0 1000px rgba(17, 24, 39, 0.9) !important; /* gray-900 with opacity */
+        }
+        
+        /* Background for progress bars */
+        .bg-red-600 {
+          box-shadow: inset 0 0 0 1000px rgba(220, 38, 38, 0.9) !important;
+        }
+        
+        .bg-green-500 {
+          box-shadow: inset 0 0 0 1000px rgba(34, 197, 94, 0.9) !important;
+        }
+        
+        .print-only { display: block !important; }
+        .no-print { display: none !important; }
+        
+        /* Hide feedback component */
+        .fixed.bottom-0.left-0.z-50,
+        .fixed.bottom-2.left-2 {
+          display: none !important;
+        }
+        
+        /* Prevent page breaks inside cards */
+        .bg-gray-700.rounded-lg.overflow-hidden.shadow-md {
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
+        }
+      }
+    `;
+    
+    // Add the style to the head
+    document.head.appendChild(style);
+    
+    // Clean up function to remove the style when component unmounts
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
+
   return (
     <div className="bg-gray-800 rounded-lg p-6">
       <div className="flex justify-between items-center mb-6">
         <button
           onClick={handleBack}
-          className="flex items-center text-gray-300 hover:text-white"
+          className="flex items-center text-gray-300 hover:text-white no-print"
         >
           <ChevronLeft size={20} className="mr-1" />
           <span>Back to Menu</span>
         </button>
         <h2 className="text-2xl font-bold">Hero Statistics</h2>
+        
+        {/* Print Button */}
+        <EnhancedTooltip text="Share hero statistics as PDF" position="left" className="no-print">
+          <button
+            onClick={handlePrint}
+            className="flex items-center px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg"
+          >
+            <Printer size={18} className="mr-2" />
+            <span>Share Stats</span>
+          </button>
+        </EnhancedTooltip>
+      </div>
+      
+      {/* Page Title for Print Only */}
+      <div className="hidden print-only text-center mb-6">
+        <h1 className="text-3xl font-bold">Guards of Atlantis II - Hero Statistics</h1>
+        <p className="text-gray-400 mt-2">Printed on {new Date().toLocaleDateString()}</p>
       </div>
       
       {/* Search and Filter Bar */}
-      <div className="bg-gray-700 rounded-lg p-4 mb-6">
+      <div className="bg-gray-700 rounded-lg p-4 mb-6 no-print">
         <div className="flex flex-col md:flex-row gap-4 items-stretch">
           {/* Search Input */}
           <div className="relative flex-grow">
@@ -402,6 +523,18 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
         </div>
       ) : (
         <div>
+          {/* Filter Summary for Print */}
+          {(filterExpansion !== 'all' || filterRole !== 'all' || searchTerm !== '') && (
+            <div className="hidden print-only mb-4 p-4 bg-gray-700 rounded-lg">
+              <h3 className="font-semibold mb-2">Filtered View:</h3>
+              <ul className="text-sm space-y-1">
+                {filterExpansion !== 'all' && <li>Expansion: {filterExpansion}</li>}
+                {filterRole !== 'all' && <li>Role: {filterRole}</li>}
+                {searchTerm !== '' && <li>Search Term: "{searchTerm}"</li>}
+              </ul>
+            </div>
+          )}
+          
           {/* Hero Cards Grid */}
           {filteredHeroes.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -414,7 +547,7 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
                   <div key={hero.heroId} className="bg-gray-700 rounded-lg overflow-hidden shadow-md">
                     {/* Hero Header */}
                     <div 
-                      className="px-5 py-4 bg-gray-800 flex items-center cursor-pointer"
+                      className="px-5 py-4 bg-gray-800 flex items-center cursor-pointer no-print-hover"
                       onMouseEnter={(e) => handleHeroMouseEnter(getHeroById(hero.heroId)!, e)}
                       onMouseLeave={handleHeroMouseLeave}
                       onClick={(e) => handleHeroClick(getHeroById(hero.heroId)!, e)}
@@ -445,7 +578,7 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
                         <div className="flex justify-between items-center mb-2">
                           <div className="text-sm text-gray-400 flex items-center">
                             <span>Win Rate</span>
-                            <EnhancedTooltip text="Percentage of games won with this hero" position="right">
+                            <EnhancedTooltip text="Percentage of games won with this hero" position="right" className="no-print">
                               <Info size={14} className="ml-1 text-gray-500 cursor-help" />
                             </EnhancedTooltip>
                           </div>
@@ -468,7 +601,7 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
                       <div className="mb-4">
                         <div className="flex items-center mb-2">
                           <h4 className="font-semibold text-sm">Best Teammates</h4>
-                          <EnhancedTooltip text="Heroes that have the highest win rate when played together with this hero" position="right" maxWidth="max-w-md">
+                          <EnhancedTooltip text="Heroes that have the highest win rate when played together with this hero" position="right" maxWidth="max-w-md" className="no-print">
                             <Info size={14} className="ml-1 text-gray-500 cursor-help" />
                           </EnhancedTooltip>
                         </div>
@@ -488,7 +621,7 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
                       <div className="mb-4">
                         <div className="flex items-center mb-2">
                           <h4 className="font-semibold text-sm">Best Against</h4>
-                          <EnhancedTooltip text="Heroes that this hero has the highest win rate against" position="right" maxWidth="max-w-md">
+                          <EnhancedTooltip text="Heroes that this hero has the highest win rate against" position="right" maxWidth="max-w-md" className="no-print">
                             <Info size={14} className="ml-1 text-gray-500 cursor-help" />
                           </EnhancedTooltip>
                         </div>
@@ -508,7 +641,7 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
                       <div>
                         <div className="flex items-center mb-2">
                           <h4 className="font-semibold text-sm">Countered By</h4>
-                          <EnhancedTooltip text="Heroes that this hero has the lowest win rate against" position="right" maxWidth="max-w-md">
+                          <EnhancedTooltip text="Heroes that this hero has the lowest win rate against" position="right" maxWidth="max-w-md" className="no-print">
                             <Info size={14} className="ml-1 text-gray-500 cursor-help" />
                           </EnhancedTooltip>
                         </div>
@@ -539,7 +672,7 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
               {(searchTerm || filterExpansion !== 'all' || filterRole !== 'all') && (
                 <button
                   onClick={resetFilters}
-                  className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg"
+                  className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg no-print"
                 >
                   Clear Filters
                 </button>
@@ -556,6 +689,7 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
           isVisible={showHeroInfo}
           onClose={() => setShowHeroInfo(false)}
           cardPosition={heroCardPosition}
+       
         />
       )}
       
@@ -569,9 +703,14 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
           These statistics show hero performance based on your match history. Win rates and synergies are calculated from 
           your recorded matches, so they reflect your group's playstyle and may differ from general statistics.
         </p>
-        <p>
+        <p className="no-print">
           Hover over or tap a hero to see their complete information. Click on column headers to sort by different criteria.
         </p>
+      </div>
+      
+      {/* Print Footer */}
+      <div className="hidden print-only mt-8 text-center text-sm text-gray-400">
+        <p>Generated by Guards of Atlantis II Timer App on {new Date().toLocaleString()}</p>
       </div>
     </div>
   );

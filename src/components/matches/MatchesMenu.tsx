@@ -1,6 +1,6 @@
 // src/components/matches/MatchesMenu.tsx
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Users, History, Shield, Download, Upload, Trash2, Info, AlertTriangle, Shuffle, FileText, Share2, Wifi } from 'lucide-react';
+import { ChevronLeft, Users, History, Shield, Download, Upload, Trash2, Info, AlertTriangle, Shuffle, FileText, Share2, Wifi, File } from 'lucide-react';
 import EnhancedTooltip from '../common/EnhancedTooltip';
 import { ConnectionModal } from '../common/ConnectionModal';
 import dbService from '../../services/DatabaseService';
@@ -364,141 +364,156 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
           </div>
         </div>
         
-        {/* Import Options Panel - Show when showImportOptions is true */}
-        {showImportOptions ? (
-          <div className="bg-gray-700 p-5 rounded-lg mb-6">
-            <h4 className="font-semibold text-lg mb-3">Import Options</h4>
-            
-            <div className="mb-4 space-y-3">
-              {/* Replace Option */}
-              <div className="flex items-start">
-                <input
-                  type="radio"
-                  id="replaceMode"
-                  name="importMode"
-                  checked={importMode === 'replace'}
-                  onChange={() => setImportMode('replace')}
-                  className="mt-1 mr-3"
-                />
-                <div className="flex-1">
-                  <label htmlFor="replaceMode" className="flex items-center font-medium cursor-pointer">
-                    Replace all data
-                    <EnhancedTooltip text={importTooltips.replace} position="right" maxWidth="max-w-md">
-                      <Info size={16} className="ml-2 text-blue-400 cursor-help" />
-                    </EnhancedTooltip>
-                  </label>
-                  <p className="text-sm text-gray-400 mt-1">
-                    Delete all existing data and replace with imported data.
-                  </p>
-                </div>
-              </div>
-              
-              {/* Merge Option */}
-              <div className="flex items-start">
-                <input
-                  type="radio"
-                  id="mergeMode"
-                  name="importMode"
-                  checked={importMode === 'merge'}
-                  onChange={() => setImportMode('merge')}
-                  className="mt-1 mr-3"
-                />
-                <div className="flex-1">
-                  <label htmlFor="mergeMode" className="flex items-center font-medium cursor-pointer">
-                    Merge with existing data
-                    <EnhancedTooltip text={importTooltips.merge} position="right" maxWidth="max-w-md">
-                      <Info size={16} className="ml-2 text-blue-400 cursor-help" />
-                    </EnhancedTooltip>
-                  </label>
-                  <p className="text-sm text-gray-400 mt-1">
-                    Add new data while preserving existing records.
-                  </p>
-                </div>
-              </div>
+        {/* Manual Data Sharing Call-to-Action */}
+        <div className="bg-green-900/30 border border-green-700 rounded-lg p-4 mb-6">
+          <div className="flex items-start">
+            <div className="mr-3 p-2 bg-green-800 rounded-full flex-shrink-0">
+              <File size={24} className="text-green-300" />
             </div>
-            
-            {/* Warning based on selected mode */}
-            <div className="bg-amber-900/30 border border-amber-600 p-3 rounded-lg mb-4">
-              <div className="flex items-start">
-                <AlertTriangle size={16} className="mr-2 mt-0.5 flex-shrink-0 text-amber-400" />
-                <div>
-                  {importMode === 'replace' ? (
-                    <>
-                      <span className="font-semibold text-amber-400">Warning: All existing data will be deleted!</span>
-                      <p className="mt-1 text-sm">This action will permanently delete all your match history and player statistics and replace them with the imported data.</p>
-                    </>
-                  ) : (
-                    <>
-                      <span className="font-semibold text-amber-400">Merge Information:</span>
-                      <p className="mt-1 text-sm">Player stats will be combined (wins, losses, ELO), and new matches will be added to your history. Matches with the same ID will be skipped to avoid duplicates.</p>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-            
-            {/* Action Buttons */}
-            <div className="flex space-x-3">
-              <button
-                onClick={handleImportData}
-                className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg flex items-center"
-              >
-                <Upload size={18} className="mr-2" />
-                <span>Proceed with Import</span>
-              </button>
+            <div className="flex-grow">
+              <h4 className="font-semibold text-lg text-green-300 mb-1">Manual Data Sharing</h4>
+              <p className="text-sm text-gray-300 mb-3">
+                Manually import or export data files to share data between devices.
+              </p>
               
-              <button
-                onClick={handleCancelImport}
-                className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg"
-              >
-                Cancel
-              </button>
+              {/* Import Options Panel - Show when showImportOptions is true */}
+              {showImportOptions ? (
+                <div className="bg-gray-800 p-4 rounded-lg mb-4">
+                  <h4 className="font-semibold text-base mb-3">Import Options</h4>
+                  
+                  <div className="mb-4 space-y-3">
+                    {/* Replace Option */}
+                    <div className="flex items-start">
+                      <input
+                        type="radio"
+                        id="replaceMode"
+                        name="importMode"
+                        checked={importMode === 'replace'}
+                        onChange={() => setImportMode('replace')}
+                        className="mt-1 mr-3"
+                      />
+                      <div className="flex-1">
+                        <label htmlFor="replaceMode" className="flex items-center font-medium cursor-pointer">
+                          Replace all data
+                          <EnhancedTooltip text={importTooltips.replace} position="right" maxWidth="max-w-md">
+                            <Info size={16} className="ml-2 text-blue-400 cursor-help" />
+                          </EnhancedTooltip>
+                        </label>
+                        <p className="text-sm text-gray-400 mt-1">
+                          Delete all existing data and replace with imported data.
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {/* Merge Option */}
+                    <div className="flex items-start">
+                      <input
+                        type="radio"
+                        id="mergeMode"
+                        name="importMode"
+                        checked={importMode === 'merge'}
+                        onChange={() => setImportMode('merge')}
+                        className="mt-1 mr-3"
+                      />
+                      <div className="flex-1">
+                        <label htmlFor="mergeMode" className="flex items-center font-medium cursor-pointer">
+                          Merge with existing data
+                          <EnhancedTooltip text={importTooltips.merge} position="right" maxWidth="max-w-md">
+                            <Info size={16} className="ml-2 text-blue-400 cursor-help" />
+                          </EnhancedTooltip>
+                        </label>
+                        <p className="text-sm text-gray-400 mt-1">
+                          Add new data while preserving existing records.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Warning based on selected mode */}
+                  <div className="bg-amber-900/30 border border-amber-600 p-3 rounded-lg mb-4">
+                    <div className="flex items-start">
+                      <AlertTriangle size={16} className="mr-2 mt-0.5 flex-shrink-0 text-amber-400" />
+                      <div>
+                        {importMode === 'replace' ? (
+                          <>
+                            <span className="font-semibold text-amber-400">Warning: All existing data will be deleted!</span>
+                            <p className="mt-1 text-sm">This action will permanently delete all your match history and player statistics and replace them with the imported data.</p>
+                          </>
+                        ) : (
+                          <>
+                            <span className="font-semibold text-amber-400">Merge Information:</span>
+                            <p className="mt-1 text-sm">Player stats will be combined (wins, losses, ELO), and new matches will be added to your history. Matches with the same ID will be skipped to avoid duplicates.</p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Action Buttons */}
+                  <div className="flex space-x-3">
+                    <button
+                      onClick={handleImportData}
+                      className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg flex items-center"
+                    >
+                      <Upload size={18} className="mr-2" />
+                      <span>Proceed with Import</span>
+                    </button>
+                    
+                    <button
+                      onClick={handleCancelImport}
+                      className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  {/* Export Data Button */}
+                  <EnhancedTooltip text="Export match statistics data to a file. Use this to backup your data or transfer it to another device.">
+                    <button
+                      onClick={handleExportData}
+                      disabled={!hasData || isExporting}
+                      className={`px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg flex items-center ${
+                        (!hasData || isExporting) ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      <Download size={18} className="mr-2" />
+                      <span>{isExporting ? 'Exporting...' : 'Export Data'}</span>
+                    </button>
+                  </EnhancedTooltip>
+                  
+                  {/* Import Data Button */}
+                  <EnhancedTooltip text="Import match statistics data from a previously exported file.">
+                    <button
+                      onClick={handleImportData}
+                      className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg flex items-center"
+                    >
+                      <Upload size={18} className="mr-2" />
+                      <span>Import Data</span>
+                    </button>
+                  </EnhancedTooltip>
+                  
+                  {/* Delete Data Button */}
+                  <EnhancedTooltip text="Delete all match statistics data permanently">
+                    <button
+                      onClick={handleDeleteData}
+                      disabled={!hasData}
+                      className={`px-4 py-2 ${
+                        showDeleteConfirm ? 'bg-red-500 hover:bg-red-400' : 'bg-red-700 hover:bg-red-600'
+                      } rounded-lg flex items-center ${
+                        !hasData ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      <Trash2 size={18} className="mr-2" />
+                      <span>{showDeleteConfirm ? 'Confirm Delete' : 'Delete All Data'}</span>
+                    </button>
+                  </EnhancedTooltip>
+                </div>
+              )}
             </div>
           </div>
-        ) : (
-          <div className="flex flex-wrap gap-4 mb-6">
-            {/* Export Data Button */}
-            <EnhancedTooltip text="Export match statistics data to a file. Use this to backup your data or transfer it to another device. The exported file contains all your match history, player stats, and ELO ratings.">
-              <button
-                onClick={handleExportData}
-                disabled={!hasData || isExporting}
-                className={`px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg flex items-center ${
-                  (!hasData || isExporting) ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-              >
-                <Download size={18} className="mr-2" />
-                <span>{isExporting ? 'Exporting...' : 'Export Data'}</span>
-              </button>
-            </EnhancedTooltip>
-            
-            {/* Import Data Button */}
-            <EnhancedTooltip text="Import match statistics data from a previously exported file. You'll have options to replace existing data or merge with it, allowing you to combine records from multiple devices or restore from a backup.">
-              <button
-                onClick={handleImportData}
-                className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg flex items-center"
-              >
-                <Upload size={18} className="mr-2" />
-                <span>Import Data</span>
-              </button>
-            </EnhancedTooltip>
-            
-            {/* Delete Data Button */}
-            <EnhancedTooltip text="Delete all match statistics data permanently">
-              <button
-                onClick={handleDeleteData}
-                disabled={!hasData}
-                className={`px-4 py-2 ${
-                  showDeleteConfirm ? 'bg-red-500 hover:bg-red-400' : 'bg-red-700 hover:bg-red-600'
-                } rounded-lg flex items-center ${
-                  !hasData ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-              >
-                <Trash2 size={18} className="mr-2" />
-                <span>{showDeleteConfirm ? 'Confirm Delete' : 'Delete All Data'}</span>
-              </button>
-            </EnhancedTooltip>
-          </div>
-        )}
+        </div>
         
         {/* Import Error Message */}
         {importError && (
