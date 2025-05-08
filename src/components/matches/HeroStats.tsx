@@ -770,7 +770,6 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
           isVisible={showHeroInfo}
           onClose={() => setShowHeroInfo(false)}
           cardPosition={heroCardPosition}
-          className="no-screenshot"
         />
       )}
       
