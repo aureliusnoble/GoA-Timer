@@ -6,7 +6,6 @@ import { heroes as allHeroes, getAllExpansions } from '../../data/heroes';
 import { useSound } from '../../context/SoundContext';
 import EnhancedTooltip from '../common/EnhancedTooltip';
 import html2canvas from 'html2canvas';
-import { useDevice } from '../../hooks/useDevice';
 import HeroRoleExplanation from '../HeroRoleExplanation';
 
 interface HeroInfoProps {
@@ -15,7 +14,6 @@ interface HeroInfoProps {
 
 const HeroInfo: React.FC<HeroInfoProps> = ({ onBack }) => {
   const { playSound } = useSound();
-  const { isMobile } = useDevice();
   const [heroes, setHeroes] = useState<Hero[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -649,10 +647,10 @@ const HeroInfo: React.FC<HeroInfoProps> = ({ onBack }) => {
                           <span className="mx-2">•</span>
                           <span className="text-blue-400">Complexity: </span>
                           <span className="text-yellow-400 ml-1">{
-                            [...Array(heroComplexity)].map((_, i) => "★").join("")
+                            [...Array(heroComplexity)].map((_) => "★").join("")
                           }</span>
                           <span className="text-gray-600">{
-                            [...Array(4 - heroComplexity)].map((_, i) => "★").join("")
+                            [...Array(4 - heroComplexity)].map((_) => "★").join("")
                           }</span>
                         </div>
                       </div>
