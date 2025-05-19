@@ -28,103 +28,7 @@ const HeroInfo: React.FC<HeroInfoProps> = ({ onBack }) => {
   // Reference for screenshot functionality
   const contentRef = React.useRef<HTMLDivElement>(null);
   
-  // Add screenshot styling
-  useEffect(() => {
-    // Create a style element for screenshot styles
-    const style = document.createElement('style');
-    style.type = 'text/css';
-    
-    // CSS for screenshot styling
-    style.innerHTML = `
-      /* Styles applied during screenshot taking */
-      .taking-screenshot {
-        background-color: #1F2937 !important;
-        padding: 2rem !important;
-        width: 1400px !important; /* Increased width for more space */
-        position: relative !important;
-        overflow: visible !important;
-      }
-      
-      .screenshot-title {
-        color: white;
-        margin-bottom: 2rem;
-      }
-      
-      .screenshot-footer {
-        color: #9CA3AF;
-        margin-top: 2rem;
-        border-top: 1px solid #4B5563;
-        padding-top: 1rem;
-      }
-      
-      /* Hide elements with no-screenshot class */
-      .taking-screenshot .no-screenshot {
-        display: none !important;
-      }
-      
-      /* Adjust card spacing and layout for screenshots */
-      .taking-screenshot .grid {
-        grid-template-columns: repeat(2, 1fr) !important; /* Force 2 columns for readability */
-        gap: 2rem !important; /* Increase gap between cards */
-      }
-      
-      .taking-screenshot .bg-gray-700 {
-        padding: 1.5rem !important; /* More padding inside cards */
-      }
-      
-      /* Fix stat bar display */
-      .taking-screenshot .transform.skew-x-12 {
-        height: 20px !important;
-        width: 20px !important; 
-      }
-      
-      /* Make text more readable */
-      .taking-screenshot .text-sm {
-        font-size: 14px !important;
-        line-height: 1.5 !important;
-      }
-      
-      .taking-screenshot .leading-relaxed {
-        line-height: 1.7 !important;
-      }
-      
-      /* Fix hero header display */
-      .taking-screenshot .px-5.py-4.bg-gray-800 {
-        padding: 1.25rem !important;
-      }
-      
-      /* Enhance hero images */
-      .taking-screenshot .rounded-full.overflow-hidden {
-        border: 2px solid #4B5563 !important;
-      }
-      
-      /* Make role explanations visible in screenshots */
-      .taking-screenshot .bg-gray-700.rounded-lg.mb-4.overflow-hidden {
-        margin-bottom: 2rem !important;
-      }
-      
-      /* Make sure role explanation grid looks good */
-      .taking-screenshot .grid.grid-cols-1.md\\:grid-cols-2.gap-4 {
-        grid-template-columns: repeat(2, 1fr) !important;
-        gap: 1rem !important;
-      }
-      
-      /* Ensure role text is properly visible */
-      .taking-screenshot .text-xs.text-gray-400 {
-        font-size: 0.85rem !important;
-        margin-top: 0.25rem !important;
-        color: #9CA3AF !important;
-      }
-    `;
-    
-    // Add the style to the head
-    document.head.appendChild(style);
-    
-    // Clean up function to remove the style when component unmounts
-    return () => {
-      document.head.removeChild(style);
-    };
-  }, []);
+
 
   // Load hero data on component mount
   useEffect(() => {
@@ -183,7 +87,7 @@ const HeroInfo: React.FC<HeroInfoProps> = ({ onBack }) => {
         (el as HTMLElement).style.display = 'none';
       });
       
-      // Take the screenshot
+      // Screenshot title content needs to include role explanation
       const canvas = await html2canvas(contentRef.current, {
         backgroundColor: '#1F2937', // Match the background color (bg-gray-800)
         windowWidth: 1400, // Updated width to match CSS
@@ -194,7 +98,12 @@ const HeroInfo: React.FC<HeroInfoProps> = ({ onBack }) => {
         allowTaint: true, // Allow cross-origin images
         useCORS: true, // Try to load images with CORS
         onclone: (clonedDoc) => {
-          // Additional modifications to the cloned document before screenshot
+          // Force expand the HeroRoleExplanation in the cloned document before screenshot
+          const roleExplanation = clonedDoc.querySelector('.bg-gray-700.rounded-lg.mb-4.overflow-hidden button + div');
+          if (roleExplanation && (roleExplanation as HTMLElement).style.display === 'none') {
+            (roleExplanation as HTMLElement).style.display = 'block';
+          }
+
           const clonedContent = clonedDoc.querySelector('#screenshotContent');
           if (clonedContent) {
             clonedContent.scrollTop = 0; // Ensure we're at the top of the content
@@ -458,38 +367,15 @@ const HeroInfo: React.FC<HeroInfoProps> = ({ onBack }) => {
             >
               Attack {sortBy === 'attack' && (sortOrder === 'asc' ? '↑' : '↓')}
             </button>
-            
             <button
-              onClick={() => handleSort('initiative')}
+              onClick={() => handleSort('expansion')}
               className={`px-3 py-1 rounded ${
-                sortBy === 'initiative' 
+                sortBy === 'expansion' 
                   ? 'bg-blue-600 hover:bg-blue-500' 
                   : 'bg-gray-600 hover:bg-gray-500'
               }`}
             >
-              Initiative {sortBy === 'initiative' && (sortOrder === 'asc' ? '↑' : '↓')}
-            </button>
-
-            <button
-              onClick={() => handleSort('defence')}
-              className={`px-3 py-1 rounded ${
-                sortBy === 'defence' 
-                  ? 'bg-blue-600 hover:bg-blue-500' 
-                  : 'bg-gray-600 hover:bg-gray-500'
-              }`}
-            >
-              Defence {sortBy === 'defence' && (sortOrder === 'asc' ? '↑' : '↓')}
-            </button>
-
-            <button
-              onClick={() => handleSort('movement')}
-              className={`px-3 py-1 rounded ${
-                sortBy === 'movement' 
-                  ? 'bg-blue-600 hover:bg-blue-500' 
-                  : 'bg-gray-600 hover:bg-gray-500'
-              }`}
-            >
-              Movement {sortBy === 'movement' && (sortOrder === 'asc' ? '↑' : '↓')}
+              Expansion {sortBy === 'expansion' && (sortOrder === 'asc' ? '↑' : '↓')}
             </button>
           </div>
           
@@ -647,10 +533,10 @@ const HeroInfo: React.FC<HeroInfoProps> = ({ onBack }) => {
                           <span className="mx-2">•</span>
                           <span className="text-blue-400">Complexity: </span>
                           <span className="text-yellow-400 ml-1">{
-                            [...Array(heroComplexity)].map((_) => "★").join("")
+                            [...Array(heroComplexity)].map(() => "★").join("")
                           }</span>
                           <span className="text-gray-600">{
-                            [...Array(4 - heroComplexity)].map((_) => "★").join("")
+                            [...Array(4 - heroComplexity)].map(() => "★").join("")
                           }</span>
                         </div>
                       </div>
