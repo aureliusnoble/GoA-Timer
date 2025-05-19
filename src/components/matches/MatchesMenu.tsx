@@ -1,13 +1,13 @@
-// src/components/matches/MatchesMenu.tsx
+// src/components/matches/MatchesMenu.tsx - Updated to include Hero Info
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Users, History, Shield, Download, Upload, Trash2, Info, AlertTriangle, Shuffle, FileText, Share2, Wifi, File } from 'lucide-react';
+import { ChevronLeft, Users, History, Shield, Download, Upload, Trash2, Info, AlertTriangle, Shuffle, FileText, Share2, Wifi, File, Book } from 'lucide-react';
 import EnhancedTooltip from '../common/EnhancedTooltip';
 import { ConnectionModal } from '../common/ConnectionModal';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
 import { useConnection } from '../../context/ConnectionContext';
 
-export type MatchesView = 'menu' | 'player-stats' | 'hero-stats' | 'match-history' | 'match-maker' | 'record-match';
+export type MatchesView = 'menu' | 'player-stats' | 'hero-stats' | 'match-history' | 'match-maker' | 'record-match' | 'hero-info';
 
 interface MatchesMenuProps {
   onBack: () => void;
@@ -206,7 +206,7 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
         <h2 className="text-2xl font-bold">Match Statistics</h2>
       </div>
       
-      {/* Updated grid layout to include Record Match */}
+      {/* Updated grid layout to include Hero Info */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-8">
         {/* Player Stats */}
         <div 
@@ -317,6 +317,25 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
               <span>No match data available</span>
             </div>
           )}
+        </div>
+        
+        {/* NEW COMPONENT: Hero Info */}
+        <div 
+          className="bg-gray-700 hover:bg-gray-600 rounded-lg p-6 cursor-pointer transition-colors"
+          onClick={() => handleNavigate('hero-info')}
+        >
+          <div className="flex items-center text-xl font-semibold mb-4">
+            <Book size={24} className="mr-3 text-teal-400" />
+            <span>Hero Guide</span>
+          </div>
+          <p className="text-gray-300">
+            Browse complete information about all heroes, including stats, roles, and abilities.
+          </p>
+          
+          <div className="mt-3 text-blue-400 text-sm flex items-center">
+            <Info size={16} className="mr-1" />
+            <span>Plan your hero selection</span>
+          </div>
         </div>
       </div>
       
