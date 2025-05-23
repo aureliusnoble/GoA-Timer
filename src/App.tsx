@@ -28,7 +28,7 @@ import {
   PlayerStats
 } from './types';
 import { getAllExpansions, filterHeroesByExpansions } from './data/heroes';
-
+import SkillOverTime from './components/matches/SkillOverTime';
 // Import match statistics components
 import MatchesMenu, { MatchesView } from './components/matches/MatchesMenu';
 import PlayerStatsScreen from './components/matches/PlayerStats';
@@ -1711,11 +1711,17 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
         onNavigate={handleMatchStatisticsNavigate}
       />
     )}
-    {currentMatchView === 'player-stats' && (
-      <PlayerStatsScreen 
-        onBack={() => handleMatchStatisticsNavigate('menu')}
-      />
-    )}
+{currentMatchView === 'skill-over-time' && (
+  <SkillOverTime 
+    onBack={() => handleMatchStatisticsNavigate('player-stats')}
+  />
+)}
+{currentMatchView === 'player-stats' && (
+  <PlayerStatsScreen 
+    onBack={() => handleMatchStatisticsNavigate('menu')}
+    onViewSkillOverTime={() => handleMatchStatisticsNavigate('skill-over-time')}
+  />
+)}
     {currentMatchView === 'hero-stats' && (
       <HeroStats 
         onBack={() => handleMatchStatisticsNavigate('menu')}

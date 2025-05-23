@@ -1431,8 +1431,109 @@ class DatabaseService {
   }
 
   /**
-   * Check if the database has any match data
+   * Get historical ratings for all players over time
+   * Returns rating snapshots after each match
    */
+  async getHistoricalRatings(): Promise<Array<{
+    date: string;
+    matchNumber: number;
+    ratings: { [playerId: string]: number };
+  }>> {
+    try {
+      // Get all matches sorted by date
+      let allMatches = await this.getAllMatches();
+      allMatches.sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        return dateA - dateB;
+      });
+      
+      // Initialize player ratings
+      const players = await this.getAllPlayers();
+      const playerRatings: { [playerId: string]: any } = {};
+      
+      // Initialize all players with default rating
+      for (const player of players) {
+        playerRatings[player.id] = rating();
+      }
+      
+      // Track rating history
+      const ratingHistory: Array<{
+        date: string;
+        matchNumber: number;
+        ratings: { [playerId: string]: number };
+      }> = [];
+      
+      // Process each match chronologically
+      for (let matchIndex = 0; matchIndex < allMatches.length; matchIndex++) {
+        const match = allMatches[matchIndex];
+        const matchPlayers = await this.getMatchPlayers(match.id);
+        
+        // Separate into teams
+        const titanPlayers: string[] = [];
+        const titanRatings: any[] = [];
+        const atlanteanPlayers: string[] = [];
+        const atlanteanRatings: any[] = [];
+        
+        for (const mp of matchPlayers) {
+          if (mp.team === Team.Titans) {
+            titanPlayers.push(mp.playerId);
+            titanRatings.push(playerRatings[mp.playerId]);
+          } else {
+            atlanteanPlayers.push(mp.playerId);
+            atlanteanRatings.push(playerRatings[mp.playerId]);
+          }
+        }
+        
+        // Skip if either team is empty
+        if (titanRatings.length === 0 || atlanteanRatings.length === 0) {
+          continue;
+        }
+        
+        // Determine ranks based on winning team
+        let ranks: number[];
+        if (match.winningTeam === Team.Titans) {
+          ranks = [1, 2];
+        } else {
+          ranks = [2, 1];
+        }
+        
+        // Update ratings using OpenSkill
+        const result = rate([titanRatings, atlanteanRatings], {
+          rank: ranks,
+          beta: TRUESKILL_BETA,
+          tau: TRUESKILL_TAU
+        });
+        
+        // Update player ratings
+        for (let i = 0; i < titanPlayers.length; i++) {
+          playerRatings[titanPlayers[i]] = result[0][i];
+        }
+        for (let i = 0; i < atlanteanPlayers.length; i++) {
+          playerRatings[atlanteanPlayers[i]] = result[1][i];
+        }
+        
+        // Create snapshot of current ratings
+        const snapshot: { [playerId: string]: number } = {};
+        for (const playerId in playerRatings) {
+          const playerRating = playerRatings[playerId];
+          const displayRating = Math.round((ordinal(playerRating) + 25) * 40 + 200);
+          snapshot[playerId] = displayRating;
+        }
+        
+        ratingHistory.push({
+          date: match.date.toString(),
+          matchNumber: matchIndex + 1,
+          ratings: snapshot
+        });
+      }
+      
+      return ratingHistory;
+    } catch (error) {
+      console.error('Error getting historical ratings:', error);
+      return [];
+    }
+  }
   async hasMatchData(): Promise<boolean> {
     const matches = await this.getAllMatches();
     return matches.length > 0;

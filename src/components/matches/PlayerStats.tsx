@@ -7,8 +7,10 @@ import { useSound } from '../../context/SoundContext';
 import EnhancedTooltip from '../common/EnhancedTooltip';
 import html2canvas from 'html2canvas';
 
+
 interface PlayerStatsProps {
   onBack: () => void;
+  onViewSkillOverTime: () => void;
 }
 
 interface PlayerWithStats extends DBPlayer {
@@ -278,7 +280,7 @@ const RankDisplay: React.FC<{ rank: number; skill: number }> = ({ rank, skill })
   );
 };
 
-const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
+const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime }) => {
   const { playSound } = useSound();
   const [players, setPlayers] = useState<PlayerWithStats[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -568,16 +570,31 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
         </button>
         <h2 className="text-2xl font-bold">Player Statistics</h2>
         
-        <EnhancedTooltip text="Take a screenshot of all player statistics" position="left">
-          <button
-            onClick={handleTakeScreenshot}
-            className="flex items-center px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg"
-            disabled={takingScreenshot}
-          >
-            <Camera size={18} className="mr-2" />
-            <span>{takingScreenshot ? 'Capturing...' : 'Share Stats'}</span>
-          </button>
-        </EnhancedTooltip>
+        <div className="flex gap-2">
+          <EnhancedTooltip text="View skill rating progression over time" position="left">
+            <button
+              onClick={() => {
+                playSound('buttonClick');
+                onViewSkillOverTime();
+              }}
+              className="flex items-center px-3 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg"
+            >
+              <TrendingUp size={18} className="mr-2" />
+              <span>View Over Time</span>
+            </button>
+          </EnhancedTooltip>
+          
+          <EnhancedTooltip text="Take a screenshot of all player statistics" position="left">
+            <button
+              onClick={handleTakeScreenshot}
+              className="flex items-center px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg"
+              disabled={takingScreenshot}
+            >
+              <Camera size={18} className="mr-2" />
+              <span>{takingScreenshot ? 'Capturing...' : 'Share Stats'}</span>
+            </button>
+          </EnhancedTooltip>
+        </div>
       </div>
       
       <div className="bg-gray-700 rounded-lg p-4 mb-6 no-screenshot">
