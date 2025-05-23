@@ -14,6 +14,148 @@ interface MatchMakerProps {
   onUseTeams?: (titanPlayers: string[], atlanteanPlayers: string[]) => void;
 }
 
+// Interface for win probability with confidence interval
+interface WinProbabilityResult {
+  team1Probability: number;
+  team1Lower: number;
+  team1Upper: number;
+  team2Probability: number;
+  team2Lower: number;
+  team2Upper: number;
+}
+
+// Component for visualizing win probability with confidence intervals
+const WinProbabilityVisualization: React.FC<{
+  probability: WinProbabilityResult;
+  team1Name: string;
+  team2Name: string;
+}> = ({ probability, team1Name, team2Name }) => {
+  return (
+    <div className="space-y-6 bg-gray-800 p-8 rounded-lg text-white">
+      {/* Percentage guideline bar */}
+      <div>
+        <div className="flex justify-between items-center mb-2 text-sm">
+          <span className="text-gray-400">Win Probability Scale</span>
+        </div>
+        <div className="relative h-8 bg-gray-700 rounded-lg">
+          {/* Percentage markers */}
+          <div className="absolute inset-0 flex justify-between items-center px-1 pointer-events-none">
+            <span className="text-xs text-gray-400">0%</span>
+            <span className="text-xs text-gray-400">20%</span>
+            <span className="text-xs text-gray-400">40%</span>
+            <span className="text-xs text-gray-400">60%</span>
+            <span className="text-xs text-gray-400">80%</span>
+            <span className="text-xs text-gray-400">100%</span>
+          </div>
+          {/* Vertical guidelines */}
+          {[20, 40, 60, 80].map((perc) => (
+            <div
+              key={perc}
+              className="absolute top-0 bottom-0 border-l border-gray-600/50"
+              style={{ left: `${perc}%` }}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Team 1 (Titans) Visualization */}
+      <div className="mt-16">
+        <div className="flex items-center mb-3">
+          <span className="text-blue-400 font-medium relative -top-4">{team1Name}</span>
+        </div>
+        <div className="relative h-8 bg-gray-700 rounded-lg">
+          {/* Confidence interval bar */}
+          <div
+            className="absolute h-6 top-1 bg-blue-600/25 rounded-full"
+            style={{
+              left: `${probability.team1Lower}%`,
+              width: `${probability.team1Upper - probability.team1Lower}%`
+            }}
+          />
+          {/* CI Labels */}
+          <span
+            className="absolute -top-7 text-xs text-blue-400 whitespace-nowrap"
+            style={{
+              left: `${probability.team1Lower}%`,
+              transform: probability.team1Lower < 5 ? 'translateX(0)' : 'translateX(-50%)'
+            }}
+          >
+            {probability.team1Lower}%
+          </span>
+          <span
+            className="absolute -top-7 text-xs text-blue-400 whitespace-nowrap"
+            style={{
+              left: `${probability.team1Upper}%`,
+              transform: probability.team1Upper > 95 ? 'translateX(-100%)' : 'translateX(-50%)'
+            }}
+          >
+            {probability.team1Upper}%
+          </span>
+          {/* Point estimate diamond */}
+          <div className="absolute top-1/2 -translate-y-1/2" style={{ left: `${probability.team1Probability}%` }}>
+            <div className="relative">
+              {/* Centered probability label */}
+              <span className="absolute -top-8 left-1/2 transform -translate-x-5 text-sm font-bold text-white whitespace-nowrap">
+                {probability.team1Probability}%
+              </span>
+              {/* Diamond */}
+              <div className="w-4 h-4 bg-blue-500 transform rotate-45 -translate-x-1/2" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Team 2 (Atlanteans) Visualization */}
+      <div className="mt-16">
+        <div className="flex items-center mb-3">
+          <span className="text-red-400 font-medium relative -top-4">{team2Name}</span>
+        </div>
+        <div className="relative h-8 bg-gray-700 rounded-lg">
+          {/* Confidence interval bar */}
+          <div
+            className="absolute h-6 top-1 bg-red-600/25 rounded-full"
+            style={{
+              left: `${probability.team2Lower}%`,
+              width: `${probability.team2Upper - probability.team2Lower}%`
+            }}
+          />
+          {/* CI Labels */}
+          <span
+            className="absolute -top-7 text-xs text-red-400 whitespace-nowrap"
+            style={{
+              left: `${probability.team2Lower}%`,
+              transform: probability.team2Lower < 5 ? 'translateX(0)' : 'translateX(-50%)'
+            }}
+          >
+            {probability.team2Lower}%
+          </span>
+          <span
+            className="absolute -top-7 text-xs text-red-400 whitespace-nowrap"
+            style={{
+              left: `${probability.team2Upper}%`,
+              transform: probability.team2Upper > 95 ? 'translateX(-100%)' : 'translateX(-50%)'
+            }}
+          >
+            {probability.team2Upper}%
+          </span>
+          {/* Point estimate diamond */}
+          <div className="absolute top-1/2 -translate-y-1/2" style={{ left: `${probability.team2Probability}%` }}>
+            <div className="relative">
+              {/* Centered probability label */}
+              <span className="absolute -top-8 left-1/2 transform -translate-x-5 text-sm font-bold text-white whitespace-nowrap">
+                {probability.team2Probability}%
+              </span>
+              {/* Diamond */}
+              <div className="w-4 h-4 bg-red-500 transform rotate-45 -translate-x-1/2" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
 const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
   const { playSound } = useSound();
   const [allPlayers, setAllPlayers] = useState<DBPlayer[]>([]);
@@ -23,48 +165,58 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [isBalancing, setIsBalancing] = useState<boolean>(false);
   const [manualMode, setManualMode] = useState<boolean>(false);
-  const [winProbability, setWinProbability] = useState<number | null>(null);
+  const [winProbability, setWinProbability] = useState<WinProbabilityResult | null>(null);
   // New state for collapsible win probability section
   const [showWinProbability, setShowWinProbability] = useState<boolean>(false);
   
   // Load player data on component mount
   useEffect(() => {
-  const loadPlayers = async () => {
-    setLoading(true);
-    try {
-      // Get all players from the database
-      const players = await dbService.getAllPlayers();
-      
-      // Filter out players with no match history
-      const playersWithMatches = players.filter(player => player.totalGames > 0);
-      
-      // Sort by name
-      playersWithMatches.sort((a, b) => a.name.localeCompare(b.name));
-      
-      setAllPlayers(playersWithMatches);
-    } catch (error) {
-      console.error('Error loading players:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  loadPlayers();
-}, []);
+    const loadPlayers = async () => {
+      setLoading(true);
+      try {
+        // Get all players from the database
+        const players = await dbService.getAllPlayers();
+        
+        // Filter out players with no match history
+        const playersWithMatches = players.filter(player => player.totalGames > 0);
+        
+        // Sort by name
+        playersWithMatches.sort((a, b) => a.name.localeCompare(b.name));
+        
+        setAllPlayers(playersWithMatches);
+      } catch (error) {
+        console.error('Error loading players:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadPlayers();
+  }, []);
   
   // Calculate win probability when teams change
   useEffect(() => {
-    if (team1.length > 0 && team2.length > 0) {
-      // Calculate average ELO for each team
-      const team1Elo = team1.reduce((sum, player) => sum + player.elo, 0) / team1.length;
-      const team2Elo = team2.reduce((sum, player) => sum + player.elo, 0) / team2.length;
-      
-      // Calculate win probability
-      const probability = dbService.calculateWinProbability(team1Elo, team2Elo);
-      setWinProbability(probability);
-    } else {
-      setWinProbability(null);
-    }
+    const calculateProbability = async () => {
+      if (team1.length > 0 && team2.length > 0) {
+        try {
+          // Get player IDs for both teams
+          const team1Ids = team1.map(p => p.id);
+          const team2Ids = team2.map(p => p.id);
+          
+          // Calculate win probability with confidence intervals using the database service
+          const result = await dbService.calculateWinProbabilityWithCI(team1Ids, team2Ids);
+          
+          setWinProbability(result);
+        } catch (error) {
+          console.error('Error calculating win probability:', error);
+          setWinProbability(null);
+        }
+      } else {
+        setWinProbability(null);
+      }
+    };
+    
+    calculateProbability();
   }, [team1, team2]);
   
   // Handle back navigation with sound
@@ -92,7 +244,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     }
   };
   
-  // Balance teams by ELO (ranking)
+  // Enhanced balance teams by ELO with randomization for multiple valid solutions
   const balanceTeams = async () => {
     if (selectedPlayers.length < 4) {
       return; // Not enough players
@@ -104,11 +256,59 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     try {
       // Get balanced teams from the database service
       const playerIds = selectedPlayers.map(p => p.id);
-      const { team1: team1Ids, team2: team2Ids } = await dbService.generateBalancedTeams(playerIds);
       
-      // Map IDs back to player objects
-      const team1Players = team1Ids.map(id => selectedPlayers.find(p => p.id === id)!);
-      const team2Players = team2Ids.map(id => selectedPlayers.find(p => p.id === id)!);
+      // Add randomization by shuffling players with similar ratings
+      const shuffledPlayers = [...selectedPlayers];
+      
+      // Group players by similar skill levels (within 100 rating points)
+      const ratingGroups: DBPlayer[][] = [];
+      const sortedByRating = [...shuffledPlayers].sort((a, b) => 
+        dbService.getDisplayRating(b) - dbService.getDisplayRating(a)
+      );
+      
+      sortedByRating.forEach(player => {
+        const rating = dbService.getDisplayRating(player);
+        let added = false;
+        
+        for (const group of ratingGroups) {
+          const groupRating = dbService.getDisplayRating(group[0]);
+          if (Math.abs(rating - groupRating) <= 100) {
+            group.push(player);
+            added = true;
+            break;
+          }
+        }
+        
+        if (!added) {
+          ratingGroups.push([player]);
+        }
+      });
+      
+      // Shuffle within each rating group
+      ratingGroups.forEach(group => {
+        for (let i = group.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [group[i], group[j]] = [group[j], group[i]];
+        }
+      });
+      
+      // Flatten back to player list
+      const randomizedPlayers = ratingGroups.flat();
+      
+      // Use greedy algorithm with randomized order
+      const team1Players: DBPlayer[] = [];
+      const team2Players: DBPlayer[] = [];
+      
+      randomizedPlayers.forEach(player => {
+        const team1Skill = team1Players.reduce((sum, p) => sum + dbService.getDisplayRating(p), 0);
+        const team2Skill = team2Players.reduce((sum, p) => sum + dbService.getDisplayRating(p), 0);
+        
+        if (team1Skill <= team2Skill) {
+          team1Players.push(player);
+        } else {
+          team2Players.push(player);
+        }
+      });
       
       setTeam1(team1Players);
       setTeam2(team2Players);
@@ -122,7 +322,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     }
   };
   
-  // Balance teams by experience (total games)
+  // Enhanced balance teams by experience with randomization
   const balanceTeamsByExperience = async () => {
     if (selectedPlayers.length < 4) {
       return; // Not enough players
@@ -132,13 +332,57 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     playSound('phaseChange');
     
     try {
-      // Get balanced teams from the database service using experience
-      const playerIds = selectedPlayers.map(p => p.id);
-      const { team1: team1Ids, team2: team2Ids } = await dbService.generateBalancedTeamsByExperience(playerIds);
+      // Add randomization by shuffling players with similar experience
+      const shuffledPlayers = [...selectedPlayers];
       
-      // Map IDs back to player objects
-      const team1Players = team1Ids.map(id => selectedPlayers.find(p => p.id === id)!);
-      const team2Players = team2Ids.map(id => selectedPlayers.find(p => p.id === id)!);
+      // Group players by similar experience levels
+      const experienceGroups: DBPlayer[][] = [];
+      const sortedByGames = [...shuffledPlayers].sort((a, b) => b.totalGames - a.totalGames);
+      
+      sortedByGames.forEach(player => {
+        const games = player.totalGames;
+        let added = false;
+        
+        for (const group of experienceGroups) {
+          const groupGames = group[0].totalGames;
+          // Group players within 5 games of each other
+          if (Math.abs(games - groupGames) <= 5) {
+            group.push(player);
+            added = true;
+            break;
+          }
+        }
+        
+        if (!added) {
+          experienceGroups.push([player]);
+        }
+      });
+      
+      // Shuffle within each experience group
+      experienceGroups.forEach(group => {
+        for (let i = group.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [group[i], group[j]] = [group[j], group[i]];
+        }
+      });
+      
+      // Flatten back to player list
+      const randomizedPlayers = experienceGroups.flat();
+      
+      // Use greedy algorithm with randomized order
+      const team1Players: DBPlayer[] = [];
+      const team2Players: DBPlayer[] = [];
+      
+      randomizedPlayers.forEach(player => {
+        const team1Games = team1Players.reduce((sum, p) => sum + p.totalGames, 0);
+        const team2Games = team2Players.reduce((sum, p) => sum + p.totalGames, 0);
+        
+        if (team1Games <= team2Games) {
+          team1Players.push(player);
+        } else {
+          team2Players.push(player);
+        }
+      });
       
       setTeam1(team1Players);
       setTeam2(team2Players);
@@ -160,8 +404,14 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     
     playSound('phaseChange');
     
-    // Shuffle players
-    const shuffled = [...selectedPlayers].sort(() => Math.random() - 0.5);
+    // Shuffle players - ensure different shuffle each time
+    const shuffled = [...selectedPlayers];
+    
+    // Fisher-Yates shuffle for true randomness
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
     
     // Split into two teams
     const halfway = Math.ceil(shuffled.length / 2);
@@ -254,9 +504,9 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
   
   // Tooltip text definitions for buttons
   const tooltips = {
-    ranking: "Balance teams based on player ELO ratings to create fair matches. Higher ELO players will be evenly distributed to make teams equally skilled.",
-    experience: "Balance teams based on player experience (total games played), ensuring both teams have a mix of experienced and newer players.",
-    random: "Create random teams without consideration for player skill or experience. Each player has an equal chance to be on either team.",
+    ranking: "Balance teams based on player ELO ratings to create fair matches. Higher ELO players will be evenly distributed to make teams equally skilled. Click multiple times for different configurations.",
+    experience: "Balance teams based on player experience (total games played), ensuring both teams have a mix of experienced and newer players. Click multiple times for different configurations.",
+    random: "Create random teams without consideration for player skill or experience. Each click generates a completely new random configuration.",
     manual: "Enable manual team assignment mode to create teams by hand. You can move players between teams freely to create custom matchups.",
     reset: "Reset both teams and start over. Player selection will be maintained but no players will be assigned to teams."
   };
@@ -288,8 +538,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
               <div>
                 <h3 className="font-semibold mb-1">How Match Maker Works</h3>
                 <p className="text-sm text-gray-300">
-                  Select players to include, then balance teams based on player ranking (ELO) or experience (games played).
-                  The system will attempt to create two teams with similar average skill or experience levels for fair matches.
+                  Select players to include, then balance teams based on player skill or experience (games played).
                 </p>
               </div>
             </div>
@@ -316,7 +565,6 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                 {allPlayers.map((player) => {
                   const isSelected = selectedPlayers.some(p => p.id === player.id);
-                 
                   
                   return (
                     <div
@@ -329,7 +577,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                       <div className="flex flex-col items-center">
                         <div className="font-medium mb-1 truncate w-full text-center">{player.name}</div>
                         <div className={`text-sm mb-1`}>
-                          ({player.elo})
+                          ({dbService.getDisplayRating(player)})
                         </div>
                         <div className="text-xs text-gray-400">
                           W: {player.wins} L: {player.losses}
@@ -569,7 +817,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                     Titans Team
                     {team1.length > 0 && (
                       <span className="ml-3 text-sm font-normal">
-                        Avg ELO: {Math.round(team1.reduce((sum, p) => sum + p.elo, 0) / team1.length)}
+                        Avg Skill: {Math.round(team1.reduce((sum, p) => sum + dbService.getDisplayRating(p), 0) / team1.length)}
                       </span>
                     )}
                   </h3>
@@ -583,7 +831,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                         <div>
                           <div className="font-medium">{player.name}</div>
                           <div className="text-sm text-gray-300">
-                            ({player.elo})
+                            ({dbService.getDisplayRating(player)})
                           </div>
                         </div>
                         
@@ -626,7 +874,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                     Atlanteans Team
                     {team2.length > 0 && (
                       <span className="ml-3 text-sm font-normal">
-                        Avg ELO: {Math.round(team2.reduce((sum, p) => sum + p.elo, 0) / team2.length)}
+                        Avg Skill: {Math.round(team2.reduce((sum, p) => sum + dbService.getDisplayRating(p), 0) / team2.length)}
                       </span>
                     )}
                   </h3>
@@ -640,7 +888,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                         <div>
                           <div className="font-medium">{player.name}</div>
                           <div className="text-sm text-gray-300">
-                            ({player.elo})
+                            ({dbService.getDisplayRating(player)})
                           </div>
                         </div>
                         
@@ -709,7 +957,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                     <div>
                       <div className="font-medium">{player.name}</div>
                       <div className="text-sm text-gray-300">
-                        ({player.elo})
+                        ({dbService.getDisplayRating(player)})
                       </div>
                     </div>
                     
@@ -733,7 +981,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
             </div>
           )}
           
-          {/* Win Probability Display - Made Collapsible */}
+          {/* Enhanced Win Probability Display */}
           {winProbability !== null && team1.length > 0 && team2.length > 0 && (
             <div className="mt-8 bg-gray-700 rounded-lg overflow-hidden">
               {/* Collapsible Header */}
@@ -754,31 +1002,20 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
               
               {/* Collapsible Content */}
               {showWinProbability && (
-                <div className="p-4 border-t border-gray-600">
-                  <div className="flex items-center mb-2">
-                    <div className="w-24 text-blue-400 font-medium">Titans</div>
-                    <div className="flex-grow h-5 bg-gray-800 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-blue-600" 
-                        style={{ width: `${winProbability}%` }}
-                      ></div>
-                    </div>
-                    <div className="w-12 ml-3 font-medium">{winProbability}%</div>
-                  </div>
-                  
-                  <div className="flex items-center">
-                    <div className="w-24 text-red-400 font-medium">Atlanteans</div>
-                    <div className="flex-grow h-5 bg-gray-800 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-red-600" 
-                        style={{ width: `${100 - winProbability}%` }}
-                      ></div>
-                    </div>
-                    <div className="w-12 ml-3 font-medium">{100 - winProbability}%</div>
-                  </div>
+                <div className="p-6 pb-4 border-t border-gray-600">
+                  <WinProbabilityVisualization 
+                    probability={winProbability}
+                    team1Name="Titans"
+                    team2Name="Atlanteans"
+                  />
                   
                   <div className="mt-4 text-sm text-gray-300">
-                    Prediction based on team average ELO ratings. Closer to 50% means more balanced teams.
+                    <p className="mb-2">
+                      Prediction based on TrueSkill ratings. The scale shows win probability from 0% to 100%.
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      The rounded bars show 95% confidence intervals - wider bars indicate greater uncertainty.
+                    </p>
                   </div>
                 </div>
               )}

@@ -669,31 +669,30 @@ class DatabaseService {
     try {
       console.log("Starting player statistics recalculation with TrueSkill...");
       
-      // Get all players and reset their stats
+      // Get all players and keep a map of their existing stats
       const players = await this.getAllPlayers();
       console.log(`Found ${players.length} players for recalculation`);
+      
+      // Create a map to track player stats properly
+      const playerStatsMap = new Map<string, {
+        totalGames: number;
+        wins: number;
+        losses: number;
+      }>();
+      
+      // Initialize stats map with zeros
+      for (const player of players) {
+        playerStatsMap.set(player.id, {
+          totalGames: 0,
+          wins: 0,
+          losses: 0
+        });
+      }
       
       // Initialize TrueSkill ratings for all players
       this.playerRatings = {};
       for (const player of players) {
         this.playerRatings[player.id] = rating();
-      }
-      
-      // Reset all player stats
-      const resetPlayers = players.map(player => ({
-        ...player,
-        totalGames: 0,
-        wins: 0,
-        losses: 0,
-        elo: INITIAL_ELO, // Keep for backwards compatibility
-        mu: undefined,
-        sigma: undefined,
-        ordinal: undefined
-      }));
-      
-      // Save reset players
-      for (const player of resetPlayers) {
-        await this.savePlayer(player);
       }
       
       // Get all matches sorted by date
@@ -755,31 +754,41 @@ class DatabaseService {
           this.playerRatings[atlanteanPlayers[i]] = result[1][i];
         }
         
-        // Update player records
+        // Update player match statistics
         for (const mp of matchPlayers) {
-          const player = await this.getPlayer(mp.playerId);
-          if (!player) continue;
+          const stats = playerStatsMap.get(mp.playerId);
+          if (!stats) continue;
           
-          const wasWinner = mp.team === match.winningTeam;
-          const playerRating = this.playerRatings[mp.playerId];
-          
-          const updatedPlayer: DBPlayer = {
-            ...player,
-            totalGames: player.totalGames + 1,
-            wins: player.wins + (wasWinner ? 1 : 0),
-            losses: player.losses + (wasWinner ? 0 : 1),
-            // TrueSkill fields
-            mu: playerRating.mu,
-            sigma: playerRating.sigma,
-            ordinal: ordinal(playerRating),
-            // Convert ordinal to a user-friendly scale (similar to Elo range)
-            // TrueSkill ordinal can be negative, so we scale it to 1000-2000+ range
-            elo: Math.round((ordinal(playerRating) + 25) * 40 + 200),
-            lastPlayed: new Date(match.date)
-          };
-          
-          await this.savePlayer(updatedPlayer);
+          stats.totalGames += 1;
+          if (mp.team === match.winningTeam) {
+            stats.wins += 1;
+          } else {
+            stats.losses += 1;
+          }
         }
+      }
+      
+      // Update all player records with their final stats
+      for (const player of players) {
+        const stats = playerStatsMap.get(player.id)!;
+        const playerRating = this.playerRatings[player.id];
+        
+        const updatedPlayer: DBPlayer = {
+          ...player,
+          totalGames: stats.totalGames,
+          wins: stats.wins,
+          losses: stats.losses,
+          // TrueSkill fields
+          mu: playerRating.mu,
+          sigma: playerRating.sigma,
+          ordinal: ordinal(playerRating),
+          // Convert ordinal to a user-friendly scale (similar to Elo range)
+          elo: Math.round((ordinal(playerRating) + 25) * 40 + 200),
+          // Keep existing lastPlayed date if no games played
+          lastPlayed: stats.totalGames > 0 ? new Date() : player.lastPlayed
+        };
+        
+        await this.savePlayer(updatedPlayer);
       }
       
       console.log("Player statistics recalculation completed successfully");
@@ -1138,6 +1147,7 @@ class DatabaseService {
 
   /**
    * Calculate predicted win probability using TrueSkill ratings
+   * Updated to match the exact calculation from the provided script
    */
   async calculateWinProbability(team1Players: string[], team2Players: string[]): Promise<number> {
     // Ensure ratings are initialized
@@ -1167,7 +1177,7 @@ class DatabaseService {
       }
     }
     
-    // Calculate team averages
+    // Calculate team averages (matching the script exactly)
     const team1Mu = team1Ratings.reduce((sum, r) => sum + r.mu, 0) / team1Ratings.length;
     const team1Sigma = Math.sqrt(team1Ratings.reduce((sum, r) => sum + r.sigma ** 2, 0)) / team1Ratings.length;
     const team2Mu = team2Ratings.reduce((sum, r) => sum + r.mu, 0) / team2Ratings.length;
@@ -1182,6 +1192,77 @@ class DatabaseService {
     const winProb = normalDist.cdf(deltaMu);
     
     return Math.round(winProb * 100);
+  }
+
+  /**
+   * Calculate predicted win probability with confidence intervals
+   * Matches the exact calculation from the provided script
+   */
+  async calculateWinProbabilityWithCI(team1Players: string[], team2Players: string[]): Promise<{
+    team1Probability: number;
+    team1Lower: number;
+    team1Upper: number;
+    team2Probability: number;
+    team2Lower: number;
+    team2Upper: number;
+  }> {
+    // Ensure ratings are initialized
+    if (Object.keys(this.playerRatings).length === 0) {
+      // Initialize from database
+      const players = await this.getAllPlayers();
+      this.initializeTrueSkillRatings(players);
+    }
+    
+    // Get ratings for both teams
+    const team1Ratings: any[] = [];
+    const team2Ratings: any[] = [];
+    
+    for (const playerId of team1Players) {
+      if (this.playerRatings[playerId]) {
+        team1Ratings.push(this.playerRatings[playerId]);
+      } else {
+        team1Ratings.push(rating()); // Default rating
+      }
+    }
+    
+    for (const playerId of team2Players) {
+      if (this.playerRatings[playerId]) {
+        team2Ratings.push(this.playerRatings[playerId]);
+      } else {
+        team2Ratings.push(rating()); // Default rating
+      }
+    }
+    
+    // Calculate team averages (matching the script exactly)
+    const team1Mu = team1Ratings.reduce((sum, r) => sum + r.mu, 0) / team1Ratings.length;
+    const team1Sigma = Math.sqrt(team1Ratings.reduce((sum, r) => sum + r.sigma ** 2, 0)) / team1Ratings.length;
+    const team2Mu = team2Ratings.reduce((sum, r) => sum + r.mu, 0) / team2Ratings.length;
+    const team2Sigma = Math.sqrt(team2Ratings.reduce((sum, r) => sum + r.sigma ** 2, 0)) / team2Ratings.length;
+    
+    // Combined variance for the difference
+    const combinedSigma = Math.sqrt(team1Sigma ** 2 + team2Sigma ** 2 + 2 * TRUESKILL_BETA ** 2);
+    
+    // Win probability using cumulative normal distribution
+    const deltaMu = team1Mu - team2Mu;
+    const normalDist = new NormalDistribution(0, combinedSigma);
+    const winProb = normalDist.cdf(deltaMu);
+    
+    // Calculate 95% confidence interval for win probability
+    const ciMargin = 1.96 * combinedSigma;
+    const ciLowerDelta = deltaMu - ciMargin;
+    const ciUpperDelta = deltaMu + ciMargin;
+    
+    const ciLower = normalDist.cdf(ciLowerDelta);
+    const ciUpper = normalDist.cdf(ciUpperDelta);
+    
+    return {
+      team1Probability: Math.round(winProb * 100),
+      team1Lower: Math.round(ciLower * 100),
+      team1Upper: Math.round(ciUpper * 100),
+      team2Probability: Math.round((1 - winProb) * 100),
+      team2Lower: Math.round((1 - ciUpper) * 100),
+      team2Upper: Math.round((1 - ciLower) * 100)
+    };
   }
 
   /**
