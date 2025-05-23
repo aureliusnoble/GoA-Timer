@@ -1,11 +1,11 @@
 // src/components/matches/PlayerStats.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, Search, TrendingUp, Users, Swords, Info, Trophy, Medal, Hexagon, Camera } from 'lucide-react';
+import { ChevronLeft, Search, TrendingUp, Users, Swords, Info, Trophy, Medal, Hexagon, Camera, X, HelpCircle } from 'lucide-react';
 import { DBPlayer } from '../../services/DatabaseService';
-import dbService from '../../services/DatabaseService';
+import dbService, { getDisplayRating } from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
 import EnhancedTooltip from '../common/EnhancedTooltip';
-import html2canvas from 'html2canvas'; // Import html2canvas library
+import html2canvas from 'html2canvas';
 
 interface PlayerStatsProps {
   onBack: () => void;
@@ -18,33 +18,252 @@ interface PlayerWithStats extends DBPlayer {
   kills: number;
   deaths: number;
   assists: number;
-  kdRatio: number; // Changed from kda to kdRatio
+  kdRatio: number;
   averageGold: number;
   averageMinionKills: number;
-  hasCombatStats: boolean; // New field to track if player has any combat stats
-  rank: number; // New field for player ranking
+  hasCombatStats: boolean;
+  rank: number;
+  displayRating: number;
 }
 
+// Modal component for skill rating explanation
+const SkillExplainerModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+  const [activeTab, setActiveTab] = useState<'simple' | 'technical'>('simple');
+  const { playSound } = useSound();
+
+  if (!isOpen) return null;
+
+  const handleClose = () => {
+    playSound('buttonClick');
+    onClose();
+  };
+
+  const handleTabChange = (tab: 'simple' | 'technical') => {
+    playSound('buttonClick');
+    setActiveTab(tab);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-800 rounded-lg w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="p-4 bg-gray-700 flex justify-between items-center">
+          <h3 className="text-xl font-bold flex items-center">
+            <HelpCircle size={24} className="mr-2 text-blue-400" />
+            Understanding Skill Ratings
+          </h3>
+          <button
+            onClick={handleClose}
+            className="p-1 bg-gray-600 hover:bg-gray-500 rounded-full"
+            aria-label="Close modal"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="flex border-b border-gray-700">
+          <button
+            onClick={() => handleTabChange('simple')}
+            className={`flex-1 px-4 py-3 font-medium transition-colors ${
+              activeTab === 'simple'
+                ? 'bg-gray-700 text-white border-b-2 border-blue-500'
+                : 'bg-gray-800 text-gray-400 hover:text-white'
+            }`}
+          >
+            Simple Explanation
+          </button>
+          <button
+            onClick={() => handleTabChange('technical')}
+            className={`flex-1 px-4 py-3 font-medium transition-colors ${
+              activeTab === 'technical'
+                ? 'bg-gray-700 text-white border-b-2 border-blue-500'
+                : 'bg-gray-800 text-gray-400 hover:text-white'
+            }`}
+          >
+            Technical Details
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {activeTab === 'simple' ? (
+            <div className="space-y-6">
+              <div>
+                <h4 className="text-lg font-semibold mb-3 text-blue-400">What is a Skill Rating?</h4>
+                <p className="text-gray-300 mb-4">
+                  Your skill rating is a number that represents how good you are at the game compared to other players. 
+                  It goes up when you win and down when you lose, but there's more to it than that!
+                </p>
+              </div>
+
+              <div>
+                <h4 className="text-lg font-semibold mb-3 text-blue-400">Why Start Low?</h4>
+                <p className="text-gray-300 mb-4">
+                  New players start with a lower visible rating even if they win their first few games. This is because 
+                  the system needs to be confident about your skill level. Think of it like this:
+                </p>
+                <div className="bg-gray-700 p-4 rounded-lg mb-4">
+                  <p className="text-sm mb-2">
+                    <strong className="text-yellow-400">After 1 game:</strong> "This player might be good, but it could be luck"
+                  </p>
+                  <p className="text-sm mb-2">
+                    <strong className="text-yellow-400">After 10 games:</strong> "Now I'm getting a clearer picture"
+                  </p>
+                  <p className="text-sm">
+                    <strong className="text-yellow-400">After 20+ games:</strong> "I'm confident about this player's skill level"
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-lg font-semibold mb-3 text-blue-400">How Rankings Work</h4>
+                <ul className="space-y-3 text-gray-300">
+                  <li className="flex items-start">
+                    <span className="text-green-400 mr-2">✓</span>
+                    <span>Beat stronger teams = bigger rating increase</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="text-green-400 mr-2">✓</span>
+                    <span>Lose to weaker teams = bigger rating decrease</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="text-green-400 mr-2">✓</span>
+                    <span>Play more games = more accurate rating</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="text-green-400 mr-2">✓</span>
+                    <span>Consistent performance = higher rating</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
+                <p className="text-sm text-blue-300">
+                  <strong>Pro tip:</strong> Don't worry if your rating seems low at first. Play more games and the 
+                  system will quickly figure out your true skill level. It typically takes about 20 games for ratings 
+                  to stabilize.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <div>
+                <h4 className="text-lg font-semibold mb-3 text-blue-400">TrueSkill Rating System</h4>
+                <p className="text-gray-300 mb-4">
+                  Guards of Atlantis uses the TrueSkill algorithm, a Bayesian skill rating system developed by Microsoft 
+                  Research. Unlike traditional Elo systems, TrueSkill models both skill and uncertainty.
+                </p>
+              </div>
+
+              <div>
+                <h4 className="text-lg font-semibold mb-3 text-blue-400">Mathematical Model</h4>
+                <p className="text-gray-300 mb-4">
+                  Each player's skill is modeled as a normal distribution:
+                </p>
+                <div className="bg-gray-900 p-4 rounded-lg font-mono text-sm mb-4">
+                  <p className="text-green-400 mb-2">skill ~ N(μ, σ²)</p>
+                  <p className="text-gray-400">where:</p>
+                  <p className="text-gray-300 ml-4">μ (mu) = mean skill estimate</p>
+                  <p className="text-gray-300 ml-4">σ (sigma) = standard deviation (uncertainty)</p>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-lg font-semibold mb-3 text-blue-400">Conservative Skill Estimate</h4>
+                <p className="text-gray-300 mb-4">
+                  The displayed rating uses the conservative skill estimate (ordinal):
+                </p>
+                <div className="bg-gray-900 p-4 rounded-lg font-mono text-sm mb-4">
+                  <p className="text-green-400">ordinal = μ - 3σ</p>
+                </div>
+                <p className="text-gray-300 mb-4">
+                  This represents the skill level we're 99.7% confident the player exceeds (3-sigma confidence interval). 
+                  The display rating is then scaled to a familiar range:
+                </p>
+                <div className="bg-gray-900 p-4 rounded-lg font-mono text-sm mb-4">
+                  <p className="text-green-400">displayRating = (ordinal + 25) × 40 + 200</p>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-lg font-semibold mb-3 text-blue-400">Update Dynamics</h4>
+                <p className="text-gray-300 mb-4">
+                  After each match, the system updates beliefs using Bayes' theorem:
+                </p>
+                <ul className="space-y-2 text-gray-300 ml-4">
+                  <li>• Prior: Current skill distribution</li>
+                  <li>• Likelihood: Match outcome probability</li>
+                  <li>• Posterior: Updated skill distribution</li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="text-lg font-semibold mb-3 text-blue-400">Key Parameters</h4>
+                <div className="bg-gray-700 p-4 rounded-lg space-y-2">
+                  <p className="text-sm">
+                    <strong className="text-yellow-400">β (beta) = 25/6:</strong> Performance variance parameter
+                  </p>
+                  <p className="text-sm">
+                    <strong className="text-yellow-400">τ (tau) = 25/300:</strong> Dynamics factor (skill change rate)
+                  </p>
+                  <p className="text-sm">
+                    <strong className="text-yellow-400">Initial values:</strong> μ₀ = 25, σ₀ = 25/3
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-lg font-semibold mb-3 text-blue-400">Advantages over Elo</h4>
+                <ul className="space-y-2 text-gray-300">
+                  <li className="flex items-start">
+                    <span className="text-green-400 mr-2">•</span>
+                    <span>Handles uncertainty explicitly (new vs experienced players)</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="text-green-400 mr-2">•</span>
+                    <span>Better team balance predictions</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="text-green-400 mr-2">•</span>
+                    <span>Faster convergence to true skill</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="text-green-400 mr-2">•</span>
+                    <span>Natural handling of returning players</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="bg-gray-900 border border-gray-700 rounded-lg p-4">
+                <p className="text-sm text-gray-400">
+                  <strong>Reference:</strong> Herbrich, R., Minka, T., & Graepel, T. (2007). 
+                  TrueSkill™: A Bayesian skill rating system. In Advances in Neural Information Processing Systems 19.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Component to display player rank with distinctive styling
-const RankDisplay: React.FC<{ rank: number; elo: number }> = ({ rank, elo }) => {
-  // Determine icon and styling based on rank
+const RankDisplay: React.FC<{ rank: number; skill: number }> = ({ rank, skill }) => {
   let icon;
   let rankClass;
   
   if (rank === 1) {
-    // Gold trophy for 1st place
     icon = <Trophy size={18} className="mr-2 text-yellow-300" />;
     rankClass = "text-yellow-300 font-bold";
   } else if (rank === 2) {
-    // Silver medal for 2nd place
     icon = <Medal size={18} className="mr-2 text-gray-300" />;
     rankClass = "text-gray-300 font-bold";
   } else if (rank === 3) {
-    // Bronze medal for 3rd place
     icon = <Medal size={18} className="mr-2 text-amber-600" />;
     rankClass = "text-amber-600 font-bold";
   } else {
-    // Everyone else (4+) gets a blue hexagon icon
     icon = <Hexagon size={18} className="mr-2 text-blue-400" />;
     rankClass = "text-blue-400 font-medium";
   }
@@ -53,7 +272,7 @@ const RankDisplay: React.FC<{ rank: number; elo: number }> = ({ rank, elo }) => 
     <div className="flex items-center">
       {icon}
       <span className={rankClass}>
-        #{rank} <span className="ml-1 text-sm text-gray-400">({elo})</span>
+        #{rank} <span className="ml-1 text-sm text-gray-400">({skill})</span>
       </span>
     </div>
   );
@@ -64,11 +283,11 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
   const [players, setPlayers] = useState<PlayerWithStats[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
-  const [sortBy, setSortBy] = useState<string>('elo');
+  const [sortBy, setSortBy] = useState<string>('skill');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [takingScreenshot, setTakingScreenshot] = useState<boolean>(false);
+  const [showSkillExplainer, setShowSkillExplainer] = useState<boolean>(false);
   
-  // Create a ref to the main content container for screenshots
   const contentRef = useRef<HTMLDivElement>(null);
   
   // Load player data on component mount
@@ -76,31 +295,23 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
     const loadPlayers = async () => {
       setLoading(true);
       try {
-        // Get all players from the database
         const allPlayers = await dbService.getAllPlayers();
         
-        // Get detailed stats for each player
         const playersWithStats = await Promise.all(
           allPlayers.map(async (player) => {
             const stats = await dbService.getPlayerStats(player.id);
             const matchesPlayed = stats.matchesPlayed;
             
-            // Calculate additional stats
             const kills = matchesPlayed.reduce((sum, match) => sum + (match.kills || 0), 0);
             const deaths = matchesPlayed.reduce((sum, match) => sum + (match.deaths || 0), 0);
             const assists = matchesPlayed.reduce((sum, match) => sum + (match.assists || 0), 0);
             const gold = matchesPlayed.reduce((sum, match) => sum + (match.goldEarned || 0), 0);
             const minionKills = matchesPlayed.reduce((sum, match) => sum + (match.minionKills || 0), 0);
             
-            // Calculate KD ratio: Kills / Deaths, or just Kills if Deaths is 0
-            // Changed to remove assists from calculation
             const kdRatio = deaths === 0 ? kills : kills / deaths;
-            
-            // Calculate win rate percentage
             const winRate = player.totalGames > 0 ? (player.wins / player.totalGames) * 100 : 0;
-            
-            // Determine if player has any combat stats logged
             const hasCombatStats = kills > 0 || deaths > 0 || assists > 0 || gold > 0;
+            const displayRating = getDisplayRating(player);
             
             return {
               ...player,
@@ -114,31 +325,26 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
               averageGold: player.totalGames > 0 ? Math.round(gold / player.totalGames) : 0,
               averageMinionKills: player.totalGames > 0 ? Math.round(minionKills / player.totalGames) : 0,
               hasCombatStats,
-              rank: 0 // Initial placeholder, will be assigned below
+              displayRating,
+              rank: 0
             };
           })
         );
         
-        // Filter out players with no match data (totalGames === 0)
         const playersWithMatches = playersWithStats.filter(player => player.totalGames > 0);
         
-        // Sort players by ELO to assign ranks
-        const sortedByElo = [...playersWithMatches].sort((a, b) => b.elo - a.elo);
+        const sortedByRating = [...playersWithMatches].sort((a, b) => b.displayRating - a.displayRating);
         
-        // Assign ranks based on ELO (handling ties)
         let currentRank = 1;
-        let currentElo = sortedByElo.length > 0 ? sortedByElo[0].elo : 0;
+        let currentRating = sortedByRating.length > 0 ? sortedByRating[0].displayRating : 0;
         let tieCount = 0;
         
-        const playersWithRanks = sortedByElo.map((player, index) => {
-          // If this player has a different ELO from the previous one
-          if (player.elo !== currentElo) {
-            // The new rank is the current position plus 1 (accounting for tied players)
+        const playersWithRanks = sortedByRating.map((player, index) => {
+          if (player.displayRating !== currentRating) {
             currentRank = index + 1;
-            currentElo = player.elo;
+            currentRating = player.displayRating;
             tieCount = 0;
           } else {
-            // For tied players, they get the same rank
             tieCount++;
           }
           
@@ -159,13 +365,11 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
     loadPlayers();
   }, []);
   
-  // Handle back navigation with sound
   const handleBack = () => {
     playSound('buttonClick');
     onBack();
   };
   
-  // Handle taking a screenshot of the content
   const handleTakeScreenshot = async () => {
     if (!contentRef.current) return;
     
@@ -173,10 +377,8 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
     setTakingScreenshot(true);
     
     try {
-      // Temporarily add a screenshot class to the parent element for styling during screenshot
       contentRef.current.classList.add('taking-screenshot');
       
-      // Create title section for the screenshot
       const titleElement = document.createElement('div');
       titleElement.className = 'screenshot-title text-center mb-6';
       titleElement.innerHTML = `
@@ -184,58 +386,48 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
         <p class="text-gray-400 mt-2">Generated on ${new Date().toLocaleDateString()}</p>
       `;
       
-      // Insert title at the top of the content
       contentRef.current.insertBefore(titleElement, contentRef.current.firstChild);
       
-      // Create footer for the screenshot
       const footerElement = document.createElement('div');
       footerElement.className = 'screenshot-footer text-center mt-8 text-sm text-gray-400';
       footerElement.innerHTML = `
         <p>Generated by Guards of Atlantis II Timer App on ${new Date().toLocaleString()}</p>
       `;
       
-      // Append footer to the content
       contentRef.current.appendChild(footerElement);
       
-      // Hide elements that shouldn't be in the screenshot
       const noScreenshotElements = contentRef.current.querySelectorAll('.no-screenshot');
       noScreenshotElements.forEach(el => {
         (el as HTMLElement).style.display = 'none';
       });
       
-      // Take the screenshot
       const canvas = await html2canvas(contentRef.current, {
-        backgroundColor: '#1F2937', // Match the background color (bg-gray-800)
-        windowWidth: 1400, // Updated width to match CSS
+        backgroundColor: '#1F2937',
+        windowWidth: 1400,
         scrollX: 0,
         scrollY: 0,
-        scale: window.devicePixelRatio || 1, // Use device pixel ratio for sharper images
-        logging: false, // Disable logging to console
-        allowTaint: true, // Allow cross-origin images
-        useCORS: true, // Try to load images with CORS
+        scale: window.devicePixelRatio || 1,
+        logging: false,
+        allowTaint: true,
+        useCORS: true,
         onclone: (clonedDoc) => {
-          // Additional modifications to the cloned document before screenshot
           const clonedContent = clonedDoc.querySelector('#screenshotContent');
           if (clonedContent) {
-            // Apply any additional styles or modifications to cloned content if needed
-            clonedContent.scrollTop = 0; // Ensure we're at the top of the content
+            clonedContent.scrollTop = 0;
           }
         }
       });
       
-      // Convert canvas to data URL and trigger download
       const dataUrl = canvas.toDataURL('image/png');
       const link = document.createElement('a');
       link.download = `guards-of-atlantis-player-stats-${new Date().toISOString().slice(0, 10)}.png`;
       link.href = dataUrl;
       link.click();
       
-      // Clean up: remove title, footer, and classes added for screenshot
       contentRef.current.removeChild(titleElement);
       contentRef.current.removeChild(footerElement);
       contentRef.current.classList.remove('taking-screenshot');
       
-      // Restore elements that were hidden
       noScreenshotElements.forEach(el => {
         (el as HTMLElement).style.display = '';
       });
@@ -246,22 +438,24 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
     }
   };
   
-  // Filter players based on search term
+  const handleShowSkillExplainer = () => {
+    playSound('buttonClick');
+    setShowSkillExplainer(true);
+  };
+  
   const filteredPlayers = players.filter(player => 
     player.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
   
-  // Sort players based on selected criteria
   const sortedPlayers = [...filteredPlayers].sort((a, b) => {
-    // Handle different sort fields
     let comparison = 0;
     
     switch (sortBy) {
       case 'name':
         comparison = a.name.localeCompare(b.name);
         break;
-      case 'elo':
-        comparison = a.elo - b.elo;
+      case 'skill':
+        comparison = a.displayRating - b.displayRating;
         break;
       case 'games':
         comparison = a.totalGames - b.totalGames;
@@ -269,27 +463,22 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
       case 'winRate':
         comparison = a.winRate - b.winRate;
         break;
-      case 'kdRatio': // Changed from kda to kdRatio
+      case 'kdRatio':
         comparison = a.kdRatio - b.kdRatio;
         break;
-    
       default:
         comparison = 0;
     }
     
-    // Apply sort order
     return sortOrder === 'asc' ? comparison : -comparison;
   });
   
-  // Handle sort button click
   const handleSort = (field: string) => {
     playSound('buttonClick');
     
-    // If clicking the same field, toggle sort order
     if (field === sortBy) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     } else {
-      // If clicking a new field, set it as sort field and default to descending
       setSortBy(field);
       setSortOrder('desc');
     }
@@ -297,17 +486,14 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
   
   // Add Screenshot-Specific CSS
   useEffect(() => {
-    // Create a style element for screenshot styles
     const style = document.createElement('style');
     style.type = 'text/css';
     
-    // CSS for screenshot styling
     style.innerHTML = `
-      /* Styles applied during screenshot taking */
       .taking-screenshot {
         background-color: #1F2937 !important;
         padding: 2rem !important;
-        width: 1400px !important; /* Increased width for more space */
+        width: 1400px !important;
         position: relative !important;
         overflow: visible !important;
       }
@@ -324,22 +510,19 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
         padding-top: 1rem;
       }
       
-      /* Hide elements with no-screenshot class */
       .taking-screenshot .no-screenshot {
         display: none !important;
       }
       
-      /* Adjust card spacing for screenshots */
       .taking-screenshot .grid {
-        grid-template-columns: repeat(2, 1fr) !important; /* Force 2 columns for more width */
-        gap: 2rem !important; /* Increase gap between cards */
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 2rem !important;
       }
       
       .taking-screenshot .bg-gray-700 {
-        padding: 1.5rem !important; /* More padding inside cards */
+        padding: 1.5rem !important;
       }
       
-      /* Fix player name cropping */
       .taking-screenshot h3.text-xl.font-bold {
         white-space: normal !important;
         max-width: 100% !important;
@@ -348,7 +531,6 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
         padding-right: 0.5rem !important;
       }
       
-      /* Fix player headers */
       .taking-screenshot .px-5.py-4.bg-gray-800 {
         padding: 1.25rem !important;
         display: flex !important;
@@ -356,23 +538,19 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
         flex-wrap: wrap !important;
       }
       
-      /* Ensure text doesn't get cut off */
       .taking-screenshot .text-sm,
       .taking-screenshot .text-xs {
         overflow: visible !important;
         white-space: normal !important;
       }
       
-      /* Give more space to hero/role tags */
       .taking-screenshot .flex-wrap {
         margin-bottom: 0.5rem !important;
       }
     `;
     
-    // Add the style to the head
     document.head.appendChild(style);
     
-    // Clean up function to remove the style when component unmounts
     return () => {
       document.head.removeChild(style);
     };
@@ -390,7 +568,6 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
         </button>
         <h2 className="text-2xl font-bold">Player Statistics</h2>
         
-        {/* Screenshot Button - replaced Print button */}
         <EnhancedTooltip text="Take a screenshot of all player statistics" position="left">
           <button
             onClick={handleTakeScreenshot}
@@ -403,10 +580,8 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
         </EnhancedTooltip>
       </div>
       
-      {/* Search and Filter Bar */}
       <div className="bg-gray-700 rounded-lg p-4 mb-6 no-screenshot">
         <div className="flex flex-col sm:flex-row gap-4">
-          {/* Search Input */}
           <div className="relative flex-grow">
             <input
               type="text"
@@ -418,18 +593,16 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
             <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
           </div>
           
-          {/* Sort Buttons */}
           <div className="flex flex-wrap gap-2">
-   
             <button
-              onClick={() => handleSort('elo')}
+              onClick={() => handleSort('skill')}
               className={`px-3 py-1 rounded ${
-                sortBy === 'elo' 
+                sortBy === 'skill' 
                   ? 'bg-blue-600 hover:bg-blue-500' 
                   : 'bg-gray-600 hover:bg-gray-500'
               }`}
             >
-              Rank {sortBy === 'elo' && (sortOrder === 'asc' ? '↑' : '↓')}
+              Skill {sortBy === 'skill' && (sortOrder === 'asc' ? '↑' : '↓')}
             </button>
             <button
               onClick={() => handleSort('games')}
@@ -475,7 +648,6 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
         </div>
       </div>
       
-      {/* Search Summary for Screenshot */}
       {searchTerm !== '' && (
         <div className="mb-4 p-4 bg-gray-700 rounded-lg screenshot-info">
           <h3 className="font-semibold mb-2">Search Results:</h3>
@@ -483,32 +655,28 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
         </div>
       )}
       
-      {/* Loading State */}
       {loading ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
         </div>
       ) : (
         <div>
-          {/* Player Cards Grid */}
           {sortedPlayers.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {sortedPlayers.map((player) => {
                 return (
                   <div key={player.id} className="bg-gray-700 rounded-lg overflow-hidden shadow-md relative">
-                    {/* Player Header - Adjusted for triangle badge */}
                     <div className="px-5 py-4 bg-gray-800 flex justify-between items-center relative">
                       <h3 className={`text-xl font-bold truncate ${player.rank <= 3 ? 'ml-10' : ''}`}>
                         {player.name}
                       </h3>
                       <div className="flex items-center">
                         <div>
-                          <RankDisplay rank={player.rank} elo={player.elo} />
+                          <RankDisplay rank={player.rank} skill={player.displayRating} />
                         </div>
                       </div>
                     </div>
                     
-                    {/* Top 3 Indicator */}
                     {player.rank <= 3 && (
                       <div className={`absolute top-0 left-0 w-0 h-0 z-10
                         border-t-[50px] border-r-[50px] 
@@ -523,9 +691,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
                       </div>
                     )}
                     
-                    {/* Player Stats */}
                     <div className="p-4">
-                      {/* Win/Loss Stats */}
                       <div className="mb-4">
                         <div className="flex justify-between items-center mb-2">
                           <div className="text-sm text-gray-400">Win Rate</div>
@@ -544,7 +710,6 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
                         </div>
                       </div>
                       
-                      {/* Combat Stats - Only show if player has combat stats */}
                       {player.hasCombatStats && (
                         <div className="grid grid-cols-3 gap-2 mb-4">
                           <div className="bg-gray-800 p-2 rounded">
@@ -573,7 +738,6 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
                         </div>
                       )}
                       
-                      {/* Favorite Heroes */}
                       <div className="mb-4">
                         <div className="text-sm text-gray-400 mb-2">Favorite Heroes</div>
                         {player.favoriteHeroes.length > 0 ? (
@@ -592,7 +756,6 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
                         )}
                       </div>
                       
-                      {/* Favorite Roles */}
                       <div>
                         <div className="text-sm text-gray-400 mb-2">Favorite Roles</div>
                         {player.favoriteRoles.length > 0 ? (
@@ -634,18 +797,32 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack }) => {
         </div>
       )}
       
-      {/* Ranking Information */}
       <div className="mt-8 p-4 bg-gray-700/50 rounded-lg text-sm text-gray-300">
-        <h4 className="font-medium mb-2 flex items-center">
-          <Info size={16} className="mr-2 text-blue-400" />
-          About Player Rankings
+        <h4 className="font-medium mb-2 flex items-center justify-between">
+          <span className="flex items-center">
+            <Info size={16} className="mr-2 text-blue-400" />
+            About Player Rankings
+          </span>
+          <button
+            onClick={handleShowSkillExplainer}
+            className="text-blue-400 hover:text-blue-300 flex items-center no-screenshot"
+          >
+            <HelpCircle size={16} className="mr-1" />
+            <span>Learn More</span>
+          </button>
         </h4>
         <p>
-          Players are ranked based on their Elo rating, which reflects their performance against other players. 
+          Players are ranked based on their skill rating, which reflects their performance against other players using the TrueSkill rating system. 
           It takes roughly 20 matches for ratings to stabilise. Rankings are calculated based on match wins and losses, 
           with players winning more points if their team beat higher ranked teams, and losing more points if they lose to lower ranked teams. 
         </p>
       </div>
+      
+      {/* Skill Explainer Modal */}
+      <SkillExplainerModal 
+        isOpen={showSkillExplainer} 
+        onClose={() => setShowSkillExplainer(false)} 
+      />
     </div>
   );
 };

@@ -1,9 +1,11 @@
 // src/services/DatabaseService.ts
 import { Team, GameLength } from '../types';
+import { rating, rate, ordinal } from 'openskill';
+import NormalDistribution from 'normal-distribution';
 
 // Database configuration
 const DB_NAME = 'GuardsOfAtlantisStats';
-const DB_VERSION = 2;
+const DB_VERSION = 4; // Incremented to trigger migration check
 
 // Database tables
 const TABLES = {
@@ -12,56 +14,62 @@ const TABLES = {
   MATCH_PLAYERS: 'matchPlayers'
 };
 
-// Initial ELO rating for new players
+// Initial ELO rating for new players (kept for backwards compatibility)
 const INITIAL_ELO = 1200;
 
-// Constants for ELO calculation
+// TrueSkill parameters (from the provided script)
+const TRUESKILL_BETA = 25/6;
+const TRUESKILL_TAU = 25/300;
 
-// Player database model
+// Player database model - Updated to include TrueSkill fields
 export interface DBPlayer {
   id: string; // Use name as ID for simplicity
   name: string;
   totalGames: number;
   wins: number;
   losses: number;
-  elo: number;
+  elo: number; // Kept for backwards compatibility
+  // TrueSkill fields
+  mu?: number;
+  sigma?: number;
+  ordinal?: number;
   lastPlayed: Date;
   dateCreated: Date;
-  deviceId?: string; // New field to track origin device
-  level?: number; // New field to track player level
+  deviceId?: string;
+  level?: number;
 }
 
 // Match database model
 export interface DBMatch {
-  id: string; // Auto-generated UUID
+  id: string;
   date: Date;
   winningTeam: Team;
   gameLength: GameLength;
   doubleLanes: boolean;
-  titanPlayers: number; // Count of players
-  atlanteanPlayers: number; // Count of players
-  deviceId?: string; // New field to track origin device
+  titanPlayers: number;
+  atlanteanPlayers: number;
+  deviceId?: string;
 }
 
-// MatchPlayer database model (connects players to matches) - Updated to include level
+// MatchPlayer database model
 export interface DBMatchPlayer {
-  id: string; // Auto-generated UUID
+  id: string;
   matchId: string;
   playerId: string;
   team: Team;
   heroId: number;
-  heroName: string; // For easier querying
-  heroRoles: string[]; // Primary roles 
+  heroName: string;
+  heroRoles: string[];
   kills?: number;
   deaths?: number;
   assists?: number;
   goldEarned?: number;
   minionKills?: number;
-  level?: number; // New field to track player level
-  deviceId?: string; // New field to track origin device
+  level?: number;
+  deviceId?: string;
 }
 
-// Export data model (for import/export)
+// Export data model
 export interface ExportData {
   players: DBPlayer[];
   matches: DBMatch[];
@@ -84,6 +92,7 @@ function generateUUID(): string {
  */
 class DatabaseService {
   private db: IDBDatabase | null = null;
+  private playerRatings: Record<string, any> = {}; // TrueSkill rating objects
 
   /**
    * Initialize the database connection
@@ -91,10 +100,36 @@ class DatabaseService {
   async initialize(): Promise<boolean> {
     try {
       this.db = await this.openDatabase();
+      
+      // Check if we need to migrate ratings to TrueSkill
+      await this.checkAndMigrateRatings();
+      
       return true;
     } catch (error) {
       console.error('Failed to initialize database:', error);
       return false;
+    }
+  }
+
+  /**
+   * Check if ratings need migration and migrate if necessary
+   */
+  private async checkAndMigrateRatings(): Promise<void> {
+    try {
+      const players = await this.getAllPlayers();
+      
+      // Check if any player has games but no TrueSkill ratings
+      const needsMigration = players.some(p => 
+        p.totalGames > 0 && (p.mu === undefined || p.sigma === undefined || p.ordinal === undefined)
+      );
+      
+      if (needsMigration) {
+        console.log('Migrating player ratings to TrueSkill system...');
+        await this.recalculatePlayerStats();
+        console.log('Migration complete!');
+      }
+    } catch (error) {
+      console.error('Error checking rating migration:', error);
     }
   }
 
@@ -113,6 +148,16 @@ class DatabaseService {
           const playerStore = db.createObjectStore(TABLES.PLAYERS, { keyPath: 'id' });
           playerStore.createIndex('name', 'name', { unique: true });
           playerStore.createIndex('elo', 'elo', { unique: false });
+          playerStore.createIndex('ordinal', 'ordinal', { unique: false });
+        } else {
+          // Add ordinal index if upgrading
+          const transaction = (event.target as IDBOpenDBRequest).transaction;
+          if (transaction) {
+            const playerStore = transaction.objectStore(TABLES.PLAYERS);
+            if (!playerStore.indexNames.contains('ordinal')) {
+              playerStore.createIndex('ordinal', 'ordinal', { unique: false });
+            }
+          }
         }
         
         // Create matches table if it doesn't exist
@@ -145,15 +190,23 @@ class DatabaseService {
   }
 
   /**
-   * Get or generate a unique device ID for this device
+   * Get scaled display rating from TrueSkill ordinal or Elo
+   * Scales TrueSkill ordinal values to a user-friendly 1000-2000+ range
    */
+  getDisplayRating(player: DBPlayer): number {
+    if (player.ordinal !== undefined) {
+      // Scale ordinal to user-friendly range
+      // Original ordinal can be negative, this scales it to ~1000-2000 range
+      return Math.round((player.ordinal + 25) * 40 + 200);
+    }
+    // Fallback to Elo for players without TrueSkill ratings
+    return player.elo;
+  }
   private getDeviceId(): string {
     const storageKey = 'guards-of-atlantis-device-id';
     
-    // Try to get existing device ID from localStorage
     let deviceId = localStorage.getItem(storageKey);
     
-    // If none exists, create one with timestamp and random component
     if (!deviceId) {
       const timestamp = Date.now().toString(36);
       const randomPart = Math.random().toString(36).substring(2, 10);
@@ -236,269 +289,232 @@ class DatabaseService {
     });
   }
 
- // New method to add to DatabaseService class
-
-/**
- * Get hero statistics based on match history
- * This includes win rates, most common teammates, best matchups, and counters
- */
-async getHeroStats(): Promise<any[]> {
-  try {
-    // 1. Get all match players (heroes played in matches)
-    const allMatchPlayers = await this.getAllMatchPlayers();
-    
-    // 2. Get all matches for context
-    const allMatches = await this.getAllMatches();
-    const matchesMap = new Map(allMatches.map(m => [m.id, m]));
-    
-    // 3. Get all heroes from match data
-    const heroMap = new Map<number, {
-      heroId: number;
-      heroName: string;
-      icon: string;
-      roles: string[];
-      complexity: number;
-      expansion: string;
-      totalGames: number;
-      wins: number;
-      losses: number;
-      teammates: Map<number, { wins: number; games: number }>;
-      opponents: Map<number, { wins: number; games: number }>;
-    }>();
-    
-    // First pass: create the hero records
-    for (const matchPlayer of allMatchPlayers) {
-      const heroId = matchPlayer.heroId;
+  /**
+   * Get hero statistics based on match history
+   */
+  async getHeroStats(): Promise<any[]> {
+    try {
+      const allMatchPlayers = await this.getAllMatchPlayers();
+      const allMatches = await this.getAllMatches();
+      const matchesMap = new Map(allMatches.map(m => [m.id, m]));
       
-      // Skip if no hero is assigned
-      if (heroId === undefined || heroId === null) continue;
+      const heroMap = new Map<number, {
+        heroId: number;
+        heroName: string;
+        icon: string;
+        roles: string[];
+        complexity: number;
+        expansion: string;
+        totalGames: number;
+        wins: number;
+        losses: number;
+        teammates: Map<number, { wins: number; games: number }>;
+        opponents: Map<number, { wins: number; games: number }>;
+      }>();
       
-      // Get or create hero stats record
-      if (!heroMap.has(heroId)) {
-        heroMap.set(heroId, {
-          heroId,
-          heroName: matchPlayer.heroName,
-          icon: `heroes/${matchPlayer.heroName.toLowerCase()}.png`, // Base icon path
-          roles: matchPlayer.heroRoles,
-          complexity: 1, // Will be populated later from heroes.ts
-          expansion: 'Unknown', // Will be populated later from heroes.ts
-          totalGames: 0,
-          wins: 0,
-          losses: 0,
-          teammates: new Map(),
-          opponents: new Map()
-        });
-      }
-      
-      // Update hero record
-      const heroRecord = heroMap.get(heroId)!;
-      heroRecord.totalGames += 1;
-      
-      // Check if the match exists and get the result
-      const match = matchesMap.get(matchPlayer.matchId);
-      if (!match) continue;
-      
-      // Determine if this hero won
-      const won = matchPlayer.team === match.winningTeam;
-      
-      // Update wins/losses
-      if (won) {
-        heroRecord.wins += 1;
-      } else {
-        heroRecord.losses += 1;
-      }
-    }
-    
-    // Second pass: calculate synergies and counters
-    for (const match of allMatches) {
-      // Get all heroes in this match
-      const matchHeroes = allMatchPlayers.filter(mp => mp.matchId === match.id);
-      
-      // Process each hero in the match
-      for (const heroMatchPlayer of matchHeroes) {
-        const heroId = heroMatchPlayer.heroId;
+      // First pass: create the hero records
+      for (const matchPlayer of allMatchPlayers) {
+        const heroId = matchPlayer.heroId;
+        
         if (heroId === undefined || heroId === null) continue;
         
-        // Skip if not in our heroMap
-        if (!heroMap.has(heroId)) continue;
+        if (!heroMap.has(heroId)) {
+          heroMap.set(heroId, {
+            heroId,
+            heroName: matchPlayer.heroName,
+            icon: `heroes/${matchPlayer.heroName.toLowerCase()}.png`,
+            roles: matchPlayer.heroRoles,
+            complexity: 1,
+            expansion: 'Unknown',
+            totalGames: 0,
+            wins: 0,
+            losses: 0,
+            teammates: new Map(),
+            opponents: new Map()
+          });
+        }
         
         const heroRecord = heroMap.get(heroId)!;
-        const heroTeam = heroMatchPlayer.team;
-        const heroWon = heroTeam === match.winningTeam;
+        heroRecord.totalGames += 1;
         
-        // Process teammates (same team)
-        const teammates = matchHeroes.filter(mp => 
-          mp.team === heroTeam && mp.heroId !== heroId
-        );
+        const match = matchesMap.get(matchPlayer.matchId);
+        if (!match) continue;
         
-        // Process opponents (opposite team)
-        const opponents = matchHeroes.filter(mp => 
-          mp.team !== heroTeam
-        );
+        const won = matchPlayer.team === match.winningTeam;
         
-        // Update teammate data
-        for (const teammate of teammates) {
-          if (teammate.heroId === undefined || teammate.heroId === null) continue;
-          
-          // Get existing teammate record or create new one
-          let teammateRecord = heroRecord.teammates.get(teammate.heroId);
-          if (!teammateRecord) {
-            teammateRecord = { wins: 0, games: 0 };
-            heroRecord.teammates.set(teammate.heroId, teammateRecord);
-          }
-          
-          // Update records
-          teammateRecord.games += 1;
-          if (heroWon) {
-            teammateRecord.wins += 1;
-          }
+        if (won) {
+          heroRecord.wins += 1;
+        } else {
+          heroRecord.losses += 1;
         }
+      }
+      
+      // Second pass: calculate synergies and counters
+      for (const match of allMatches) {
+        const matchHeroes = allMatchPlayers.filter(mp => mp.matchId === match.id);
         
-        // Update opponent data
-        for (const opponent of opponents) {
-          if (opponent.heroId === undefined || opponent.heroId === null) continue;
+        for (const heroMatchPlayer of matchHeroes) {
+          const heroId = heroMatchPlayer.heroId;
+          if (heroId === undefined || heroId === null) continue;
           
-          // Get existing opponent record or create new one
-          let opponentRecord = heroRecord.opponents.get(opponent.heroId);
-          if (!opponentRecord) {
-            opponentRecord = { wins: 0, games: 0 };
-            heroRecord.opponents.set(opponent.heroId, opponentRecord);
+          if (!heroMap.has(heroId)) continue;
+          
+          const heroRecord = heroMap.get(heroId)!;
+          const heroTeam = heroMatchPlayer.team;
+          const heroWon = heroTeam === match.winningTeam;
+          
+          const teammates = matchHeroes.filter(mp => 
+            mp.team === heroTeam && mp.heroId !== heroId
+          );
+          
+          const opponents = matchHeroes.filter(mp => 
+            mp.team !== heroTeam
+          );
+          
+          for (const teammate of teammates) {
+            if (teammate.heroId === undefined || teammate.heroId === null) continue;
+            
+            let teammateRecord = heroRecord.teammates.get(teammate.heroId);
+            if (!teammateRecord) {
+              teammateRecord = { wins: 0, games: 0 };
+              heroRecord.teammates.set(teammate.heroId, teammateRecord);
+            }
+            
+            teammateRecord.games += 1;
+            if (heroWon) {
+              teammateRecord.wins += 1;
+            }
           }
           
-          // Update records
-          opponentRecord.games += 1;
-          if (heroWon) {
-            opponentRecord.wins += 1;
+          for (const opponent of opponents) {
+            if (opponent.heroId === undefined || opponent.heroId === null) continue;
+            
+            let opponentRecord = heroRecord.opponents.get(opponent.heroId);
+            if (!opponentRecord) {
+              opponentRecord = { wins: 0, games: 0 };
+              heroRecord.opponents.set(opponent.heroId, opponentRecord);
+            }
+            
+            opponentRecord.games += 1;
+            if (heroWon) {
+              opponentRecord.wins += 1;
+            }
           }
         }
       }
+      
+      // Transform map to array with calculated stats
+      const heroStats = Array.from(heroMap.values()).map(hero => {
+        const winRate = hero.totalGames > 0 ? (hero.wins / hero.totalGames) * 100 : 0;
+        
+        const bestTeammates = Array.from(hero.teammates.entries())
+          .filter(([_, stats]) => stats.games >= 1)
+          .map(([teammateId, stats]) => {
+            const teammateHero = heroMap.get(teammateId);
+            if (!teammateHero) return null;
+            
+            return {
+              heroId: teammateId,
+              heroName: teammateHero.heroName,
+              icon: teammateHero.icon,
+              winRate: stats.games > 0 ? (stats.wins / stats.games) * 100 : 0,
+              gamesPlayed: stats.games
+            };
+          })
+          .filter((item): item is NonNullable<typeof item> => item !== null)
+          .sort((a, b) => b.winRate - a.winRate)
+          .slice(0, 3);
+        
+        const bestAgainst = Array.from(hero.opponents.entries())
+          .filter(([_, stats]) => stats.games >= 1)
+          .map(([opponentId, stats]) => {
+            const opponentHero = heroMap.get(opponentId);
+            if (!opponentHero) return null;
+            
+            return {
+              heroId: opponentId,
+              heroName: opponentHero.heroName,
+              icon: opponentHero.icon,
+              winRate: stats.games > 0 ? (stats.wins / stats.games) * 100 : 0,
+              gamesPlayed: stats.games
+            };
+          })
+          .filter((item): item is NonNullable<typeof item> => item !== null)
+          .sort((a, b) => b.winRate - a.winRate)
+          .slice(0, 3);
+        
+        const worstAgainst = Array.from(hero.opponents.entries())
+          .filter(([_, stats]) => stats.games >= 1)
+          .map(([opponentId, stats]) => {
+            const opponentHero = heroMap.get(opponentId);
+            if (!opponentHero) return null;
+            
+            return {
+              heroId: opponentId,
+              heroName: opponentHero.heroName,
+              icon: opponentHero.icon,
+              winRate: stats.games > 0 ? (stats.wins / stats.games) * 100 : 0,
+              gamesPlayed: stats.games
+            };
+          })
+          .filter((item): item is NonNullable<typeof item> => item !== null)
+          .sort((a, b) => a.winRate - b.winRate)
+          .slice(0, 3);
+        
+        return {
+          ...hero,
+          winRate,
+          bestTeammates,
+          bestAgainst,
+          worstAgainst,
+          teammates: undefined,
+          opponents: undefined
+        };
+      });
+      
+      // Try to enrich with data from heroes.ts
+      try {
+        const { heroes } = await import('../data/heroes');
+        
+        for (const heroStat of heroStats) {
+          const heroData = heroes.find(h => h.name === heroStat.heroName);
+          if (heroData) {
+            heroStat.complexity = heroData.complexity;
+            heroStat.expansion = heroData.expansion;
+          }
+        }
+      } catch (error) {
+        console.error('Error enriching hero stats with heroes.ts data:', error);
+      }
+      
+      return heroStats;
+    } catch (error) {
+      console.error('Error getting hero stats:', error);
+      return [];
     }
-    
-    // 4. Transform map to array with calculated stats
-    const heroStats = Array.from(heroMap.values()).map(hero => {
-      // Calculate win rate
-      const winRate = hero.totalGames > 0 ? (hero.wins / hero.totalGames) * 100 : 0;
-      
-      // Calculate best teammates (highest win rate when played together)
-      const bestTeammates = Array.from(hero.teammates.entries())
-        .filter(([_, stats]) => stats.games >= 1) // Minimum 2 games together
-        .map(([teammateId, stats]) => {
-          // Find the hero record for this teammate
-          const teammateHero = heroMap.get(teammateId);
-          if (!teammateHero) return null;
-          
-          return {
-            heroId: teammateId,
-            heroName: teammateHero.heroName,
-            icon: teammateHero.icon,
-            winRate: stats.games > 0 ? (stats.wins / stats.games) * 100 : 0,
-            gamesPlayed: stats.games
-          };
-        })
-        .filter((item): item is NonNullable<typeof item> => item !== null) // Type guard to filter out nulls
-        .sort((a, b) => b.winRate - a.winRate) // Sort by win rate
-        .slice(0, 3); // Top 3
-      
-      // Calculate best matchups (highest win rate against)
-      const bestAgainst = Array.from(hero.opponents.entries())
-        .filter(([_, stats]) => stats.games >= 1) // Minimum 2 games against
-        .map(([opponentId, stats]) => {
-          // Find the hero record for this opponent
-          const opponentHero = heroMap.get(opponentId);
-          if (!opponentHero) return null;
-          
-          return {
-            heroId: opponentId,
-            heroName: opponentHero.heroName,
-            icon: opponentHero.icon,
-            winRate: stats.games > 0 ? (stats.wins / stats.games) * 100 : 0,
-            gamesPlayed: stats.games
-          };
-        })
-        .filter((item): item is NonNullable<typeof item> => item !== null) // Type guard to filter out nulls
-        .sort((a, b) => b.winRate - a.winRate) // Sort by win rate
-        .slice(0, 3); // Top 3
-      
-      // Calculate worst matchups (lowest win rate against)
-      const worstAgainst = Array.from(hero.opponents.entries())
-        .filter(([_, stats]) => stats.games >= 1) // Minimum 2 games against
-        .map(([opponentId, stats]) => {
-          // Find the hero record for this opponent
-          const opponentHero = heroMap.get(opponentId);
-          if (!opponentHero) return null;
-          
-          return {
-            heroId: opponentId,
-            heroName: opponentHero.heroName,
-            icon: opponentHero.icon,
-            winRate: stats.games > 0 ? (stats.wins / stats.games) * 100 : 0,
-            gamesPlayed: stats.games
-          };
-        })
-        .filter((item): item is NonNullable<typeof item> => item !== null) // Type guard to filter out nulls
-        .sort((a, b) => a.winRate - b.winRate) // Sort by win rate (ascending)
-        .slice(0, 3); // Bottom 3
-      
-      return {
-        ...hero,
-        winRate,
-        bestTeammates,
-        bestAgainst,
-        worstAgainst,
-        // Remove map objects before returning
-        teammates: undefined,
-        opponents: undefined
+  }
+
+  /**
+   * Get all match players from the database
+   */
+  private async getAllMatchPlayers(): Promise<DBMatchPlayer[]> {
+    if (!this.db) await this.initialize();
+    if (!this.db) return [];
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([TABLES.MATCH_PLAYERS], 'readonly');
+      const matchPlayerStore = transaction.objectStore(TABLES.MATCH_PLAYERS);
+      const request = matchPlayerStore.getAll();
+
+      request.onsuccess = () => {
+        resolve(request.result || []);
+      };
+
+      request.onerror = () => {
+        reject(request.error);
       };
     });
-    
-    // 5. Enrich with data from heroes.ts if available
-    try {
-      // Try to import heroes from data/heroes
-      const { heroes } = await import('../data/heroes');
-      
-      // Update hero data with additional information
-      for (const heroStat of heroStats) {
-        const heroData = heroes.find(h => h.name === heroStat.heroName);
-        if (heroData) {
-          heroStat.complexity = heroData.complexity;
-          heroStat.expansion = heroData.expansion;
-          // Add any other useful properties
-        }
-      }
-    } catch (error) {
-      console.error('Error enriching hero stats with heroes.ts data:', error);
-      // Continue without enrichment if heroes.ts can't be imported
-    }
-    
-    return heroStats;
-  } catch (error) {
-    console.error('Error getting hero stats:', error);
-    return [];
   }
-}
-
-/**
- * Get all match players from the database
- * This is a helper method for getHeroStats()
- */
-private async getAllMatchPlayers(): Promise<DBMatchPlayer[]> {
-  if (!this.db) await this.initialize();
-  if (!this.db) return [];
-
-  return new Promise((resolve, reject) => {
-    const transaction = this.db!.transaction([TABLES.MATCH_PLAYERS], 'readonly');
-    const matchPlayerStore = transaction.objectStore(TABLES.MATCH_PLAYERS);
-    const request = matchPlayerStore.getAll();
-
-    request.onsuccess = () => {
-      resolve(request.result || []);
-    };
-
-    request.onerror = () => {
-      reject(request.error);
-    };
-  });
-}
 
   /**
    * Get all matches
@@ -551,12 +567,10 @@ private async getAllMatchPlayers(): Promise<DBMatchPlayer[]> {
     if (!this.db) await this.initialize();
     if (!this.db) throw new Error('Database not initialized');
 
-    // If no ID, generate one
     if (!match.id) {
       match.id = generateUUID();
     }
 
-    // Add device ID if missing
     if (!match.deviceId) {
       match.deviceId = this.getDeviceId();
     }
@@ -577,27 +591,22 @@ private async getAllMatchPlayers(): Promise<DBMatchPlayer[]> {
   }
 
   /**
-   * Delete a match and its associated player records.
-   * This also updates the player statistics to remove the impact of this match.
+   * Delete a match and its associated player records
    */
   async deleteMatch(matchId: string): Promise<void> {
     if (!this.db) await this.initialize();
     if (!this.db) throw new Error('Database not initialized');
 
     try {
-      // 1. Get the match data
       const match = await this.getMatch(matchId);
       if (!match) {
         throw new Error('Match not found');
       }
 
-      // 2. Get all player records for this match
       const matchPlayers = await this.getMatchPlayers(matchId);
       
-      // 3. Delete match players and the match itself
       await this.deleteMatchAndPlayers(matchId, matchPlayers);
       
-      // 4. Recalculate player statistics
       await this.recalculatePlayerStats();
       
     } catch (error) {
@@ -608,7 +617,6 @@ private async getAllMatchPlayers(): Promise<DBMatchPlayer[]> {
 
   /**
    * Helper method to delete a match and its player records
-   * without recalculating stats (used internally by deleteMatch)
    */
   private async deleteMatchAndPlayers(matchId: string, matchPlayers: DBMatchPlayer[]): Promise<void> {
     if (!this.db) await this.initialize();
@@ -617,13 +625,11 @@ private async getAllMatchPlayers(): Promise<DBMatchPlayer[]> {
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction([TABLES.MATCHES, TABLES.MATCH_PLAYERS], 'readwrite');
       
-      // Delete match player records
       const matchPlayerStore = transaction.objectStore(TABLES.MATCH_PLAYERS);
       matchPlayers.forEach(player => {
         matchPlayerStore.delete(player.id);
       });
       
-      // Delete the match itself
       const matchStore = transaction.objectStore(TABLES.MATCHES);
       matchStore.delete(matchId);
       
@@ -636,136 +642,169 @@ private async getAllMatchPlayers(): Promise<DBMatchPlayer[]> {
       };
     });
   }
-/**
- * Recalculate all player statistics based on current match history
- * This completely resets and rebuilds all player stats from scratch
- * based on chronological match data
- */
-private async recalculatePlayerStats(): Promise<void> {
-  try {
-    console.log("Starting player statistics recalculation...");
-    
-    // 1. Get all players and reset their stats
-    const players = await this.getAllPlayers();
-    console.log(`Found ${players.length} players for recalculation`);
-    
-    // Reset all player stats to initial values (keep names, IDs, created dates, and levels)
-    const resetPlayers = players.map(player => ({
-      ...player,
-      totalGames: 0,
-      wins: 0,
-      losses: 0,
-      elo: INITIAL_ELO, // Reset to initial ELO
-      // Keep level as-is since it's manually set
-    }));
-    
-    // Save reset players
-    for (const player of resetPlayers) {
-      await this.savePlayer(player);
+
+  /**
+   * Initialize TrueSkill ratings for all players
+   */
+  private initializeTrueSkillRatings(players: DBPlayer[]): void {
+    this.playerRatings = {};
+    for (const player of players) {
+      if (player.mu !== undefined && player.sigma !== undefined) {
+        // Use existing TrueSkill ratings
+        this.playerRatings[player.id] = {
+          mu: player.mu,
+          sigma: player.sigma
+        };
+      } else {
+        // Initialize with default rating
+        this.playerRatings[player.id] = rating();
+      }
     }
-    
-    // 2. Get all matches sorted by date (oldest first) to ensure chronological processing
-    let allMatches = await this.getAllMatches();
-    allMatches.sort((a, b) => {
-      const dateA = new Date(a.date).getTime();
-      const dateB = new Date(b.date).getTime();
-      return dateA - dateB;
-    });
-    
-    console.log(`Processing ${allMatches.length} matches in chronological order`);
-    
-    // 3. Replay all matches to recalculate stats
-    for (const match of allMatches) {
-      // Get match players
-      const matchPlayers = await this.getMatchPlayers(match.id);
+  }
+
+  /**
+   * Recalculate all player statistics based on current match history using TrueSkill
+   */
+  private async recalculatePlayerStats(): Promise<void> {
+    try {
+      console.log("Starting player statistics recalculation with TrueSkill...");
       
-      // Group players by team
-      const titanPlayers: string[] = [];
-      const atlanteanPlayers: string[] = [];
+      // Get all players and reset their stats
+      const players = await this.getAllPlayers();
+      console.log(`Found ${players.length} players for recalculation`);
       
-      matchPlayers.forEach(mp => {
-        if (mp.team === Team.Titans) {
-          titanPlayers.push(mp.playerId);
-        } else {
-          atlanteanPlayers.push(mp.playerId);
-        }
+      // Initialize TrueSkill ratings for all players
+      this.playerRatings = {};
+      for (const player of players) {
+        this.playerRatings[player.id] = rating();
+      }
+      
+      // Reset all player stats
+      const resetPlayers = players.map(player => ({
+        ...player,
+        totalGames: 0,
+        wins: 0,
+        losses: 0,
+        elo: INITIAL_ELO, // Keep for backwards compatibility
+        mu: undefined,
+        sigma: undefined,
+        ordinal: undefined
+      }));
+      
+      // Save reset players
+      for (const player of resetPlayers) {
+        await this.savePlayer(player);
+      }
+      
+      // Get all matches sorted by date
+      let allMatches = await this.getAllMatches();
+      allMatches.sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        return dateA - dateB;
       });
       
-      // Get current player records with their CURRENT ELO values
-      const currentPlayers: DBPlayer[] = [];
-      for (const mp of matchPlayers) {
-        const player = await this.getPlayer(mp.playerId);
-        if (player) {
-          currentPlayers.push(player);
+      console.log(`Processing ${allMatches.length} matches in chronological order`);
+      
+      // Process matches chronologically
+      for (const match of allMatches) {
+        const matchPlayers = await this.getMatchPlayers(match.id);
+        
+        // Separate into teams
+        const titanPlayers: string[] = [];
+        const atlanteanPlayers: string[] = [];
+        const titanRatings: any[] = [];
+        const atlanteanRatings: any[] = [];
+        
+        for (const mp of matchPlayers) {
+          if (mp.team === Team.Titans) {
+            titanPlayers.push(mp.playerId);
+            titanRatings.push(this.playerRatings[mp.playerId]);
+          } else {
+            atlanteanPlayers.push(mp.playerId);
+            atlanteanRatings.push(this.playerRatings[mp.playerId]);
+          }
+        }
+        
+        // Skip if either team is empty
+        if (titanRatings.length === 0 || atlanteanRatings.length === 0) {
+          console.warn(`Skipping match ${match.id} due to empty team`);
+          continue;
+        }
+        
+        // Determine ranks based on winning team
+        let ranks: number[];
+        if (match.winningTeam === Team.Titans) {
+          ranks = [1, 2]; // Titans win
+        } else {
+          ranks = [2, 1]; // Atlanteans win
+        }
+        
+        // Update ratings using OpenSkill
+        const result = rate([titanRatings, atlanteanRatings], {
+          rank: ranks,
+          beta: TRUESKILL_BETA,
+          tau: TRUESKILL_TAU
+        });
+        
+        // Store updated ratings
+        for (let i = 0; i < titanPlayers.length; i++) {
+          this.playerRatings[titanPlayers[i]] = result[0][i];
+        }
+        for (let i = 0; i < atlanteanPlayers.length; i++) {
+          this.playerRatings[atlanteanPlayers[i]] = result[1][i];
+        }
+        
+        // Update player records
+        for (const mp of matchPlayers) {
+          const player = await this.getPlayer(mp.playerId);
+          if (!player) continue;
+          
+          const wasWinner = mp.team === match.winningTeam;
+          const playerRating = this.playerRatings[mp.playerId];
+          
+          const updatedPlayer: DBPlayer = {
+            ...player,
+            totalGames: player.totalGames + 1,
+            wins: player.wins + (wasWinner ? 1 : 0),
+            losses: player.losses + (wasWinner ? 0 : 1),
+            // TrueSkill fields
+            mu: playerRating.mu,
+            sigma: playerRating.sigma,
+            ordinal: ordinal(playerRating),
+            // Convert ordinal to a user-friendly scale (similar to Elo range)
+            // TrueSkill ordinal can be negative, so we scale it to 1000-2000+ range
+            elo: Math.round((ordinal(playerRating) + 25) * 40 + 200),
+            lastPlayed: new Date(match.date)
+          };
+          
+          await this.savePlayer(updatedPlayer);
         }
       }
       
-      // Skip if any player is missing (should not happen)
-      if (currentPlayers.length !== matchPlayers.length) {
-        console.warn(`Skipping match ${match.id} due to missing player records`);
-        continue;
-      }
-      
-      // Calculate team average ELOs using CURRENT player ELO values
-      const titanPlayerRecords = currentPlayers.filter(p => 
-        titanPlayers.includes(p.id)
-      );
-      
-      const atlanteanPlayerRecords = currentPlayers.filter(p => 
-        atlanteanPlayers.includes(p.id)
-      );
-      
-      const titanAvgELO = titanPlayerRecords.length > 0 
-        ? titanPlayerRecords.reduce((sum, p) => sum + p.elo, 0) / titanPlayerRecords.length
-        : INITIAL_ELO;
-        
-      const atlanteanAvgELO = atlanteanPlayerRecords.length > 0 
-        ? atlanteanPlayerRecords.reduce((sum, p) => sum + p.elo, 0) / atlanteanPlayerRecords.length
-        : INITIAL_ELO;
-      
-      console.log(`Match ${match.id} - Titans Avg ELO: ${titanAvgELO.toFixed(2)}, Atlanteans Avg ELO: ${atlanteanAvgELO.toFixed(2)}`);
-      
-      // Update each player's stats based on this match
-      for (const player of currentPlayers) {
-        const mp = matchPlayers.find(m => m.playerId === player.id);
-        if (!mp) continue;
-        
-        const wasWinner = mp.team === match.winningTeam;
-        
-        // Calculate new ELO based on balanced approach
-        const playerTeamAvgELO = mp.team === Team.Titans ? titanAvgELO : atlanteanAvgELO;
-        const opponentTeamAvgELO = mp.team === Team.Titans ? atlanteanAvgELO : titanAvgELO;
-        
-        const newELO = this.calculateNewELO(
-          player.elo, 
-          playerTeamAvgELO,
-          opponentTeamAvgELO, 
-          wasWinner
-        );
-        
-        // Update player record
-        const updatedPlayer: DBPlayer = {
-          ...player,
-          totalGames: player.totalGames + 1,
-          wins: player.wins + (wasWinner ? 1 : 0),
-          losses: player.losses + (wasWinner ? 0 : 1),
-          elo: newELO,
-          lastPlayed: new Date(match.date)
-        };
-        
-        console.log(`Updated player ${player.id}: ELO ${player.elo} -> ${newELO} (${wasWinner ? 'Win' : 'Loss'})`);
-        
-        // Save updated player
-        await this.savePlayer(updatedPlayer);
-      }
+      console.log("Player statistics recalculation completed successfully");
+    } catch (error) {
+      console.error('Error recalculating player stats:', error);
+      throw error;
     }
-    
-    console.log("Player statistics recalculation completed successfully");
-  } catch (error) {
-    console.error('Error recalculating player stats:', error);
-    throw error;
   }
-}
+
+  /**
+   * Calculate new ELO ratings (deprecated - kept for backwards compatibility)
+   * This now returns an approximation based on TrueSkill ordinal
+   */
+  calculateNewELO(
+    playerELO: number, 
+    playerTeamAvgELO: number, 
+    opponentTeamAvgELO: number, 
+    won: boolean,
+    teamWeight: number = 0.7,
+    baseKFactor: number = 32
+  ): number {
+    // This is deprecated - just return the current ELO
+    // The actual calculation is done in recordMatch using TrueSkill
+    return playerELO;
+  }
 
   /**
    * Save a match player record
@@ -774,12 +813,10 @@ private async recalculatePlayerStats(): Promise<void> {
     if (!this.db) await this.initialize();
     if (!this.db) throw new Error('Database not initialized');
 
-    // If no ID, generate one
     if (!matchPlayer.id) {
       matchPlayer.id = generateUUID();
     }
 
-    // Add device ID if missing
     if (!matchPlayer.deviceId) {
       matchPlayer.deviceId = this.getDeviceId();
     }
@@ -846,224 +883,193 @@ private async recalculatePlayerStats(): Promise<void> {
   }
 
   /**
- * Calculate new ELO ratings with balanced sensitivity to upsets
- * @param playerELO The player's current ELO rating
- * @param playerTeamAvgELO The average ELO of the player's team
- * @param opponentTeamAvgELO The average ELO of the opponent team
- * @param won Whether the player's team won (true) or lost (false)
- * @param teamWeight Weight given to team component (0-1, default 0.7)
- * @param baseKFactor Base K-factor value (default 32)
- * @returns New ELO rating for the player
- */
-calculateNewELO(
-  playerELO: number, 
-  playerTeamAvgELO: number, 
-  opponentTeamAvgELO: number, 
-  won: boolean,
-  teamWeight: number = 0.7,
-  baseKFactor: number = 32
-): number {
-  // Ensure teamWeight is within valid range
-  teamWeight = Math.max(0, Math.min(1, teamWeight));
-  
-  // Calculate team-based expected outcome
-  const teamExpectedOutcome = 1 / (1 + Math.pow(10, (opponentTeamAvgELO - playerTeamAvgELO) / 400));
-  
-  // Calculate individual-based expected outcome
-  const individualExpectedOutcome = 1 / (1 + Math.pow(10, (opponentTeamAvgELO - playerELO) / 400));
-  
-  // Combine team and individual components
-  const combinedExpectedOutcome = (teamWeight * teamExpectedOutcome) + 
-                               ((1 - teamWeight) * individualExpectedOutcome);
-  
-  // Actual outcome (1 for win, 0 for loss)
-  const actualOutcome = won ? 1 : 0;
-  
-  // Calculate surprise factor (how unexpected the result was)
-  const surpriseFactor = Math.abs(actualOutcome - combinedExpectedOutcome);
-  
-  // Calculate absolute rating difference between teams (capped for stability)
-  const ratingDifference = Math.min(400, Math.abs(playerTeamAvgELO - opponentTeamAvgELO));
-  
-  // Dynamic K-factor based on rating difference and surprise (with caps)
-  const dynamicKFactor = Math.min(64, baseKFactor * (1 + (surpriseFactor * 0.5) + (ratingDifference / 600) * 0.3));
-  
-  // Apply a more moderate multiplier for upsets
-  let upsetMultiplier = 1.0;
-  if (won && playerTeamAvgELO < opponentTeamAvgELO) {
-    // More moderate bonus for beating stronger opponents
-    upsetMultiplier = 1.0 + Math.min(1.5, Math.pow((opponentTeamAvgELO - playerTeamAvgELO) / 400, 1.2) * 0.5);
-  } else if (!won && playerTeamAvgELO > opponentTeamAvgELO) {
-    // More moderate penalty for losing to weaker opponents
-    upsetMultiplier = 1.0 + Math.min(1.3, Math.pow((playerTeamAvgELO - opponentTeamAvgELO) / 500, 1.0) * 0.3);
-  }
-  
-  // Calculate ELO change with safeguards
-  const rawEloChange = dynamicKFactor * (actualOutcome - combinedExpectedOutcome) * upsetMultiplier;
-  
-  // Cap maximum ELO change (both gain and loss)
-  const maxChange = 75; // Maximum points that can change in a single match
-  const cappedEloChange = Math.max(-maxChange, Math.min(maxChange, rawEloChange));
-  
-  // Ensure ELO never drops below minimum threshold
-  const minELO = 100;
-  const newELO = Math.max(minELO, Math.round(playerELO + cappedEloChange));
-  
-  // Add logging for troubleshooting and tuning
-  console.log(`
-    ELO Change Calculation:
-    Player ELO: ${playerELO}, Team Avg: ${playerTeamAvgELO}, Opponent Avg: ${opponentTeamAvgELO}
-    Expected Outcome: ${combinedExpectedOutcome.toFixed(4)}, Actual: ${actualOutcome}
-    Surprise Factor: ${surpriseFactor.toFixed(4)}, Rating Diff: ${ratingDifference}
-    Dynamic K-Factor: ${dynamicKFactor.toFixed(2)}, Upset Multiplier: ${upsetMultiplier.toFixed(2)}
-    Raw Change: ${rawEloChange.toFixed(2)}, Capped Change: ${cappedEloChange.toFixed(2)}
-    New ELO: ${newELO}
-  `);
-  
-  return newELO;
-}
+   * Record a completed match and update player statistics using TrueSkill
+   */
+  async recordMatch(
+    matchData: {
+      date: Date;
+      winningTeam: Team;
+      gameLength: GameLength;
+      doubleLanes: boolean;
+    },
+    playerData: {
+      id: string;
+      team: Team;
+      heroId: number;
+      heroName: string;
+      heroRoles: string[];
+      kills?: number;
+      deaths?: number;
+      assists?: number;
+      goldEarned?: number;
+      minionKills?: number;
+      level?: number;
+    }[]
+  ): Promise<string> {
+    if (!this.db) await this.initialize();
+    if (!this.db) throw new Error('Database not initialized');
 
-/**
- * Record a completed match and update player statistics
- */
-async recordMatch(
-  matchData: {
-    date: Date;
-    winningTeam: Team;
-    gameLength: GameLength;
-    doubleLanes: boolean;
-  },
-  playerData: {
-    id: string; // player name
-    team: Team;
-    heroId: number;
-    heroName: string;
-    heroRoles: string[];
-    kills?: number;
-    deaths?: number;
-    assists?: number;
-    goldEarned?: number;
-    minionKills?: number;
-    level?: number; // New field for player level
-  }[]
-): Promise<string> {
-  if (!this.db) await this.initialize();
-  if (!this.db) throw new Error('Database not initialized');
+    // Initialize ratings cache if empty
+    if (Object.keys(this.playerRatings).length === 0) {
+      const allPlayers = await this.getAllPlayers();
+      this.initializeTrueSkillRatings(allPlayers);
+    }
 
-  // First, ensure all players exist in the database
-  const playerPromises = playerData.map(async (playerInfo) => {
-    const existingPlayer = await this.getPlayer(playerInfo.id);
+    // First, ensure all players exist in the database
+    const playerPromises = playerData.map(async (playerInfo) => {
+      const existingPlayer = await this.getPlayer(playerInfo.id);
+      
+      if (!existingPlayer) {
+        const defaultRating = rating();
+        const newPlayer: DBPlayer = {
+          id: playerInfo.id,
+          name: playerInfo.id,
+          totalGames: 0,
+          wins: 0,
+          losses: 0,
+          elo: INITIAL_ELO,
+          mu: defaultRating.mu,
+          sigma: defaultRating.sigma,
+          ordinal: ordinal(defaultRating),
+          lastPlayed: new Date(),
+          dateCreated: new Date(),
+          deviceId: this.getDeviceId(),
+          level: playerInfo.level || 1
+        };
+        await this.savePlayer(newPlayer);
+        this.playerRatings[playerInfo.id] = defaultRating;
+        return newPlayer;
+      } 
+      
+      // Initialize rating if not present
+      if (!this.playerRatings[playerInfo.id]) {
+        if (existingPlayer.mu !== undefined && existingPlayer.sigma !== undefined) {
+          this.playerRatings[playerInfo.id] = {
+            mu: existingPlayer.mu,
+            sigma: existingPlayer.sigma
+          };
+        } else {
+          this.playerRatings[playerInfo.id] = rating();
+        }
+      }
+      
+      // Update player level if provided
+      if (playerInfo.level !== undefined && 
+          (existingPlayer.level === undefined || playerInfo.level > existingPlayer.level)) {
+        existingPlayer.level = playerInfo.level;
+        await this.savePlayer(existingPlayer);
+      }
+      
+      return existingPlayer;
+    });
     
-    if (!existingPlayer) {
-      // Create new player record
-      const newPlayer: DBPlayer = {
-        id: playerInfo.id,
-        name: playerInfo.id, // Use name as ID
-        totalGames: 0,
-        wins: 0,
-        losses: 0,
-        elo: INITIAL_ELO,
-        lastPlayed: new Date(),
-        dateCreated: new Date(),
-        deviceId: this.getDeviceId(),
-        level: playerInfo.level || 1 // Initialize with level from player data or default to 1
-      };
-      await this.savePlayer(newPlayer);
-      return newPlayer;
-    } 
+    const players = await Promise.all(playerPromises);
     
-    // Update player level if provided and greater than current level
-    if (playerInfo.level !== undefined && 
-        (existingPlayer.level === undefined || playerInfo.level > existingPlayer.level)) {
-      existingPlayer.level = playerInfo.level;
-      await this.savePlayer(existingPlayer);
+    // Group players by team and get their ratings
+    const titanPlayers: string[] = [];
+    const titanRatings: any[] = [];
+    const atlanteanPlayers: string[] = [];
+    const atlanteanRatings: any[] = [];
+    
+    for (let i = 0; i < playerData.length; i++) {
+      if (playerData[i].team === Team.Titans) {
+        titanPlayers.push(playerData[i].id);
+        titanRatings.push(this.playerRatings[playerData[i].id]);
+      } else {
+        atlanteanPlayers.push(playerData[i].id);
+        atlanteanRatings.push(this.playerRatings[playerData[i].id]);
+      }
     }
     
-    return existingPlayer;
-  });
-  
-  const players = await Promise.all(playerPromises);
-  
-  // Group players by team
-  const titanPlayers = players.filter((_, index) => playerData[index].team === Team.Titans);
-  const atlanteanPlayers = players.filter((_, index) => playerData[index].team === Team.Atlanteans);
-  
-  // Calculate average ELO for each team
-  const titanAvgELO = titanPlayers.reduce((sum, p) => sum + p.elo, 0) / titanPlayers.length;
-  const atlanteanAvgELO = atlanteanPlayers.reduce((sum, p) => sum + p.elo, 0) / atlanteanPlayers.length;
-  
-  // Create the match record
-  const match: DBMatch = {
-    id: generateUUID(),
-    date: matchData.date,
-    winningTeam: matchData.winningTeam,
-    gameLength: matchData.gameLength,
-    doubleLanes: matchData.doubleLanes,
-    titanPlayers: titanPlayers.length,
-    atlanteanPlayers: atlanteanPlayers.length,
-    deviceId: this.getDeviceId()
-  };
-  
-  // Save the match
-  await this.saveMatch(match);
-  
-  // Update player statistics and create match player records
-  const playerUpdatePromises = playerData.map(async (playerInfo, index) => {
-    const player = players[index];
-    const isWinner = playerInfo.team === matchData.winningTeam;
-    
-    // Get the player's team average ELO
-    const playerTeamAvgELO = playerInfo.team === Team.Titans ? titanAvgELO : atlanteanAvgELO;
-    
-    // Get the opponent team average ELO
-    const opponentTeamAvgELO = playerInfo.team === Team.Titans ? atlanteanAvgELO : titanAvgELO;
-    
-    // Calculate new ELO using the balanced approach
-    const newELO = this.calculateNewELO(
-      player.elo, 
-      playerTeamAvgELO, 
-      opponentTeamAvgELO, 
-      isWinner
-    );
-    
-    // Update player record
-    const updatedPlayer: DBPlayer = {
-      ...player,
-      totalGames: player.totalGames + 1,
-      wins: player.wins + (isWinner ? 1 : 0),
-      losses: player.losses + (isWinner ? 0 : 1),
-      elo: newELO,
-      lastPlayed: new Date(),
-      level: playerInfo.level || player.level // Updated to include player level
-    };
-    
-    await this.savePlayer(updatedPlayer);
-    
-    // Create match player record
-    const matchPlayer: DBMatchPlayer = {
+    // Create the match record
+    const match: DBMatch = {
       id: generateUUID(),
-      matchId: match.id,
-      playerId: player.id,
-      team: playerInfo.team,
-      heroId: playerInfo.heroId,
-      heroName: playerInfo.heroName,
-      heroRoles: playerInfo.heroRoles,
-      kills: playerInfo.kills,
-      deaths: playerInfo.deaths,
-      assists: playerInfo.assists,
-      goldEarned: playerInfo.goldEarned,
-      minionKills: playerInfo.minionKills,
-      level: playerInfo.level, // Updated to include player level
+      date: matchData.date,
+      winningTeam: matchData.winningTeam,
+      gameLength: matchData.gameLength,
+      doubleLanes: matchData.doubleLanes,
+      titanPlayers: titanPlayers.length,
+      atlanteanPlayers: atlanteanPlayers.length,
       deviceId: this.getDeviceId()
     };
     
-    await this.saveMatchPlayer(matchPlayer);
-  });
-  
-  await Promise.all(playerUpdatePromises);
-  
-  return match.id;
-}
+    // Save the match
+    await this.saveMatch(match);
+    
+    // Update ratings using TrueSkill
+    let ranks: number[];
+    if (matchData.winningTeam === Team.Titans) {
+      ranks = [1, 2];
+    } else {
+      ranks = [2, 1];
+    }
+    
+    const result = rate([titanRatings, atlanteanRatings], {
+      rank: ranks,
+      beta: TRUESKILL_BETA,
+      tau: TRUESKILL_TAU
+    });
+    
+    // Update player ratings and statistics
+    const playerUpdatePromises = playerData.map(async (playerInfo, index) => {
+      const player = players[index];
+      const isWinner = playerInfo.team === matchData.winningTeam;
+      
+      // Get updated rating
+      let updatedRating;
+      if (playerInfo.team === Team.Titans) {
+        const titanIndex = titanPlayers.indexOf(playerInfo.id);
+        updatedRating = result[0][titanIndex];
+      } else {
+        const atlanteanIndex = atlanteanPlayers.indexOf(playerInfo.id);
+        updatedRating = result[1][atlanteanIndex];
+      }
+      
+      // Update cached rating
+      this.playerRatings[playerInfo.id] = updatedRating;
+      
+      // Update player record
+      const updatedPlayer: DBPlayer = {
+        ...player,
+        totalGames: player.totalGames + 1,
+        wins: player.wins + (isWinner ? 1 : 0),
+        losses: player.losses + (isWinner ? 0 : 1),
+        mu: updatedRating.mu,
+        sigma: updatedRating.sigma,
+        ordinal: ordinal(updatedRating),
+        // Convert ordinal to user-friendly scale
+        elo: Math.round((ordinal(updatedRating) + 25) * 40 + 200),
+        lastPlayed: new Date(),
+        level: playerInfo.level || player.level
+      };
+      
+      await this.savePlayer(updatedPlayer);
+      
+      // Create match player record
+      const matchPlayer: DBMatchPlayer = {
+        id: generateUUID(),
+        matchId: match.id,
+        playerId: player.id,
+        team: playerInfo.team,
+        heroId: playerInfo.heroId,
+        heroName: playerInfo.heroName,
+        heroRoles: playerInfo.heroRoles,
+        kills: playerInfo.kills,
+        deaths: playerInfo.deaths,
+        assists: playerInfo.assists,
+        goldEarned: playerInfo.goldEarned,
+        minionKills: playerInfo.minionKills,
+        level: playerInfo.level,
+        deviceId: this.getDeviceId()
+      };
+      
+      await this.saveMatchPlayer(matchPlayer);
+    });
+    
+    await Promise.all(playerUpdatePromises);
+    
+    return match.id;
+  }
 
   /**
    * Get player statistics including favorite heroes and roles
@@ -1131,89 +1137,121 @@ async recordMatch(
   }
 
   /**
-   * Calculate predicted win probability for a given team composition
-   * Returns the probability as a percentage (0-100)
+   * Calculate predicted win probability using TrueSkill ratings
    */
-  calculateWinProbability(team1ELO: number, team2ELO: number): number {
-    // Use the ELO formula to calculate probability
-    const probability = 1 / (1 + Math.pow(10, (team2ELO - team1ELO) / 400));
+  async calculateWinProbability(team1Players: string[], team2Players: string[]): Promise<number> {
+    // Ensure ratings are initialized
+    if (Object.keys(this.playerRatings).length === 0) {
+      // Initialize from database
+      const players = await this.getAllPlayers();
+      this.initializeTrueSkillRatings(players);
+    }
     
-    // Convert to percentage
-    return Math.round(probability * 100);
+    // Get ratings for both teams
+    const team1Ratings: any[] = [];
+    const team2Ratings: any[] = [];
+    
+    for (const playerId of team1Players) {
+      if (this.playerRatings[playerId]) {
+        team1Ratings.push(this.playerRatings[playerId]);
+      } else {
+        team1Ratings.push(rating()); // Default rating
+      }
+    }
+    
+    for (const playerId of team2Players) {
+      if (this.playerRatings[playerId]) {
+        team2Ratings.push(this.playerRatings[playerId]);
+      } else {
+        team2Ratings.push(rating()); // Default rating
+      }
+    }
+    
+    // Calculate team averages
+    const team1Mu = team1Ratings.reduce((sum, r) => sum + r.mu, 0) / team1Ratings.length;
+    const team1Sigma = Math.sqrt(team1Ratings.reduce((sum, r) => sum + r.sigma ** 2, 0)) / team1Ratings.length;
+    const team2Mu = team2Ratings.reduce((sum, r) => sum + r.mu, 0) / team2Ratings.length;
+    const team2Sigma = Math.sqrt(team2Ratings.reduce((sum, r) => sum + r.sigma ** 2, 0)) / team2Ratings.length;
+    
+    // Combined variance for the difference
+    const combinedSigma = Math.sqrt(team1Sigma ** 2 + team2Sigma ** 2 + 2 * TRUESKILL_BETA ** 2);
+    
+    // Win probability using cumulative normal distribution
+    const deltaMu = team1Mu - team2Mu;
+    const normalDist = new NormalDistribution(0, combinedSigma);
+    const winProb = normalDist.cdf(deltaMu);
+    
+    return Math.round(winProb * 100);
   }
 
   /**
-   * Generate balanced teams based on ELO ratings
-   * Returns the player IDs split into two arrays
+   * Generate balanced teams based on skill ratings
    */
-  generateBalancedTeams(playerIds: string[]): Promise<{ team1: string[], team2: string[] }> {
-    return this.getAllPlayers()
-      .then(allPlayers => {
-        // Filter to only include the selected players
-        const selectedPlayers = allPlayers.filter(p => playerIds.includes(p.id));
-        
-        // If we don't have enough players, return empty teams
-        if (selectedPlayers.length < 4) {
-          return { team1: [], team2: [] };
-        }
-        
-        // Sort players by ELO (highest to lowest)
-        selectedPlayers.sort((a, b) => b.elo - a.elo);
-        
-        // Use a greedy algorithm to create balanced teams
-        const team1: DBPlayer[] = [];
-        const team2: DBPlayer[] = [];
-        
-        // Distribute players to balance total ELO
-        selectedPlayers.forEach(player => {
-          // Calculate current team ELOs
-          const team1ELO = team1.reduce((sum, p) => sum + p.elo, 0);
-          const team2ELO = team2.reduce((sum, p) => sum + p.elo, 0);
-          
-          // Add player to the team with lower ELO
-          if (team1ELO <= team2ELO) {
-            team1.push(player);
-          } else {
-            team2.push(player);
-          }
-        });
-        
-        return {
-          team1: team1.map(p => p.id),
-          team2: team2.map(p => p.id)
-        };
-      });
+  async generateBalancedTeams(playerIds: string[]): Promise<{ team1: string[], team2: string[] }> {
+    const allPlayers = await this.getAllPlayers();
+    
+    // Filter to only include the selected players
+    const selectedPlayers = allPlayers.filter(p => playerIds.includes(p.id));
+    
+    if (selectedPlayers.length < 4) {
+      return { team1: [], team2: [] };
+    }
+    
+    // Initialize ratings if needed
+    if (Object.keys(this.playerRatings).length === 0) {
+      this.initializeTrueSkillRatings(allPlayers);
+    }
+    
+    // Sort players by display rating (highest to lowest)
+    selectedPlayers.sort((a, b) => {
+      const ratingA = this.getDisplayRating(a);
+      const ratingB = this.getDisplayRating(b);
+      return ratingB - ratingA;
+    });
+    
+    // Use a greedy algorithm to create balanced teams
+    const team1: DBPlayer[] = [];
+    const team2: DBPlayer[] = [];
+    
+    // Distribute players to balance total skill
+    selectedPlayers.forEach(player => {
+      const team1Skill = team1.reduce((sum, p) => sum + this.getDisplayRating(p), 0);
+      const team2Skill = team2.reduce((sum, p) => sum + this.getDisplayRating(p), 0);
+      
+      if (team1Skill <= team2Skill) {
+        team1.push(player);
+      } else {
+        team2.push(player);
+      }
+    });
+    
+    return {
+      team1: team1.map(p => p.id),
+      team2: team2.map(p => p.id)
+    };
   }
 
   /**
    * Generate balanced teams based on gameplay experience (total games)
-   * Returns the player IDs split into two arrays
    */
-  generateBalancedTeamsByExperience(playerIds: string[]): Promise<{ team1: string[], team2: string[] }> {
+  async generateBalancedTeamsByExperience(playerIds: string[]): Promise<{ team1: string[], team2: string[] }> {
     return this.getAllPlayers()
       .then(allPlayers => {
-        // Filter to only include the selected players
         const selectedPlayers = allPlayers.filter(p => playerIds.includes(p.id));
         
-        // If we don't have enough players, return empty teams
         if (selectedPlayers.length < 4) {
           return { team1: [], team2: [] };
         }
         
-        // Sort players by total games (highest to lowest)
         selectedPlayers.sort((a, b) => b.totalGames - a.totalGames);
         
-        // Use a greedy algorithm to create balanced teams
         const team1: DBPlayer[] = [];
         const team2: DBPlayer[] = [];
         
-        // Distribute players to balance total experience
         selectedPlayers.forEach(player => {
-          // Calculate current team total games
           const team1Games = team1.reduce((sum, p) => sum + p.totalGames, 0);
           const team2Games = team2.reduce((sum, p) => sum + p.totalGames, 0);
           
-          // Add player to the team with lower total games
           if (team1Games <= team2Games) {
             team1.push(player);
           } else {
@@ -1235,7 +1273,6 @@ async recordMatch(
     const players = await this.getAllPlayers();
     const matches = await this.getAllMatches();
     
-    // Get all match players
     const matchPlayers: DBMatchPlayer[] = [];
     for (const match of matches) {
       const matchPlayersList = await this.getMatchPlayers(match.id);
@@ -1260,27 +1297,25 @@ async recordMatch(
     
     try {
       if (mode === 'replace') {
-        // Original behavior: Clear existing data and replace
         await this.clearAllData();
         
-        // Import players
         for (const player of data.players) {
           await this.savePlayer(player);
         }
         
-        // Import matches
         for (const match of data.matches) {
           await this.saveMatch(match);
         }
         
-        // Import match players
         for (const matchPlayer of data.matchPlayers) {
           await this.saveMatchPlayer(matchPlayer);
         }
       } else {
-        // New behavior: Merge data
         await this.mergeData(data);
       }
+      
+      // Recalculate TrueSkill ratings after import
+      await this.recalculatePlayerStats();
       
       return true;
     } catch (error) {
@@ -1289,52 +1324,44 @@ async recordMatch(
     }
   }
 
-  
-
   /**
-   * Merge imported data with existing data - IMPROVED IMPLEMENTATION
-   * This method focuses on only adding new matches and preserving existing ones,
-   * then recalculating all statistics from match data.
+   * Merge imported data with existing data
    */
   async mergeData(importedData: ExportData): Promise<boolean> {
     if (!this.db) await this.initialize();
     if (!this.db) throw new Error('Database not initialized');
     
     try {
-      // Get current device ID
       const deviceId = this.getDeviceId();
       
-      // STEP 1: ENSURE PLAYERS EXIST (minimal player creation)
       const existingPlayers = await this.getAllPlayers();
       const existingPlayerIds = new Set(existingPlayers.map(p => p.id));
       
-      // Only add players that don't already exist - with minimal default data
       for (const importedPlayer of importedData.players) {
         if (!existingPlayerIds.has(importedPlayer.id)) {
-          // Create a new player with minimal data - stats will be calculated later
           const newPlayer: DBPlayer = {
             id: importedPlayer.id,
             name: importedPlayer.name,
-            totalGames: 0, // Will be recalculated
-            wins: 0, // Will be recalculated
-            losses: 0, // Will be recalculated
-            elo: INITIAL_ELO, // Will be recalculated
-            lastPlayed: new Date(), // Will be updated during recalculation
+            totalGames: 0,
+            wins: 0,
+            losses: 0,
+            elo: INITIAL_ELO,
+            mu: undefined,
+            sigma: undefined,
+            ordinal: undefined,
+            lastPlayed: new Date(),
             dateCreated: new Date(),
             deviceId: `imported_${deviceId}`,
-            level: importedPlayer.level || 1 // Preserve level
+            level: importedPlayer.level || 1
           };
           await this.savePlayer(newPlayer);
           existingPlayerIds.add(importedPlayer.id);
         }
       }
       
-      // STEP 2: ADD NEW MATCHES ONLY (preserving existing matches)
-      // Get all existing matches
       const existingMatches = await this.getAllMatches();
       const existingMatchIds = new Set(existingMatches.map(m => m.id));
       
-      // Create a map of all match players from imported data
       const importedMatchPlayersMap = new Map<string, DBMatchPlayer[]>();
       for (const mp of importedData.matchPlayers) {
         if (!importedMatchPlayersMap.has(mp.matchId)) {
@@ -1343,36 +1370,27 @@ async recordMatch(
         importedMatchPlayersMap.get(mp.matchId)!.push(mp);
       }
       
-      // Add only new matches and their player records
       for (const importedMatch of importedData.matches) {
-        // Skip matches that already exist
         if (existingMatchIds.has(importedMatch.id)) {
           continue;
         }
         
-        // Add device ID if missing
         if (!importedMatch.deviceId) {
           importedMatch.deviceId = `imported_${deviceId}`;
         }
         
-        // Save the new match
         await this.saveMatch(importedMatch);
         
-        // Add all associated match player records
         const matchPlayers = importedMatchPlayersMap.get(importedMatch.id) || [];
         for (const matchPlayer of matchPlayers) {
-          // Add device ID if missing
           if (!matchPlayer.deviceId) {
             matchPlayer.deviceId = `imported_${deviceId}`;
           }
           
-          // Save the match player record
           await this.saveMatchPlayer(matchPlayer);
         }
       }
       
-      // STEP 3: RECALCULATE ALL PLAYER STATISTICS
-      // This recalculates all statistics based on the combined match history
       await this.recalculatePlayerStats();
       
       return true;
@@ -1399,6 +1417,9 @@ async recordMatch(
       transaction.objectStore(TABLES.MATCHES).clear();
       transaction.objectStore(TABLES.MATCH_PLAYERS).clear();
       
+      // Clear cached ratings
+      this.playerRatings = {};
+      
       return new Promise((resolve, reject) => {
         transaction.oncomplete = () => resolve(true);
         transaction.onerror = () => reject(transaction.error);
@@ -1421,3 +1442,6 @@ async recordMatch(
 // Export a singleton instance
 export const dbService = new DatabaseService();
 export default dbService;
+
+// Export utility functions
+export const getDisplayRating = (player: DBPlayer) => dbService.getDisplayRating(player);

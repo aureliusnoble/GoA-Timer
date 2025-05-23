@@ -290,10 +290,6 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
             Manually log match results for games played outside the application.
           </p>
           
-          <div className="mt-3 text-blue-400 text-sm flex items-center">
-            <Info size={16} className="mr-1" />
-            <span>Add match data not recorded in the timer</span>
-          </div>
         </div>
         
         {/* Match Maker */}
@@ -332,10 +328,7 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
             Browse complete information about all heroes, including stats, roles, and abilities.
           </p>
           
-          <div className="mt-3 text-blue-400 text-sm flex items-center">
-            <Info size={16} className="mr-1" />
-            <span>Plan your hero selection</span>
-          </div>
+      
         </div>
       </div>
       
