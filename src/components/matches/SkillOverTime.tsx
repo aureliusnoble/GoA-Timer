@@ -1,6 +1,6 @@
 // src/components/matches/SkillOverTime.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, TrendingUp, Users, Calendar, Info, Camera, Filter, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronLeft, TrendingUp, Users, Info, Camera, Filter, ChevronDown, ChevronUp } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer
