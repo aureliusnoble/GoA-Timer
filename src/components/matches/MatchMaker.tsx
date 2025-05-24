@@ -64,33 +64,7 @@ const WinProbabilityVisualization: React.FC<{
           <span className="text-blue-400 font-medium relative -top-4">{team1Name}</span>
         </div>
         <div className="relative h-8 bg-gray-700 rounded-lg">
-          {/* Confidence interval bar */}
-          <div
-            className="absolute h-6 top-1 bg-blue-600/25 rounded-full"
-            style={{
-              left: `${probability.team1Lower}%`,
-              width: `${probability.team1Upper - probability.team1Lower}%`
-            }}
-          />
-          {/* CI Labels */}
-          <span
-            className="absolute -top-7 text-xs text-blue-400 whitespace-nowrap"
-            style={{
-              left: `${probability.team1Lower}%`,
-              transform: probability.team1Lower < 5 ? 'translateX(0)' : 'translateX(-50%)'
-            }}
-          >
-            {probability.team1Lower}%
-          </span>
-          <span
-            className="absolute -top-7 text-xs text-blue-400 whitespace-nowrap"
-            style={{
-              left: `${probability.team1Upper}%`,
-              transform: probability.team1Upper > 95 ? 'translateX(-100%)' : 'translateX(-50%)'
-            }}
-          >
-            {probability.team1Upper}%
-          </span>
+          
           {/* Point estimate diamond */}
           <div className="absolute top-1/2 -translate-y-1/2" style={{ left: `${probability.team1Probability}%` }}>
             <div className="relative">
@@ -111,33 +85,7 @@ const WinProbabilityVisualization: React.FC<{
           <span className="text-red-400 font-medium relative -top-4">{team2Name}</span>
         </div>
         <div className="relative h-8 bg-gray-700 rounded-lg">
-          {/* Confidence interval bar */}
-          <div
-            className="absolute h-6 top-1 bg-red-600/25 rounded-full"
-            style={{
-              left: `${probability.team2Lower}%`,
-              width: `${probability.team2Upper - probability.team2Lower}%`
-            }}
-          />
-          {/* CI Labels */}
-          <span
-            className="absolute -top-7 text-xs text-red-400 whitespace-nowrap"
-            style={{
-              left: `${probability.team2Lower}%`,
-              transform: probability.team2Lower < 5 ? 'translateX(0)' : 'translateX(-50%)'
-            }}
-          >
-            {probability.team2Lower}%
-          </span>
-          <span
-            className="absolute -top-7 text-xs text-red-400 whitespace-nowrap"
-            style={{
-              left: `${probability.team2Upper}%`,
-              transform: probability.team2Upper > 95 ? 'translateX(-100%)' : 'translateX(-50%)'
-            }}
-          >
-            {probability.team2Upper}%
-          </span>
+         
           {/* Point estimate diamond */}
           <div className="absolute top-1/2 -translate-y-1/2" style={{ left: `${probability.team2Probability}%` }}>
             <div className="relative">
@@ -1011,9 +959,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                     <p className="mb-2">
                       Prediction based on TrueSkill ratings. The scale shows win probability from 0% to 100%.
                     </p>
-                    <p className="text-xs text-gray-400">
-                      The rounded bars show 95% confidence intervals - wider bars indicate greater uncertainty.
-                    </p>
+             
                   </div>
                 </div>
               )}

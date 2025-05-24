@@ -560,7 +560,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime }
   
   return (
     <div ref={contentRef} id="screenshotContent" className="bg-gray-800 rounded-lg p-6">
-      <div className="flex justify-between items-center mb-6 no-screenshot">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 no-screenshot">
         <button
           onClick={handleBack}
           className="flex items-center text-gray-300 hover:text-white"
@@ -568,37 +568,38 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime }
           <ChevronLeft size={20} className="mr-1" />
           <span>Back to Menu</span>
         </button>
-        <h2 className="text-2xl font-bold">Player Statistics</h2>
+        <h2 className="text-2xl font-bold text-center sm:text-left">Player Statistics</h2>
         
-        <div className="flex gap-2">
+        {/* Mobile-optimized button group */}
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <EnhancedTooltip text="View skill rating progression over time" position="left">
             <button
               onClick={() => {
                 playSound('buttonClick');
                 onViewSkillOverTime();
               }}
-              className="flex items-center px-3 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg"
+              className="flex items-center justify-center px-3 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg w-full sm:w-auto"
             >
               <TrendingUp size={18} className="mr-2" />
-              <span>View Over Time</span>
+              <span className="whitespace-nowrap">View Over Time</span>
             </button>
           </EnhancedTooltip>
           
           <EnhancedTooltip text="Take a screenshot of all player statistics" position="left">
             <button
               onClick={handleTakeScreenshot}
-              className="flex items-center px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg"
+              className="flex items-center justify-center px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg w-full sm:w-auto"
               disabled={takingScreenshot}
             >
               <Camera size={18} className="mr-2" />
-              <span>{takingScreenshot ? 'Capturing...' : 'Share Stats'}</span>
+              <span className="whitespace-nowrap">{takingScreenshot ? 'Capturing...' : 'Share Stats'}</span>
             </button>
           </EnhancedTooltip>
         </div>
       </div>
       
       <div className="bg-gray-700 rounded-lg p-4 mb-6 no-screenshot">
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex flex-col lg:flex-row gap-4">
           <div className="relative flex-grow">
             <input
               type="text"
@@ -613,7 +614,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime }
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => handleSort('skill')}
-              className={`px-3 py-1 rounded ${
+              className={`px-3 py-1 rounded text-sm ${
                 sortBy === 'skill' 
                   ? 'bg-blue-600 hover:bg-blue-500' 
                   : 'bg-gray-600 hover:bg-gray-500'
@@ -623,7 +624,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime }
             </button>
             <button
               onClick={() => handleSort('games')}
-              className={`px-3 py-1 rounded ${
+              className={`px-3 py-1 rounded text-sm ${
                 sortBy === 'games' 
                   ? 'bg-blue-600 hover:bg-blue-500' 
                   : 'bg-gray-600 hover:bg-gray-500'
@@ -633,27 +634,27 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime }
             </button>
             <button
               onClick={() => handleSort('winRate')}
-              className={`px-3 py-1 rounded ${
+              className={`px-3 py-1 rounded text-sm ${
                 sortBy === 'winRate' 
                   ? 'bg-blue-600 hover:bg-blue-500' 
                   : 'bg-gray-600 hover:bg-gray-500'
               }`}
             >
-              Win Rate {sortBy === 'winRate' && (sortOrder === 'asc' ? '↑' : '↓')}
+              Win% {sortBy === 'winRate' && (sortOrder === 'asc' ? '↑' : '↓')}
             </button>
             <button
               onClick={() => handleSort('kdRatio')}
-              className={`px-3 py-1 rounded ${
+              className={`px-3 py-1 rounded text-sm ${
                 sortBy === 'kdRatio' 
                   ? 'bg-blue-600 hover:bg-blue-500' 
                   : 'bg-gray-600 hover:bg-gray-500'
               }`}
             >
-              KD Ratio {sortBy === 'kdRatio' && (sortOrder === 'asc' ? '↑' : '↓')}
+              KD {sortBy === 'kdRatio' && (sortOrder === 'asc' ? '↑' : '↓')}
             </button>
             <button
               onClick={() => handleSort('name')}
-              className={`px-3 py-1 rounded ${
+              className={`px-3 py-1 rounded text-sm ${
                 sortBy === 'name' 
                   ? 'bg-blue-600 hover:bg-blue-500' 
                   : 'bg-gray-600 hover:bg-gray-500'
