@@ -1147,7 +1147,7 @@ class DatabaseService {
 
   /**
    * Calculate predicted win probability using TrueSkill ratings
-   * Updated to match the exact calculation from the provided script
+   * Following standard TrueSkill team game calculations
    */
   async calculateWinProbability(team1Players: string[], team2Players: string[]): Promise<number> {
     // Ensure ratings are initialized
@@ -1177,14 +1177,21 @@ class DatabaseService {
       }
     }
     
-    // Calculate team averages (matching the script exactly)
-    const team1Mu = team1Ratings.reduce((sum, r) => sum + r.mu, 0) / team1Ratings.length;
-    const team1Sigma = Math.sqrt(team1Ratings.reduce((sum, r) => sum + r.sigma ** 2, 0)) / team1Ratings.length;
-    const team2Mu = team2Ratings.reduce((sum, r) => sum + r.mu, 0) / team2Ratings.length;
-    const team2Sigma = Math.sqrt(team2Ratings.reduce((sum, r) => sum + r.sigma ** 2, 0)) / team2Ratings.length;
+    // Calculate team skill and variance following TrueSkill conventions:
+    // Team skill = sum of individual skills
+    // Team variance = sum of individual variances + n * beta^2
+    const team1Mu = team1Ratings.reduce((sum, r) => sum + r.mu, 0);
+    const team1Variance = team1Ratings.reduce((sum, r) => sum + r.sigma ** 2, 0) + 
+                          team1Ratings.length * TRUESKILL_BETA ** 2;
+    const team1Sigma = Math.sqrt(team1Variance);
     
-    // Combined variance for the difference
-    const combinedSigma = Math.sqrt(team1Sigma ** 2 + team2Sigma ** 2 + 2 * TRUESKILL_BETA ** 2);
+    const team2Mu = team2Ratings.reduce((sum, r) => sum + r.mu, 0);
+    const team2Variance = team2Ratings.reduce((sum, r) => sum + r.sigma ** 2, 0) + 
+                          team2Ratings.length * TRUESKILL_BETA ** 2;
+    const team2Sigma = Math.sqrt(team2Variance);
+    
+    // Combined variance for the difference in team performances
+    const combinedSigma = Math.sqrt(team1Variance + team2Variance);
     
     // Win probability using cumulative normal distribution
     const deltaMu = team1Mu - team2Mu;
@@ -1196,7 +1203,7 @@ class DatabaseService {
 
   /**
    * Calculate predicted win probability with confidence intervals
-   * Matches the exact calculation from the provided script
+   * Using proper TrueSkill team calculations and uncertainty propagation
    */
   async calculateWinProbabilityWithCI(team1Players: string[], team2Players: string[]): Promise<{
     team1Probability: number;
@@ -1233,35 +1240,48 @@ class DatabaseService {
       }
     }
     
-    // Calculate team averages (matching the script exactly)
-    const team1Mu = team1Ratings.reduce((sum, r) => sum + r.mu, 0) / team1Ratings.length;
-    const team1Sigma = Math.sqrt(team1Ratings.reduce((sum, r) => sum + r.sigma ** 2, 0)) / team1Ratings.length;
-    const team2Mu = team2Ratings.reduce((sum, r) => sum + r.mu, 0) / team2Ratings.length;
-    const team2Sigma = Math.sqrt(team2Ratings.reduce((sum, r) => sum + r.sigma ** 2, 0)) / team2Ratings.length;
+    // Calculate team parameters following TrueSkill conventions
+    const team1Mu = team1Ratings.reduce((sum, r) => sum + r.mu, 0);
+    const team1SkillVariance = team1Ratings.reduce((sum, r) => sum + r.sigma ** 2, 0);
+    const team1PerformanceVariance = team1SkillVariance + team1Ratings.length * TRUESKILL_BETA ** 2;
     
-    // Combined variance for the difference
-    const combinedSigma = Math.sqrt(team1Sigma ** 2 + team2Sigma ** 2 + 2 * TRUESKILL_BETA ** 2);
+    const team2Mu = team2Ratings.reduce((sum, r) => sum + r.mu, 0);
+    const team2SkillVariance = team2Ratings.reduce((sum, r) => sum + r.sigma ** 2, 0);
+    const team2PerformanceVariance = team2SkillVariance + team2Ratings.length * TRUESKILL_BETA ** 2;
     
-    // Win probability using cumulative normal distribution
+    // Delta parameters
     const deltaMu = team1Mu - team2Mu;
-    const normalDist = new NormalDistribution(0, combinedSigma);
+    const deltaPerformanceVariance = team1PerformanceVariance + team2PerformanceVariance;
+    const deltaPerformanceSigma = Math.sqrt(deltaPerformanceVariance);
+    
+    // Point estimate of win probability
+    const normalDist = new NormalDistribution(0, deltaPerformanceSigma);
     const winProb = normalDist.cdf(deltaMu);
     
-    // Calculate 95% confidence interval for win probability
-    const ciMargin = 1.96 * combinedSigma;
-    const ciLowerDelta = deltaMu - ciMargin;
-    const ciUpperDelta = deltaMu + ciMargin;
+    // For confidence intervals, we use only the skill uncertainty (not performance variance)
+    // This represents our uncertainty about the true skill levels
+    const deltaSkillVariance = team1SkillVariance + team2SkillVariance;
+    const deltaSkillSigma = Math.sqrt(deltaSkillVariance);
     
-    const ciLower = normalDist.cdf(ciLowerDelta);
-    const ciUpper = normalDist.cdf(ciUpperDelta);
+    // 95% confidence interval for the skill difference
+    const ciMargin = 1.96 * deltaSkillSigma;
+    
+    // Calculate win probabilities at the confidence bounds
+    // When team skill difference is at its lower bound
+    const lowerSkillDelta = deltaMu - ciMargin;
+    const lowerWinProb = normalDist.cdf(lowerSkillDelta);
+    
+    // When team skill difference is at its upper bound
+    const upperSkillDelta = deltaMu + ciMargin;
+    const upperWinProb = normalDist.cdf(upperSkillDelta);
     
     return {
       team1Probability: Math.round(winProb * 100),
-      team1Lower: Math.round(ciLower * 100),
-      team1Upper: Math.round(ciUpper * 100),
+      team1Lower: Math.round(lowerWinProb * 100),
+      team1Upper: Math.round(upperWinProb * 100),
       team2Probability: Math.round((1 - winProb) * 100),
-      team2Lower: Math.round((1 - ciUpper) * 100),
-      team2Upper: Math.round((1 - ciLower) * 100)
+      team2Lower: Math.round((1 - upperWinProb) * 100),
+      team2Upper: Math.round((1 - lowerWinProb) * 100)
     };
   }
 
