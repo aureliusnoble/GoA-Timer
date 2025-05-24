@@ -6,9 +6,7 @@ import { ConnectionModal } from '../common/ConnectionModal';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
 import { useConnection } from '../../context/ConnectionContext';
-
-export type MatchesView = 'menu' | 'player-stats' | 'hero-stats' | 'match-history' | 'match-maker' | 'record-match' | 'hero-info';
-
+export type MatchesView = 'menu' | 'player-stats' | 'hero-stats' | 'match-history' | 'match-maker' | 'record-match' | 'hero-info' | 'skill-over-time';
 interface MatchesMenuProps {
   onBack: () => void;
   onNavigate: (view: MatchesView) => void;

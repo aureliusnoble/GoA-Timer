@@ -254,8 +254,6 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     playSound('phaseChange');
     
     try {
-      // Get balanced teams from the database service
-      const playerIds = selectedPlayers.map(p => p.id);
       
       // Add randomization by shuffling players with similar ratings
       const shuffledPlayers = [...selectedPlayers];

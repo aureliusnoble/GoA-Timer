@@ -11,7 +11,7 @@ import {
   Legend,
   ResponsiveContainer,
   ReferenceLine,
-  Dot
+
 } from 'recharts';
 import dbService, { getDisplayRating } from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
@@ -57,7 +57,7 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
   const [hoveredPlayer, setHoveredPlayer] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  const [showLegend, setShowLegend] = useState(true);
+  const [showLegend] = useState(true);
   const [averageRating, setAverageRating] = useState(0);
 
   // Load and process data
@@ -67,12 +67,8 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
       try {
         // Get all players and matches
         const allPlayers = await dbService.getAllPlayers();
-        const allMatches = await dbService.getAllMatches();
         
-        // Sort matches by date
-        const sortedMatches = [...allMatches].sort((a, b) => 
-          new Date(a.date).getTime() - new Date(b.date).getTime()
-        );
+
 
         // Initialize player ratings tracking
         const playerRatings: { [playerId: string]: number[] } = {};
@@ -86,7 +82,7 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
 
         // Build time series data by replaying matches
         const timeSeries: TimeSeriesPoint[] = [];
-        let gameNumber = 0;
+  
 
         // We need to track cumulative ratings after each match
         // This requires recalculating ratings chronologically
@@ -242,28 +238,6 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
     return null;
   };
 
-  // Custom dot to handle overlapping points
-  const CustomDot = (props: any) => {
-    const { cx, cy, payload, dataKey } = props;
-    const player = players.find(p => p.id === dataKey);
-    
-    if (!player || !selectedPlayers.has(dataKey)) return null;
-    
-    const isHovered = hoveredPlayer === dataKey;
-    const radius = isHovered ? 5 : 3;
-    
-    return (
-      <circle
-        cx={cx}
-        cy={cy}
-        r={radius}
-        fill={player.color}
-        stroke={player.color}
-        strokeWidth={2}
-        opacity={isHovered ? 1 : 0.8}
-      />
-    );
-  };
 
   const filteredPlayers = players.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase())

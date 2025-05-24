@@ -803,16 +803,16 @@ class DatabaseService {
    * This now returns an approximation based on TrueSkill ordinal
    */
   calculateNewELO(
-    playerELO: number, 
-    playerTeamAvgELO: number, 
-    opponentTeamAvgELO: number, 
-    won: boolean,
-    teamWeight: number = 0.7,
-    baseKFactor: number = 32
+    _playerELO: number, 
+    _playerTeamAvgELO: number, 
+    _opponentTeamAvgELO: number, 
+    _won: boolean,
+    _teamWeight: number = 0.7,
+    _baseKFactor: number = 32
   ): number {
     // This is deprecated - just return the current ELO
     // The actual calculation is done in recordMatch using TrueSkill
-    return playerELO;
+    return _playerELO;
   }
 
   /**
@@ -1183,12 +1183,10 @@ class DatabaseService {
     const team1Mu = team1Ratings.reduce((sum, r) => sum + r.mu, 0);
     const team1Variance = team1Ratings.reduce((sum, r) => sum + r.sigma ** 2, 0) + 
                           team1Ratings.length * TRUESKILL_BETA ** 2;
-    const team1Sigma = Math.sqrt(team1Variance);
     
     const team2Mu = team2Ratings.reduce((sum, r) => sum + r.mu, 0);
     const team2Variance = team2Ratings.reduce((sum, r) => sum + r.sigma ** 2, 0) + 
                           team2Ratings.length * TRUESKILL_BETA ** 2;
-    const team2Sigma = Math.sqrt(team2Variance);
     
     // Combined variance for the difference in team performances
     const combinedSigma = Math.sqrt(team1Variance + team2Variance);
