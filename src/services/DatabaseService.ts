@@ -1533,6 +1533,94 @@ class DatabaseService {
    * Get historical ratings for all players over time
    * Returns rating snapshots after each match
    */
+  /**
+   * Get current TrueSkill ratings calculated fresh from all match history
+   * This ensures consistent ratings across all components
+   */
+  async getCurrentTrueSkillRatings(): Promise<{ [playerId: string]: number }> {
+    try {
+      // Get all matches sorted by date
+      let allMatches = await this.getAllMatches();
+      allMatches.sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        return dateA - dateB;
+      });
+      
+      // Initialize player ratings
+      const players = await this.getAllPlayers();
+      const playerRatings: { [playerId: string]: any } = {};
+      
+      // Initialize all players with default rating
+      for (const player of players) {
+        playerRatings[player.id] = rating();
+      }
+      
+      // Process each match chronologically to get final ratings
+      for (let matchIndex = 0; matchIndex < allMatches.length; matchIndex++) {
+        const match = allMatches[matchIndex];
+        const matchPlayers = await this.getMatchPlayers(match.id);
+        
+        // Separate into teams
+        const titanPlayers: string[] = [];
+        const titanRatings: any[] = [];
+        const atlanteanPlayers: string[] = [];
+        const atlanteanRatings: any[] = [];
+        
+        for (const mp of matchPlayers) {
+          if (mp.team === Team.Titans) {
+            titanPlayers.push(mp.playerId);
+            titanRatings.push(playerRatings[mp.playerId]);
+          } else {
+            atlanteanPlayers.push(mp.playerId);
+            atlanteanRatings.push(playerRatings[mp.playerId]);
+          }
+        }
+        
+        // Skip if either team is empty
+        if (titanRatings.length === 0 || atlanteanRatings.length === 0) {
+          continue;
+        }
+        
+        // Determine ranks based on winning team
+        let ranks: number[];
+        if (match.winningTeam === Team.Titans) {
+          ranks = [1, 2];
+        } else {
+          ranks = [2, 1];
+        }
+        
+        // Update ratings using OpenSkill
+        const result = rate([titanRatings, atlanteanRatings], {
+          rank: ranks,
+          beta: TRUESKILL_BETA,
+          tau: TRUESKILL_TAU
+        });
+        
+        // Update player ratings
+        for (let i = 0; i < titanPlayers.length; i++) {
+          playerRatings[titanPlayers[i]] = result[0][i];
+        }
+        for (let i = 0; i < atlanteanPlayers.length; i++) {
+          playerRatings[atlanteanPlayers[i]] = result[1][i];
+        }
+      }
+      
+      // Convert to display ratings
+      const currentRatings: { [playerId: string]: number } = {};
+      for (const playerId in playerRatings) {
+        const playerRating = playerRatings[playerId];
+        const ordinalValue = ordinal(playerRating);
+        currentRatings[playerId] = Math.round((ordinalValue + 25) * 40 + 200);
+      }
+      
+      return currentRatings;
+    } catch (error) {
+      console.error('Error getting current TrueSkill ratings:', error);
+      return {};
+    }
+  }
+
   async getHistoricalRatings(): Promise<Array<{
     date: string;
     matchNumber: number;
@@ -1616,7 +1704,8 @@ class DatabaseService {
         const snapshot: { [playerId: string]: number } = {};
         for (const playerId in playerRatings) {
           const playerRating = playerRatings[playerId];
-          const displayRating = Math.round((ordinal(playerRating) + 25) * 40 + 200);
+          const ordinalValue = ordinal(playerRating);
+          const displayRating = Math.round((ordinalValue + 25) * 40 + 200);
           snapshot[playerId] = displayRating;
         }
         

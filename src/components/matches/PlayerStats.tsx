@@ -299,6 +299,9 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime }
       try {
         const allPlayers = await dbService.getAllPlayers();
         
+        // Get fresh TrueSkill ratings for consistency with SkillOverTime
+        const currentRatings = await dbService.getCurrentTrueSkillRatings();
+        
         const playersWithStats = await Promise.all(
           allPlayers.map(async (player) => {
             const stats = await dbService.getPlayerStats(player.id);
@@ -313,7 +316,9 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime }
             const kdRatio = deaths === 0 ? kills : kills / deaths;
             const winRate = player.totalGames > 0 ? (player.wins / player.totalGames) * 100 : 0;
             const hasCombatStats = kills > 0 || deaths > 0 || assists > 0 || gold > 0;
-            const displayRating = getDisplayRating(player);
+            
+            // Use fresh TrueSkill rating calculation (consistent with SkillOverTime)
+            const displayRating = currentRatings[player.id] || getDisplayRating(player);
             
             return {
               ...player,

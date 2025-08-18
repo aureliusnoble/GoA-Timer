@@ -82,6 +82,8 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
       setLoading(true);
       try {
         const history = await dbService.getHistoricalRatings();
+        // Get fresh current ratings for consistency with PlayerStats
+        const currentRatings = await dbService.getCurrentTrueSkillRatings();
         
         // Process the data into player-centric format
         const playerMap = new Map<string, PlayerRatingHistory>();
@@ -110,11 +112,14 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
             }));
           
           if (data.length > 0) {
+            // Use fresh current rating for consistency with PlayerStats
+            const freshCurrentRating = currentRatings[playerId] || data[data.length - 1].rating;
+            
             playerMap.set(playerId, {
               playerId,
               playerName,
               data,
-              currentRating: data[data.length - 1].rating,
+              currentRating: freshCurrentRating,
               isActive: data.length >= 5 // Only show players with 5+ matches by default
             });
           }
