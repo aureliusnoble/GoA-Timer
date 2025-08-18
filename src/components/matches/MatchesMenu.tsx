@@ -6,7 +6,7 @@ import { ConnectionModal } from '../common/ConnectionModal';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
 import { useConnection } from '../../context/ConnectionContext';
-export type MatchesView = 'menu' | 'player-stats' | 'hero-stats' | 'match-history' | 'match-maker' | 'record-match' | 'hero-info' | 'skill-over-time';
+export type MatchesView = 'menu' | 'player-stats' | 'detailed-player-stats' | 'hero-stats' | 'match-history' | 'match-maker' | 'record-match' | 'hero-info' | 'skill-over-time';
 interface MatchesMenuProps {
   onBack: () => void;
   onNavigate: (view: MatchesView) => void;
@@ -26,6 +26,7 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
   // State for import options
   const [showImportOptions, setShowImportOptions] = useState<boolean>(false);
   const [importMode, setImportMode] = useState<'replace' | 'merge'>('replace');
+  
   
   // Check if we have any match data
   const checkForMatchData = async () => {
@@ -555,6 +556,7 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
         onClose={handleCloseConnectionModal}
         onDataReceived={handleDataReceived}
       />
+      
     </div>
   );
 };

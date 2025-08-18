@@ -19,6 +19,26 @@ import {
 } from 'lucide-react';
 import { useSound } from '../context/SoundContext';
 
+// Interface for individual stat category toggles (follows RecordMatch pattern)
+interface StatCategories {
+  kills: boolean;
+  deaths: boolean;
+  assists: boolean;
+  goldEarned: boolean;
+  minionKills: boolean;
+  level: boolean;
+}
+
+// Default enabled stats (start with all disabled - user selects what to track)
+const DEFAULT_ENABLED_STATS: StatCategories = {
+  kills: false,
+  deaths: false,
+  assists: false,
+  goldEarned: false,
+  minionKills: false,
+  level: false
+};
+
 interface EndOfRoundAssistantProps {
   players: Player[];
   onComplete: (stats?: { [playerId: number]: PlayerRoundStats }) => void;
@@ -26,13 +46,14 @@ interface EndOfRoundAssistantProps {
 }
 
 // Stats collected for a single round - Updated to include level
+// All fields optional to support selective stat tracking
 export interface PlayerRoundStats {
-  goldCollected: number;
-  kills: number;
-  assists: number;
-  deaths: number;
-  minionKills: number;
-  level?: number; // New field to track player level
+  goldCollected?: number;
+  kills?: number;
+  assists?: number;
+  deaths?: number;
+  minionKills?: number;
+  level?: number;
 }
 
 // Enum for stat tracking tabs - Updated to include Level
@@ -53,6 +74,9 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
   
   // State for tracking if logging is enabled
   const [loggingEnabled, setLoggingEnabled] = useState<boolean>(false);
+  
+  // State for individual stat category toggles
+  const [enabledStats, setEnabledStats] = useState<StatCategories>(DEFAULT_ENABLED_STATS);
   
   // State for player stats this round
   const [playerStats, setPlayerStats] = useState<{[playerId: number]: PlayerRoundStats}>({});
@@ -144,6 +168,15 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
     }));
   };
 
+  // Handle toggling individual stat categories
+  const handleStatToggle = (statKey: keyof StatCategories, enabled: boolean) => {
+    playSound('toggleSwitch');
+    setEnabledStats(prev => ({
+      ...prev,
+      [statKey]: enabled
+    }));
+  };
+
   // NEW: Handle checking all checklist items at once
   const checkAllItems = () => {
     playSound('phaseChange');
@@ -163,7 +196,23 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
     
     // Pass the stats back to parent component if logging is enabled
     if (loggingEnabled) {
-      onComplete(playerStats);
+      // Filter stats based on enabled categories
+      const filteredStats: { [playerId: number]: PlayerRoundStats } = {};
+      
+      Object.entries(playerStats).forEach(([playerIdStr, stats]) => {
+        const playerId = parseInt(playerIdStr);
+        const filteredPlayerStats: PlayerRoundStats = {
+          goldCollected: enabledStats.goldEarned ? stats.goldCollected : undefined,
+          kills: enabledStats.kills ? stats.kills : undefined,
+          assists: enabledStats.assists ? stats.assists : undefined,
+          deaths: enabledStats.deaths ? stats.deaths : undefined,
+          minionKills: enabledStats.minionKills ? stats.minionKills : undefined,
+          level: enabledStats.level ? stats.level : undefined
+        };
+        filteredStats[playerId] = filteredPlayerStats;
+      });
+      
+      onComplete(filteredStats);
     } else {
       onComplete();
     }
@@ -193,6 +242,22 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
     playSound('buttonClick');
     setActiveTab(tab);
   };
+
+  // Dynamic tab availability based on enabled stats
+  const availableTabs = [
+    { tab: StatTrackingTab.Kills, enabled: enabledStats.kills, icon: <Swords size={16} />, label: 'Kills' },
+    { tab: StatTrackingTab.Deaths, enabled: enabledStats.deaths, icon: <Skull size={16} />, label: 'Deaths' },
+    { tab: StatTrackingTab.Minions, enabled: enabledStats.minionKills, icon: <Bot size={16} />, label: 'Minions' },
+    { tab: StatTrackingTab.Gold, enabled: enabledStats.goldEarned, icon: <Coins size={16} />, label: 'Gold' },
+    { tab: StatTrackingTab.Level, enabled: enabledStats.level, icon: <Shield size={16} />, label: 'Level' }
+  ].filter(tabInfo => tabInfo.enabled);
+
+  // Auto-switch tab if current tab becomes disabled
+  useEffect(() => {
+    if (loggingEnabled && availableTabs.length > 0 && !availableTabs.find(tabInfo => tabInfo.tab === activeTab)) {
+      setActiveTab(availableTabs[0].tab);
+    }
+  }, [enabledStats, activeTab, availableTabs, loggingEnabled]);
 
   if (!isVisible) return null;
 
@@ -357,40 +422,70 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
             <div className="space-y-4">
               <p className="text-gray-300 italic">Enter stats for this round only. You only need to enter the stats you are interested in tracking.</p>
               
-              {/* Tabs for different stat types */}
-              <div className="flex border-b border-gray-700 flex-wrap">
-                <button 
-                  className={`px-4 py-2 flex items-center ${activeTab === StatTrackingTab.Kills ? 'border-b-2 border-blue-500 text-blue-400' : 'text-gray-400 hover:text-white'}`}
-                  onClick={() => changeTab(StatTrackingTab.Kills)}
-                >
-                  <Swords size={16} className="mr-2" /> Kills
-                </button>
-                <button 
-                  className={`px-4 py-2 flex items-center ${activeTab === StatTrackingTab.Deaths ? 'border-b-2 border-blue-500 text-blue-400' : 'text-gray-400 hover:text-white'}`}
-                  onClick={() => changeTab(StatTrackingTab.Deaths)}
-                >
-                  <Skull size={16} className="mr-2" /> Deaths
-                </button>
-                <button 
-                  className={`px-4 py-2 flex items-center ${activeTab === StatTrackingTab.Minions ? 'border-b-2 border-blue-500 text-blue-400' : 'text-gray-400 hover:text-white'}`}
-                  onClick={() => changeTab(StatTrackingTab.Minions)}
-                >
-                  <Bot size={16} className="mr-2" /> Minions
-                </button>
-                <button 
-                  className={`px-4 py-2 flex items-center ${activeTab === StatTrackingTab.Gold ? 'border-b-2 border-blue-500 text-blue-400' : 'text-gray-400 hover:text-white'}`}
-                  onClick={() => changeTab(StatTrackingTab.Gold)}
-                >
-                  <Coins size={16} className="mr-2" /> Gold
-                </button>
-                {/* New tab for Level */}
-                <button 
-                  className={`px-4 py-2 flex items-center ${activeTab === StatTrackingTab.Level ? 'border-b-2 border-blue-500 text-blue-400' : 'text-gray-400 hover:text-white'}`}
-                  onClick={() => changeTab(StatTrackingTab.Level)}
-                >
-                  <Shield size={16} className="mr-2" /> Level
-                </button>
+              {/* Individual Stat Category Toggles */}
+              <div className="mb-4 p-3 bg-gray-700/50 rounded-lg">
+                <h4 className="font-semibold mb-3 text-gray-300">Select Stats to Track</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <StatToggle 
+                    icon={<Swords size={16} />}
+                    label="Kills"
+                    enabled={enabledStats.kills}
+                    onChange={(enabled) => handleStatToggle('kills', enabled)}
+                  />
+                  <StatToggle 
+                    icon={<Skull size={16} />}
+                    label="Deaths"
+                    enabled={enabledStats.deaths}
+                    onChange={(enabled) => handleStatToggle('deaths', enabled)}
+                  />
+                  <StatToggle 
+                    icon={<Users size={16} />}
+                    label="Assists"
+                    enabled={enabledStats.assists}
+                    onChange={(enabled) => handleStatToggle('assists', enabled)}
+                  />
+                  <StatToggle 
+                    icon={<Coins size={16} />}
+                    label="Gold Earned"
+                    enabled={enabledStats.goldEarned}
+                    onChange={(enabled) => handleStatToggle('goldEarned', enabled)}
+                  />
+                  <StatToggle 
+                    icon={<Bot size={16} />}
+                    label="Minion Kills"
+                    enabled={enabledStats.minionKills}
+                    onChange={(enabled) => handleStatToggle('minionKills', enabled)}
+                  />
+                  <StatToggle 
+                    icon={<Shield size={16} />}
+                    label="Level"
+                    enabled={enabledStats.level}
+                    onChange={(enabled) => handleStatToggle('level', enabled)}
+                  />
+                </div>
               </div>
+              
+              {/* Dynamic tabs based on enabled stats */}
+              {availableTabs.length > 0 ? (
+                <div className="flex border-b border-gray-700 flex-wrap">
+                  {availableTabs.map(tabInfo => (
+                    <button 
+                      key={tabInfo.tab}
+                      className={`px-4 py-2 flex items-center ${
+                        activeTab === tabInfo.tab ? 'border-b-2 border-blue-500 text-blue-400' : 'text-gray-400 hover:text-white'
+                      }`}
+                      onClick={() => changeTab(tabInfo.tab)}
+                    >
+                      {tabInfo.icon} <span className="ml-2">{tabInfo.label}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-400">
+                  <p className="mb-2">No stats selected for tracking</p>
+                  <p className="text-sm">Enable stat categories above to begin tracking data</p>
+                </div>
+              )}
               
               {/* Tab content */}
               <div className="mt-4">
@@ -1004,68 +1099,114 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                   </div>
                 )}
                 
-                {/* Navigation buttons for tabs */}
-                <div className="flex justify-between mt-4">
-                  <button 
-                    className="flex items-center px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded"
-                    onClick={() => {
-                      const newTab = Math.max(0, activeTab - 1);
-                      changeTab(newTab);
-                    }}
-                    disabled={activeTab === 0}
-                  >
-                    <ChevronLeft size={16} className="mr-1" /> Previous
-                  </button>
-                  <button 
-                    className="flex items-center px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded"
-                    onClick={() => {
-                      const newTab = Math.min(StatTrackingTab.Level, activeTab + 1);
-                      changeTab(newTab);
-                    }}
-                    disabled={activeTab === StatTrackingTab.Level}
-                  >
-                    Next <ChevronRight size={16} className="ml-1" />
-                  </button>
-                </div>
+                {/* Navigation buttons for tabs - only show if there are multiple tabs */}
+                {availableTabs.length > 1 && (
+                  <div className="flex justify-between mt-4">
+                    <button 
+                      className="flex items-center px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded"
+                      onClick={() => {
+                        const currentIndex = availableTabs.findIndex(tabInfo => tabInfo.tab === activeTab);
+                        const prevIndex = Math.max(0, currentIndex - 1);
+                        changeTab(availableTabs[prevIndex].tab);
+                      }}
+                      disabled={availableTabs.findIndex(tabInfo => tabInfo.tab === activeTab) === 0}
+                    >
+                      <ChevronLeft size={16} className="mr-1" /> Previous
+                    </button>
+                    <button 
+                      className="flex items-center px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded"
+                      onClick={() => {
+                        const currentIndex = availableTabs.findIndex(tabInfo => tabInfo.tab === activeTab);
+                        const nextIndex = Math.min(availableTabs.length - 1, currentIndex + 1);
+                        changeTab(availableTabs[nextIndex].tab);
+                      }}
+                      disabled={availableTabs.findIndex(tabInfo => tabInfo.tab === activeTab) === availableTabs.length - 1}
+                    >
+                      Next <ChevronRight size={16} className="ml-1" />
+                    </button>
+                  </div>
+                )}
               </div>
               
-              {/* Current totals summary */}
+              {/* Enhanced totals summary - only show enabled stats */}
               <div className="mt-6 p-4 bg-gray-700/50 rounded-lg">
-                <h4 className="font-semibold mb-2">All Stats This Round</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                  <div>
-                    <div className="flex items-center text-blue-300">
-                      <Swords size={16} className="mr-2" /> Total Kills
-                    </div>
-                    <div className="text-xl">
-                      {Object.values(playerStats).reduce((sum, stats) => sum + (stats.kills || 0), 0)}
-                    </div>
+                <h4 className="font-semibold mb-2">Stats Being Tracked This Round</h4>
+                
+                {/* Show stats only if at least one is enabled */}
+                {Object.values(enabledStats).some(Boolean) ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {enabledStats.kills && (
+                      <div>
+                        <div className="flex items-center text-blue-300">
+                          <Swords size={16} className="mr-2" /> Total Kills
+                        </div>
+                        <div className="text-xl">
+                          {Object.values(playerStats).reduce((sum, stats) => sum + (stats.kills || 0), 0)}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {enabledStats.deaths && (
+                      <div>
+                        <div className="flex items-center text-red-300">
+                          <Skull size={16} className="mr-2" /> Total Deaths
+                        </div>
+                        <div className="text-xl">
+                          {Object.values(playerStats).reduce((sum, stats) => sum + (stats.deaths || 0), 0)}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {enabledStats.assists && (
+                      <div>
+                        <div className="flex items-center text-purple-300">
+                          <Users size={16} className="mr-2" /> Total Assists
+                        </div>
+                        <div className="text-xl">
+                          {Object.values(playerStats).reduce((sum, stats) => sum + (stats.assists || 0), 0)}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {enabledStats.goldEarned && (
+                      <div>
+                        <div className="flex items-center text-yellow-300">
+                          <Coins size={16} className="mr-2" /> Gold Collected
+                        </div>
+                        <div className="text-xl">
+                          {Object.values(playerStats).reduce((sum, stats) => sum + (stats.goldCollected || 0), 0)}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {enabledStats.minionKills && (
+                      <div>
+                        <div className="flex items-center text-green-300">
+                          <Bot size={16} className="mr-2" /> Minion Kills
+                        </div>
+                        <div className="text-xl">
+                          {Object.values(playerStats).reduce((sum, stats) => sum + (stats.minionKills || 0), 0)}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {enabledStats.level && (
+                      <div>
+                        <div className="flex items-center text-indigo-300">
+                          <Shield size={16} className="mr-2" /> Levels
+                        </div>
+                        <div className="text-sm">
+                          {players.map(player => `${player.name}: ${playerStats[player.id]?.level || 1}`).join(', ')}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <div className="flex items-center text-red-300">
-                      <Skull size={16} className="mr-2" /> Total Deaths
-                    </div>
-                    <div className="text-xl">
-                      {Object.values(playerStats).reduce((sum, stats) => sum + (stats.deaths || 0), 0)}
-                    </div>
+                ) : (
+                  <div className="text-center py-4 text-gray-400">
+                    <p>No statistics will be tracked this round.</p>
+                    <p className="text-sm">Enable stat categories above to begin tracking.</p>
                   </div>
-                  <div>
-                    <div className="flex items-center text-green-300">
-                      <Bot size={16} className="mr-2" /> Minion Kills
-                    </div>
-                    <div className="text-xl">
-                      {Object.values(playerStats).reduce((sum, stats) => sum + (stats.minionKills || 0), 0)}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center text-yellow-300">
-                      <Coins size={16} className="mr-2" /> Gold Collected
-                    </div>
-                    <div className="text-xl">
-                      {Object.values(playerStats).reduce((sum, stats) => sum + (stats.goldCollected || 0), 0)}
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           )}
@@ -1091,5 +1232,32 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
     </div>
   );
 };
+
+// StatToggle component for individual stat category controls
+interface StatToggleProps {
+  icon: React.ReactNode;
+  label: string;
+  enabled: boolean;
+  onChange: (enabled: boolean) => void;
+}
+
+const StatToggle: React.FC<StatToggleProps> = ({ icon, label, enabled, onChange }) => (
+  <div 
+    className={`flex items-center p-2 rounded cursor-pointer transition-colors ${
+      enabled ? 'bg-blue-900/30 border border-blue-500/50' : 'bg-gray-600 border border-gray-500'
+    }`} 
+    onClick={() => onChange(!enabled)}
+  >
+    <div className={`mr-2 ${enabled ? 'text-blue-400' : 'text-gray-400'}`}>
+      {icon}
+    </div>
+    <span className={`text-sm flex-grow ${enabled ? 'text-blue-200' : 'text-gray-400'}`}>
+      {label}
+    </span>
+    <div className="ml-auto">
+      <div className={`w-4 h-4 rounded-full ${enabled ? 'bg-blue-500' : 'bg-gray-500'}`} />
+    </div>
+  </div>
+);
 
 export default EndOfRoundAssistant;

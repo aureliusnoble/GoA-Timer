@@ -73,7 +73,8 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
         deaths: player.stats?.totalDeaths,
         assists: player.stats?.totalAssists,
         goldEarned: player.stats?.totalGoldEarned,
-        minionKills: player.stats?.totalMinionKills
+        minionKills: player.stats?.totalMinionKills,
+        level: player.stats?.level
       }));
       
       // Save match data

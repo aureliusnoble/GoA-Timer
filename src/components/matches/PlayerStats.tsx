@@ -1,6 +1,6 @@
 // src/components/matches/PlayerStats.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, Search, TrendingUp, Users, Swords, Info, Trophy, Medal, Hexagon, Camera, X, HelpCircle } from 'lucide-react';
+import { ChevronLeft, Search, TrendingUp, Users, Swords, Info, Trophy, Medal, Hexagon, Camera, X, HelpCircle, User } from 'lucide-react';
 import { DBPlayer } from '../../services/DatabaseService';
 import dbService, { getDisplayRating } from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
@@ -11,6 +11,7 @@ import html2canvas from 'html2canvas';
 interface PlayerStatsProps {
   onBack: () => void;
   onViewSkillOverTime: () => void;
+  onViewPlayerDetails: (playerId: string) => void;
 }
 
 interface PlayerWithStats extends DBPlayer {
@@ -280,7 +281,7 @@ const RankDisplay: React.FC<{ rank: number; skill: number }> = ({ rank, skill })
   );
 };
 
-const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime }) => {
+const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, onViewPlayerDetails }) => {
   const { playSound } = useSound();
   const [players, setPlayers] = useState<PlayerWithStats[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -796,6 +797,19 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime }
                           <div className="text-sm text-gray-500 italic">No roles data</div>
                         )}
                       </div>
+                      
+                      {/* View Details Button */}
+                      <button
+                        onClick={() => {
+                          playSound('buttonClick');
+                          onViewPlayerDetails(player.id);
+                        }}
+                        className="w-full mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-500 
+                                   rounded-lg flex items-center justify-center transition-colors"
+                      >
+                        <User size={18} className="mr-2" />
+                        <span>View Details</span>
+                      </button>
                     </div>
                   </div>
                 );

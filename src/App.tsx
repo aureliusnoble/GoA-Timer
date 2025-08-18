@@ -11,6 +11,7 @@ import AudioInitializer from './components/common/AudioInitializer';
 import VictoryScreen from './components/VictoryScreen';
 import ResumeGamePrompt from './components/common/ResumeGamePrompt';
 import { gameStorageService } from './services/GameStorageService';
+import migrationService from './services/MigrationService';
 import { SoundProvider, useSound } from './context/SoundContext';
 import { ConnectionProvider } from './context/ConnectionContext'; // Import ConnectionProvider
 import { PlayerRoundStats } from './components/EndOfRoundAssistant';
@@ -32,6 +33,7 @@ import SkillOverTime from './components/matches/SkillOverTime';
 // Import match statistics components
 import MatchesMenu, { MatchesView } from './components/matches/MatchesMenu';
 import PlayerStatsScreen from './components/matches/PlayerStats';
+import DetailedPlayerStats from './components/matches/DetailedPlayerStats';
 import MatchHistory from './components/matches/MatchHistory';
 import MatchMaker from './components/matches/MatchMaker';
 import HeroStats from './components/matches/HeroStats';
@@ -449,6 +451,7 @@ function AppContent() {
   // NEW: Match statistics states
   const [showMatchStatistics, setShowMatchStatistics] = useState<boolean>(false);
   const [currentMatchView, setCurrentMatchView] = useState<MatchesView>('menu');
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   
   // NEW: Save/resume game state
   const [showResumePrompt, setShowResumePrompt] = useState<boolean>(false);
@@ -512,10 +515,15 @@ function AppContent() {
     showVictoryScreen
   ]);
 
-  // NEW: Check for saved game on component mount
+  // App initialization: run migration and check for saved game
   useEffect(() => {
-    const checkForSavedGame = async () => {
+    const initializeApp = async () => {
       try {
+        // Run migrations silently in background
+        const migrationResult = await migrationService.runMigrations();
+        console.log('🔄 Migration completed:', migrationResult);
+        
+        // Continue with saved game check
         const savedGame = await gameStorageService.loadGame();
         
         if (savedGame) {
@@ -534,13 +542,14 @@ function AppContent() {
           setShowResumePrompt(true);
         }
       } catch (error) {
-        console.error('Error checking for saved game:', error);
+        console.error('App initialization error:', error);
+        // App continues normally even if initialization fails
       }
     };
     
-    // Only check for saved game if we're not already in a game
+    // Only run initialization if we're not already in a game
     if (!gameStarted && !isDraftingMode) {
-      checkForSavedGame();
+      initializeApp();
     }
   }, [gameStarted, isDraftingMode]);
 
@@ -631,21 +640,14 @@ const addPlayer = (team: Team) => {
     }
   }
   
-  // Initialize player with default stats including level
+  // Initialize player without stats (only created when EndOfRoundAssistant logging enabled)
   const newPlayer: Player = {
     id: localPlayers.length + 1,
     team,
     hero: null,
     lane,
     name: '', // Initialize with empty name
-    stats: {
-      totalGoldEarned: 0,
-      totalKills: 0,
-      totalAssists: 0,
-      totalDeaths: 0,
-      totalMinionKills: 0,
-      level: 1 // Initialize with level 1
-    }
+    // stats will be undefined initially - only created when tracking is enabled
   };
   
   setLocalPlayers([...localPlayers, newPlayer]);
@@ -1317,17 +1319,11 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
   // Calculate total player count
   const playerCount = playersToUse.length;
   
-  // IMPORTANT FIX: Reset player stats for the new game while preserving levels
+  // IMPORTANT FIX: Reset player stats for the new game while preserving only level
   const playersWithResetStats = playersToUse.map(player => ({
     ...player,
-    stats: {
-      totalGoldEarned: 0,
-      totalKills: 0,
-      totalAssists: 0,
-      totalDeaths: 0,
-      totalMinionKills: 0,
-      level: player.stats?.level || 1 // Preserve existing level or set default
-    }
+    // Only preserve level if it exists, otherwise no stats object
+    stats: player.stats?.level ? { level: player.stats.level } : undefined
   }));
   
   // Update local players with reset stats
@@ -1549,16 +1545,35 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
   const updatedPlayers = localPlayers.map(player => {
     const playerRoundStats = roundStats[player.id];
     
-    if (playerRoundStats) {
-      // Calculate updated totals
-      const updatedStats: PlayerStats = {
-        totalGoldEarned: (player.stats?.totalGoldEarned || 0) + playerRoundStats.goldCollected,
-        totalKills: (player.stats?.totalKills || 0) + playerRoundStats.kills,
-        totalAssists: (player.stats?.totalAssists || 0) + playerRoundStats.assists,
-        totalDeaths: (player.stats?.totalDeaths || 0) + playerRoundStats.deaths,
-        totalMinionKills: (player.stats?.totalMinionKills || 0) + playerRoundStats.minionKills,
-        level: playerRoundStats.level // Update the player level if provided
-      };
+    if (playerRoundStats && 
+        ((playerRoundStats.kills ?? 0) > 0 || (playerRoundStats.deaths ?? 0) > 0 || 
+         (playerRoundStats.assists ?? 0) > 0 || (playerRoundStats.goldCollected ?? 0) > 0 || 
+         (playerRoundStats.minionKills ?? 0) > 0 || playerRoundStats.level)) {
+      
+      // Only create/update stats object if there's actual data to track
+      const updatedStats: PlayerStats = {};
+      
+      // Only set fields that have meaningful values
+      if ((playerRoundStats.kills ?? 0) > 0 || player.stats?.totalKills) {
+        updatedStats.totalKills = (player.stats?.totalKills || 0) + (playerRoundStats.kills ?? 0);
+      }
+      if ((playerRoundStats.deaths ?? 0) > 0 || player.stats?.totalDeaths) {
+        updatedStats.totalDeaths = (player.stats?.totalDeaths || 0) + (playerRoundStats.deaths ?? 0);
+      }
+      if ((playerRoundStats.assists ?? 0) > 0 || player.stats?.totalAssists) {
+        updatedStats.totalAssists = (player.stats?.totalAssists || 0) + (playerRoundStats.assists ?? 0);
+      }
+      if ((playerRoundStats.goldCollected ?? 0) > 0 || player.stats?.totalGoldEarned) {
+        updatedStats.totalGoldEarned = (player.stats?.totalGoldEarned || 0) + (playerRoundStats.goldCollected ?? 0);
+      }
+      if ((playerRoundStats.minionKills ?? 0) > 0 || player.stats?.totalMinionKills) {
+        updatedStats.totalMinionKills = (player.stats?.totalMinionKills || 0) + (playerRoundStats.minionKills ?? 0);
+      }
+      if (playerRoundStats.level) {
+        updatedStats.level = playerRoundStats.level;
+      } else if (player.stats?.level) {
+        updatedStats.level = player.stats.level;
+      }
       
       return {
         ...player,
@@ -1720,6 +1735,19 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
   <PlayerStatsScreen 
     onBack={() => handleMatchStatisticsNavigate('menu')}
     onViewSkillOverTime={() => handleMatchStatisticsNavigate('skill-over-time')}
+    onViewPlayerDetails={(playerId: string) => {
+      setSelectedPlayerId(playerId);
+      handleMatchStatisticsNavigate('detailed-player-stats');
+    }}
+  />
+)}
+{currentMatchView === 'detailed-player-stats' && selectedPlayerId && (
+  <DetailedPlayerStats 
+    playerId={selectedPlayerId}
+    onBack={() => {
+      setSelectedPlayerId(null);
+      handleMatchStatisticsNavigate('player-stats');
+    }}
   />
 )}
     {currentMatchView === 'hero-stats' && (
@@ -1758,13 +1786,7 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
             team: Team.Titans,
             hero: null,
             name,
-            stats: {
-              totalGoldEarned: 0,
-              totalKills: 0,
-              totalAssists: 0,
-              totalDeaths: 0,
-              totalMinionKills: 0
-            }
+            // No initial stats - will be created when EndOfRoundAssistant logging enabled
           }));
           
           // Then add the Atlanteans with continuing IDs
@@ -1773,13 +1795,7 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
             team: Team.Atlanteans,
             hero: null,
             name,
-            stats: {
-              totalGoldEarned: 0,
-              totalKills: 0,
-              totalAssists: 0,
-              totalDeaths: 0,
-              totalMinionKills: 0
-            }
+            // No initial stats - will be created when EndOfRoundAssistant logging enabled
           }));
           
           // Combine both teams

@@ -1726,6 +1726,23 @@ class DatabaseService {
     const matches = await this.getAllMatches();
     return matches.length > 0;
   }
+
+  /**
+   * Update a specific match player record
+   */
+  async updateMatchPlayer(matchPlayerId: string, updates: Partial<DBMatchPlayer>): Promise<void> {
+    if (!this.db) await this.initialize();
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const transaction = this.db.transaction(['matchPlayers'], 'readwrite');
+    const store = transaction.objectStore('matchPlayers');
+    
+    const existingRecord = await store.get(matchPlayerId);
+    if (existingRecord) {
+      const updatedRecord = { ...existingRecord, ...updates };
+      await store.put(updatedRecord);
+    }
+  }
 }
 
 // Export a singleton instance

@@ -123,11 +123,11 @@ const GameTimer: React.FC<GameTimerProps> = ({
   const hasAnyPlayerLoggedStats = (): boolean => {
     return players.some(player => 
       player.stats && (
-        player.stats.totalKills > 0 ||
-        player.stats.totalAssists > 0 ||
-        player.stats.totalDeaths > 0 ||
-        player.stats.totalMinionKills > 0 ||
-        player.stats.totalGoldEarned > 0 ||
+        (player.stats.totalKills ?? 0) > 0 ||
+        (player.stats.totalAssists ?? 0) > 0 ||
+        (player.stats.totalDeaths ?? 0) > 0 ||
+        (player.stats.totalMinionKills ?? 0) > 0 ||
+        (player.stats.totalGoldEarned ?? 0) > 0 ||
         player.stats.level !== undefined
       )
     );
@@ -139,7 +139,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
       player.stats && 
       (statName === 'level' 
         ? player.stats[statName] !== undefined 
-        : player.stats[statName] > 0)
+        : (player.stats[statName] ?? 0) > 0)
     );
   };
 
@@ -670,11 +670,11 @@ const GameTimer: React.FC<GameTimerProps> = ({
     
     // Check if this player has any stats
     const playerHasStats = player.stats && (
-      player.stats.totalKills > 0 ||
-      player.stats.totalAssists > 0 ||
-      player.stats.totalDeaths > 0 ||
-      player.stats.totalMinionKills > 0 ||
-      player.stats.totalGoldEarned > 0 ||
+      (player.stats.totalKills ?? 0) > 0 ||
+      (player.stats.totalAssists ?? 0) > 0 ||
+      (player.stats.totalDeaths ?? 0) > 0 ||
+      (player.stats.totalMinionKills ?? 0) > 0 ||
+      (player.stats.totalGoldEarned ?? 0) > 0 ||
       player.stats.level !== undefined
     );
     

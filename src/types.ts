@@ -41,12 +41,13 @@ export interface Hero {
 }
 
 // New interface for player statistics - Updated to include level
+// All fields are optional - only set when actually tracked
 export interface PlayerStats {
-  totalGoldEarned: number;
-  totalKills: number;
-  totalAssists: number;
-  totalDeaths: number;
-  totalMinionKills: number;
+  totalGoldEarned?: number;
+  totalKills?: number;
+  totalAssists?: number;
+  totalDeaths?: number;
+  totalMinionKills?: number;
   level?: number; // New field to track player level
 }
 

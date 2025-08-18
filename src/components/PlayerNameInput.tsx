@@ -33,7 +33,6 @@ const PlayerNameInput: React.FC<PlayerNameInputProps> = ({
   const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([]);
   const [showInvalidWarning, setShowInvalidWarning] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const [isSelecting, setIsSelecting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const warningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suggestionListId = useId();
@@ -54,8 +53,7 @@ const PlayerNameInput: React.FC<PlayerNameInputProps> = ({
   useEffect(() => {
     if (inputValue.trim()) {
       const filtered = suggestedNames.filter(name => 
-        name.toLowerCase().includes(inputValue.toLowerCase()) && 
-        name.toLowerCase() !== inputValue.toLowerCase()
+        name.toLowerCase().includes(inputValue.toLowerCase())
       );
       setFilteredSuggestions(filtered.slice(0, 5)); // Limit to 5 suggestions
       // Reset highlighted index when suggestions change
@@ -99,25 +97,21 @@ const PlayerNameInput: React.FC<PlayerNameInputProps> = ({
     }
   };
   
-  // Handle blur event - fixed to prevent race condition with selection
+  // Handle blur event - simplified approach
   const handleBlur = () => {
-    // Don't interfere if user is actively selecting
-    if (isSelecting) return;
-    
-    // Allow time for mouse clicks on suggestions
+    // Hide suggestions and commit current value
+    // Use setTimeout to allow suggestion clicks to complete first
     setTimeout(() => {
-      if (!isSelecting) {
-        setShowSuggestions(false);
-        setHighlightedIndex(-1);
-        
-        // Only trim/update if not from selection
-        const trimmedValue = inputValue.trim();
-        if (trimmedValue !== inputValue) {
-          setInputValue(trimmedValue);
-          onNameChange(trimmedValue);
-        }
+      setShowSuggestions(false);
+      setHighlightedIndex(-1);
+      
+      // Commit the current input value (trimmed)
+      const trimmedValue = inputValue.trim();
+      if (trimmedValue !== inputValue) {
+        setInputValue(trimmedValue);
       }
-    }, 150);
+      onNameChange(trimmedValue);
+    }, 200); // Slightly longer delay to ensure clicks complete
   };
   
   // Handle focus event
@@ -149,7 +143,16 @@ const PlayerNameInput: React.FC<PlayerNameInputProps> = ({
       case 'Enter':
         e.preventDefault();
         if (highlightedIndex >= 0 && highlightedIndex < filteredSuggestions.length) {
+          // User selected a suggestion with Enter
           handleSelectSuggestion(filteredSuggestions[highlightedIndex], 'keyboard');
+        } else {
+          // User pressed Enter on a new name - commit the current value
+          const trimmedValue = inputValue.trim();
+          setInputValue(trimmedValue);
+          onNameChange(trimmedValue);
+          setShowSuggestions(false);
+          setHighlightedIndex(-1);
+          inputRef.current?.blur();
         }
         break;
         
@@ -170,19 +173,19 @@ const PlayerNameInput: React.FC<PlayerNameInputProps> = ({
     }
   };
 
-  // Handle selection of a suggested name - enhanced to prevent blur override
-  const handleSelectSuggestion = (name: string, _method: 'mouse' | 'keyboard' = 'mouse') => {
-    setIsSelecting(true);
+  // Handle selection of a suggested name - simplified
+  const handleSelectSuggestion = (name: string, method: 'mouse' | 'keyboard' = 'mouse') => {
+    // Immediately commit the selected name
     setInputValue(name);
     onNameChange(name);
     setShowSuggestions(false);
     setHighlightedIndex(-1);
     playSound('buttonClick');
     
-    // Clear selection flag after React updates
-    setTimeout(() => {
-      setIsSelecting(false);
-    }, 0);
+    // For keyboard selection, blur the input to complete the selection
+    if (method === 'keyboard') {
+      inputRef.current?.blur();
+    }
   };
   
   // Handle remove button click
@@ -209,8 +212,14 @@ const PlayerNameInput: React.FC<PlayerNameInputProps> = ({
           ? 'border-red-500 bg-red-900/20' 
           : showInvalidWarning
             ? 'border-amber-500 bg-amber-900/20'
-            : 'border-gray-600 bg-gray-800'
-        } rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500`}>
+            : player.team === Team.Titans
+              ? 'border-blue-600 bg-blue-900/30'
+              : 'border-red-600 bg-red-900/30'
+        } rounded-lg overflow-hidden focus-within:ring-2 ${
+          player.team === Team.Titans 
+            ? 'focus-within:ring-blue-500' 
+            : 'focus-within:ring-red-500'
+        }`}>
         <input
           ref={inputRef}
           type="text"
@@ -233,8 +242,8 @@ const PlayerNameInput: React.FC<PlayerNameInputProps> = ({
           placeholder="Player name"
           className={`px-3 py-2 flex-grow bg-transparent outline-none text-sm ${
             player.team === Team.Titans 
-              ? 'text-blue-300' 
-              : 'text-red-300'
+              ? 'text-blue-100 placeholder-blue-300' 
+              : 'text-red-100 placeholder-red-300'
           }`}
         />
         
@@ -289,7 +298,11 @@ const PlayerNameInput: React.FC<PlayerNameInputProps> = ({
               id={`${suggestionListId}-option-${index}`}
               role="option"
               aria-selected={index === highlightedIndex}
-              onClick={() => handleSelectSuggestion(suggestion, 'mouse')}
+              onMouseDown={(e) => {
+                // Prevent input from losing focus when clicking suggestion
+                e.preventDefault();
+                handleSelectSuggestion(suggestion, 'mouse');
+              }}
               onMouseEnter={() => setHighlightedIndex(index)}
               className={`px-4 py-2 cursor-pointer text-sm min-h-[44px] flex items-center ${
                 index === highlightedIndex

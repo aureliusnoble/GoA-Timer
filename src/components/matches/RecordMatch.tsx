@@ -241,21 +241,9 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
       }
     }
     
-    // Logical validation - only if stats are enabled and it's a long game
-    const hasAnyEnabledStats = Object.values(enabledStats).some(Boolean);
-    if (hasAnyEnabledStats && gameLength === GameLength.Long) {
-      const hasAnyActivity = (
-        (enabledStats.kills && (stats.kills ?? 0) > 0) ||
-        (enabledStats.deaths && (stats.deaths ?? 0) > 0) ||
-        (enabledStats.assists && (stats.assists ?? 0) > 0) ||
-        (enabledStats.goldEarned && (stats.goldEarned ?? 0) > 0) ||
-        (enabledStats.minionKills && (stats.minionKills ?? 0) > 0)
-      );
-      
-      if (!hasAnyActivity) {
-        errors.push('At least some activity expected for long games');
-      }
-    }
+    // Note: Zero values are legitimate for all stats - individual range validation above
+    // ensures values are within appropriate bounds (e.g., kills 0-50, deaths 0-20, etc.)
+    // No additional "activity" validation needed as players may legitimately have zeros
     
     return errors;
   };
