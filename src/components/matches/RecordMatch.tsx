@@ -1,6 +1,6 @@
 // src/components/matches/RecordMatch.tsx
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Calendar, Shield, Users, Check, HelpCircle, Plus, Save, ArrowDown, ArrowUp } from 'lucide-react';
+import { ChevronLeft, Calendar, Shield, Users, Check, HelpCircle, Plus, Save, ArrowDown, ArrowUp, Minus, Sword, Heart, HandHelping, Coins, Target, Star, Database } from 'lucide-react';
 import { Team, GameLength, Hero } from '../../types';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
@@ -11,6 +11,26 @@ interface RecordMatchProps {
   onBack: () => void;
 }
 
+// Define player statistics structure - all fields optional for selective tracking
+interface PlayerStats {
+  kills?: number;
+  deaths?: number;
+  assists?: number;
+  goldEarned?: number;
+  minionKills?: number;
+  level?: number;
+}
+
+// Define which stat categories can be tracked
+interface StatCategories {
+  kills: boolean;
+  deaths: boolean;
+  assists: boolean;
+  goldEarned: boolean;
+  minionKills: boolean;
+  level: boolean;
+}
+
 // Define the player entry structure for the form
 interface PlayerEntry {
   id: string; // Player name as ID
@@ -19,6 +39,7 @@ interface PlayerEntry {
   heroId: number | null;
   heroName: string;
   heroRoles: string[];
+  stats?: PlayerStats; // Optional detailed statistics
 }
 
 const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
@@ -55,11 +76,27 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
     maxPlayers?: string;
     heroDuplicates?: string;
     teamBalance?: string;
+    stats?: string;
   }>({});
   
   // Track duplicate player names and hero IDs
   const [duplicatePlayerNames, setDuplicatePlayerNames] = useState<string[]>([]);
   const [duplicateHeroIds, setDuplicateHeroIds] = useState<number[]>([]);
+  
+  // Detailed stats mode
+  const [detailedMode, setDetailedMode] = useState<boolean>(false);
+  const [playerStats, setPlayerStats] = useState<Map<number, PlayerStats>>(new Map());
+  const [statsErrors, setStatsErrors] = useState<Map<number, string[]>>(new Map());
+  
+  // Stat category toggles - default all to false (N/A)
+  const [enabledStats, setEnabledStats] = useState<StatCategories>({
+    kills: false,
+    deaths: false,
+    assists: false,
+    goldEarned: false,
+    minionKills: false,
+    level: false
+  });
   
   // Load player names from database on component mount
   const [existingPlayerNames, setExistingPlayerNames] = useState<string[]>([]);
@@ -89,6 +126,183 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
     onBack();
   };
   
+  // Initialize default stats for a player based on enabled categories
+  const initializePlayerStats = (): PlayerStats => {
+    const stats: PlayerStats = {};
+    
+    // Only set values for enabled stat categories
+    if (enabledStats.kills) stats.kills = 0;
+    if (enabledStats.deaths) stats.deaths = 0;
+    if (enabledStats.assists) stats.assists = 0;
+    if (enabledStats.goldEarned) stats.goldEarned = 0;
+    if (enabledStats.minionKills) stats.minionKills = 0;
+    if (enabledStats.level) stats.level = 1;
+    
+    return stats;
+  };
+  
+  // Toggle a stat category on/off
+  const handleStatCategoryToggle = (category: keyof StatCategories) => {
+    playSound('buttonClick');
+    const newEnabledStats = { ...enabledStats, [category]: !enabledStats[category] };
+    setEnabledStats(newEnabledStats);
+    
+    // Update all player stats when toggling categories
+    if (detailedMode) {
+      const updatedPlayerStats = new Map<number, PlayerStats>();
+      
+      players.forEach((_, index) => {
+        const currentStats = playerStats.get(index) || {};
+        const newStats: PlayerStats = {};
+        
+        // Preserve existing values for enabled stats, clear disabled ones
+        if (newEnabledStats.kills) {
+          newStats.kills = currentStats.kills ?? 0;
+        }
+        if (newEnabledStats.deaths) {
+          newStats.deaths = currentStats.deaths ?? 0;
+        }
+        if (newEnabledStats.assists) {
+          newStats.assists = currentStats.assists ?? 0;
+        }
+        if (newEnabledStats.goldEarned) {
+          newStats.goldEarned = currentStats.goldEarned ?? 0;
+        }
+        if (newEnabledStats.minionKills) {
+          newStats.minionKills = currentStats.minionKills ?? 0;
+        }
+        if (newEnabledStats.level) {
+          newStats.level = currentStats.level ?? 1;
+        }
+        
+        updatedPlayerStats.set(index, newStats);
+      });
+      
+      setPlayerStats(updatedPlayerStats);
+      
+      // Clear any validation errors when toggling
+      setStatsErrors(new Map());
+    }
+  };
+  
+  // Handle mode toggle between basic and detailed recording
+  const handleModeToggle = () => {
+    playSound('buttonClick');
+    setDetailedMode(!detailedMode);
+    
+    // Initialize stats for all players when entering detailed mode
+    if (!detailedMode) {
+      const newPlayerStats = new Map<number, PlayerStats>();
+      players.forEach((_, index) => {
+        newPlayerStats.set(index, initializePlayerStats());
+      });
+      setPlayerStats(newPlayerStats);
+    }
+  };
+  
+  // Validate player statistics - only check enabled stats
+  const validatePlayerStats = (_playerIndex: number, stats: PlayerStats): string[] => {
+    const errors: string[] = [];
+    
+    // Only validate enabled stats
+    if (enabledStats.kills && stats.kills !== undefined) {
+      if (stats.kills < 0 || stats.kills > 50) {
+        errors.push('Kills must be between 0 and 50');
+      }
+    }
+    
+    if (enabledStats.deaths && stats.deaths !== undefined) {
+      if (stats.deaths < 0 || stats.deaths > 20) {
+        errors.push('Deaths must be between 0 and 20');
+      }
+    }
+    
+    if (enabledStats.assists && stats.assists !== undefined) {
+      if (stats.assists < 0 || stats.assists > 100) {
+        errors.push('Assists must be between 0 and 100');
+      }
+    }
+    
+    if (enabledStats.goldEarned && stats.goldEarned !== undefined) {
+      if (stats.goldEarned < 0 || stats.goldEarned > 10000) {
+        errors.push('Gold earned must be between 0 and 10,000');
+      }
+    }
+    
+    if (enabledStats.minionKills && stats.minionKills !== undefined) {
+      if (stats.minionKills < 0 || stats.minionKills > 200) {
+        errors.push('Minion kills must be between 0 and 200');
+      }
+    }
+    
+    if (enabledStats.level && stats.level !== undefined) {
+      if (stats.level < 1 || stats.level > 8) {
+        errors.push('Level must be between 1 and 8');
+      }
+    }
+    
+    // Logical validation - only if stats are enabled and it's a long game
+    const hasAnyEnabledStats = Object.values(enabledStats).some(Boolean);
+    if (hasAnyEnabledStats && gameLength === GameLength.Long) {
+      const hasAnyActivity = (
+        (enabledStats.kills && (stats.kills ?? 0) > 0) ||
+        (enabledStats.deaths && (stats.deaths ?? 0) > 0) ||
+        (enabledStats.assists && (stats.assists ?? 0) > 0) ||
+        (enabledStats.goldEarned && (stats.goldEarned ?? 0) > 0) ||
+        (enabledStats.minionKills && (stats.minionKills ?? 0) > 0)
+      );
+      
+      if (!hasAnyActivity) {
+        errors.push('At least some activity expected for long games');
+      }
+    }
+    
+    return errors;
+  };
+  
+  // Update player statistics with validation
+  const handlePlayerStatsChange = (playerIndex: number, newStats: PlayerStats) => {
+    const updatedStats = new Map(playerStats);
+    updatedStats.set(playerIndex, newStats);
+    setPlayerStats(updatedStats);
+    
+    // Validate the new stats
+    const validationErrors = validatePlayerStats(playerIndex, newStats);
+    const updatedErrors = new Map(statsErrors);
+    
+    if (validationErrors.length > 0) {
+      updatedErrors.set(playerIndex, validationErrors);
+    } else {
+      updatedErrors.delete(playerIndex);
+    }
+    
+    setStatsErrors(updatedErrors);
+  };
+  
+  // Reset stats for a specific player
+  const handleResetPlayerStats = (playerIndex: number) => {
+    playSound('buttonClick');
+    const updatedStats = new Map(playerStats);
+    updatedStats.set(playerIndex, initializePlayerStats());
+    setPlayerStats(updatedStats);
+    
+    // Clear any errors for this player
+    const updatedErrors = new Map(statsErrors);
+    updatedErrors.delete(playerIndex);
+    setStatsErrors(updatedErrors);
+  };
+  
+  // Reset all player stats
+  const handleResetAllStats = () => {
+    playSound('buttonClick');
+    const newPlayerStats = new Map<number, PlayerStats>();
+    players.forEach((_, index) => {
+      newPlayerStats.set(index, initializePlayerStats());
+    });
+    setPlayerStats(newPlayerStats);
+    setStatsErrors(new Map());
+  };
+  
   // Add a new player to the form
   const handleAddPlayer = (team: Team) => {
     // Don't add more than 10 players
@@ -111,7 +325,16 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
       heroRoles: []
     };
     
+    const newPlayerIndex = players.length;
     setPlayers([...players, newPlayer]);
+    
+    // Initialize stats for new player if in detailed mode
+    if (detailedMode) {
+      const updatedStats = new Map(playerStats);
+      updatedStats.set(newPlayerIndex, initializePlayerStats());
+      setPlayerStats(updatedStats);
+    }
+    
     setFormErrors({ 
       ...formErrors, 
       players: undefined,
@@ -126,6 +349,25 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
     const updatedPlayers = [...players];
     updatedPlayers.splice(playerId, 1);
     setPlayers(updatedPlayers);
+    
+    // Clean up stats and errors for removed player and reindex remaining players
+    if (detailedMode) {
+      const newPlayerStats = new Map<number, PlayerStats>();
+      const newStatsErrors = new Map<number, string[]>();
+      
+      updatedPlayers.forEach((_, newIndex) => {
+        const oldIndex = newIndex >= playerId ? newIndex + 1 : newIndex;
+        if (playerStats.has(oldIndex)) {
+          newPlayerStats.set(newIndex, playerStats.get(oldIndex)!);
+        }
+        if (statsErrors.has(oldIndex)) {
+          newStatsErrors.set(newIndex, statsErrors.get(oldIndex)!);
+        }
+      });
+      
+      setPlayerStats(newPlayerStats);
+      setStatsErrors(newStatsErrors);
+    }
     
     // Re-check for duplicates after removing a player
     checkForDuplicates(updatedPlayers);
@@ -236,6 +478,7 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
       maxPlayers?: string;
       heroDuplicates?: string;
       teamBalance?: string;
+      stats?: string;
     } = {};
     
     // Check if date is valid
@@ -303,6 +546,28 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
       errors.heroDuplicates = `Duplicate heroes selected: ${duplicateHeroNames.join(', ')}`;
     }
     
+    // Validate detailed stats if in detailed mode
+    if (detailedMode) {
+      let hasStatsErrors = false;
+      const newStatsErrors = new Map<number, string[]>();
+      
+      players.forEach((_, index) => {
+        const stats = playerStats.get(index);
+        if (stats) {
+          const validationErrors = validatePlayerStats(index, stats);
+          if (validationErrors.length > 0) {
+            newStatsErrors.set(index, validationErrors);
+            hasStatsErrors = true;
+          }
+        }
+      });
+      
+      if (hasStatsErrors) {
+        errors.stats = 'Please fix player statistics errors before submitting';
+        setStatsErrors(newStatsErrors);
+      }
+    }
+    
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -329,19 +594,41 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
       };
       
       // Create player data array
-      const playerData = players.map(player => ({
-        id: player.id,
-        team: player.team,
-        heroId: player.heroId!,
-        heroName: player.heroName,
-        heroRoles: player.heroRoles,
-        // Default values for stats since this is a manual entry
-        kills: 0,
-        deaths: 0,
-        assists: 0,
-        goldEarned: 0,
-        minionKills: 0
-      }));
+      const playerData = players.map((player, index) => {
+        const baseData = {
+          id: player.id,
+          team: player.team,
+          heroId: player.heroId!,
+          heroName: player.heroName,
+          heroRoles: player.heroRoles,
+        };
+        
+        if (detailedMode && playerStats.has(index)) {
+          // Use detailed statistics if available, only for enabled stats
+          const stats = playerStats.get(index)!;
+          return {
+            ...baseData,
+            // Only include enabled stats, others remain undefined (null in DB)
+            kills: enabledStats.kills ? stats.kills : undefined,
+            deaths: enabledStats.deaths ? stats.deaths : undefined,
+            assists: enabledStats.assists ? stats.assists : undefined,
+            goldEarned: enabledStats.goldEarned ? stats.goldEarned : undefined,
+            minionKills: enabledStats.minionKills ? stats.minionKills : undefined,
+            level: enabledStats.level ? stats.level : undefined
+          };
+        }
+        
+        // Default values for basic mode (all stats N/A)
+        return {
+          ...baseData,
+          kills: undefined,
+          deaths: undefined,
+          assists: undefined,
+          goldEarned: undefined,
+          minionKills: undefined,
+          level: undefined
+        };
+      });
       
       // Record the match to the database - THIS WAS MISSING!
       await dbService.recordMatch(matchData, playerData);
@@ -623,6 +910,9 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
           {formErrors.maxPlayers && (
             <div className="text-red-400 text-sm mt-2">{formErrors.maxPlayers}</div>
           )}
+          {formErrors.stats && (
+            <div className="text-red-400 text-sm mt-2">{formErrors.stats}</div>
+          )}
           
           {/* Team Counts with Validation Indicators */}
           {players.length > 0 && (
@@ -658,6 +948,170 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
             </div>
           )}
         </div>
+        
+        {/* Recording Mode Toggle */}
+        <div className="bg-gray-700 rounded-lg p-4">
+          <h3 className="text-lg font-semibold mb-4 flex items-center">
+            <Database size={18} className="mr-2 text-green-400" />
+            Recording Mode
+          </h3>
+          
+          <div className="flex flex-col sm:flex-row gap-4">
+            <button
+              onClick={handleModeToggle}
+              className={`flex-1 p-4 rounded-lg border-2 transition-all ${
+                !detailedMode
+                  ? 'border-blue-500 bg-blue-900/50'
+                  : 'border-gray-600 bg-gray-800 hover:bg-gray-700'
+              }`}
+            >
+              <div className="text-left">
+                <div className="font-medium text-lg mb-1">Basic Recording</div>
+                <div className="text-sm text-gray-300">
+                  Record match results with player names, heroes, and winner only
+                </div>
+              </div>
+            </button>
+            
+            <button
+              onClick={handleModeToggle}
+              className={`flex-1 p-4 rounded-lg border-2 transition-all ${
+                detailedMode
+                  ? 'border-green-500 bg-green-900/50'
+                  : 'border-gray-600 bg-gray-800 hover:bg-gray-700'
+              }`}
+            >
+              <div className="text-left">
+                <div className="font-medium text-lg mb-1">Detailed Recording</div>
+                <div className="text-sm text-gray-300">
+                  Record complete player statistics: kills, deaths, assists, gold, level
+                </div>
+              </div>
+            </button>
+          </div>
+          
+          {detailedMode && (
+            <div className="mt-3 p-3 bg-green-900/20 border border-green-500/30 rounded-lg">
+              <p className="text-sm text-green-200 flex items-center">
+                <HelpCircle size={16} className="mr-2" />
+                Detailed mode allows you to record comprehensive player statistics for more accurate match analysis.
+              </p>
+            </div>
+          )}
+        </div>
+        
+        {/* Player Statistics Section - only show in detailed mode */}
+        {detailedMode && (
+          <div className="bg-gray-700 rounded-lg p-4">
+            <h3 className="text-lg font-semibold mb-4 flex items-center">
+              <Users size={18} className="mr-2 text-green-400" />
+              Player Statistics
+            </h3>
+            
+            {/* Stat Category Selection */}
+            <div className="mb-6 p-4 bg-gray-800/50 rounded-lg border border-gray-600">
+              <h4 className="text-sm font-medium text-gray-300 mb-3 flex items-center">
+                <Check size={16} className="mr-2" />
+                Select Statistics to Track
+              </h4>
+              
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <label className="flex items-center space-x-2 cursor-pointer hover:bg-gray-700/50 p-2 rounded">
+                  <input
+                    type="checkbox"
+                    checked={enabledStats.kills}
+                    onChange={() => handleStatCategoryToggle('kills')}
+                    className="form-checkbox h-4 w-4 text-red-600 bg-gray-800 border-gray-600 rounded focus:ring-red-500"
+                  />
+                  <span className="text-sm flex items-center">
+                    <Sword size={14} className="mr-1" />
+                    Kills
+                  </span>
+                </label>
+                
+                <label className="flex items-center space-x-2 cursor-pointer hover:bg-gray-700/50 p-2 rounded">
+                  <input
+                    type="checkbox"
+                    checked={enabledStats.deaths}
+                    onChange={() => handleStatCategoryToggle('deaths')}
+                    className="form-checkbox h-4 w-4 text-red-600 bg-gray-800 border-gray-600 rounded focus:ring-red-500"
+                  />
+                  <span className="text-sm flex items-center">
+                    <Heart size={14} className="mr-1" />
+                    Deaths
+                  </span>
+                </label>
+                
+                <label className="flex items-center space-x-2 cursor-pointer hover:bg-gray-700/50 p-2 rounded">
+                  <input
+                    type="checkbox"
+                    checked={enabledStats.assists}
+                    onChange={() => handleStatCategoryToggle('assists')}
+                    className="form-checkbox h-4 w-4 text-blue-600 bg-gray-800 border-gray-600 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-sm flex items-center">
+                    <HandHelping size={14} className="mr-1" />
+                    Assists
+                  </span>
+                </label>
+                
+                <label className="flex items-center space-x-2 cursor-pointer hover:bg-gray-700/50 p-2 rounded">
+                  <input
+                    type="checkbox"
+                    checked={enabledStats.goldEarned}
+                    onChange={() => handleStatCategoryToggle('goldEarned')}
+                    className="form-checkbox h-4 w-4 text-yellow-600 bg-gray-800 border-gray-600 rounded focus:ring-yellow-500"
+                  />
+                  <span className="text-sm flex items-center">
+                    <Coins size={14} className="mr-1" />
+                    Gold
+                  </span>
+                </label>
+                
+                <label className="flex items-center space-x-2 cursor-pointer hover:bg-gray-700/50 p-2 rounded">
+                  <input
+                    type="checkbox"
+                    checked={enabledStats.minionKills}
+                    onChange={() => handleStatCategoryToggle('minionKills')}
+                    className="form-checkbox h-4 w-4 text-green-600 bg-gray-800 border-gray-600 rounded focus:ring-green-500"
+                  />
+                  <span className="text-sm flex items-center">
+                    <Target size={14} className="mr-1" />
+                    Minions
+                  </span>
+                </label>
+                
+                <label className="flex items-center space-x-2 cursor-pointer hover:bg-gray-700/50 p-2 rounded">
+                  <input
+                    type="checkbox"
+                    checked={enabledStats.level}
+                    onChange={() => handleStatCategoryToggle('level')}
+                    className="form-checkbox h-4 w-4 text-purple-600 bg-gray-800 border-gray-600 rounded focus:ring-purple-500"
+                  />
+                  <span className="text-sm flex items-center">
+                    <Star size={14} className="mr-1" />
+                    Level
+                  </span>
+                </label>
+              </div>
+              
+              {/* Helper text */}
+              <p className="text-xs text-gray-400 mt-3">
+                💡 Only checked statistics will be tracked.
+              </p>
+            </div>
+            
+            <TeamStatsContainer
+              players={players}
+              playerStats={playerStats}
+              statsErrors={statsErrors}
+              enabledStats={enabledStats}
+              onStatsChange={handlePlayerStatsChange}
+              onResetPlayerStats={handleResetPlayerStats}
+              onResetAllStats={handleResetAllStats}
+            />
+          </div>
+        )}
         
         {/* Winner Section */}
         <div className="bg-gray-700 rounded-lg p-4">
@@ -911,5 +1365,372 @@ const X: React.FC<{ size: number }> = ({ size }) => (
     <path d="m6 6 12 12"></path>
   </svg>
 );
+
+// TeamStatsContainer Component - Container for team-based stats organization
+interface TeamStatsContainerProps {
+  players: PlayerEntry[];
+  playerStats: Map<number, PlayerStats>;
+  statsErrors: Map<number, string[]>;
+  enabledStats: StatCategories;
+  onStatsChange: (playerIndex: number, stats: PlayerStats) => void;
+  onResetPlayerStats?: (playerIndex: number) => void;
+  onResetAllStats?: () => void;
+}
+
+const TeamStatsContainer: React.FC<TeamStatsContainerProps> = ({
+  players,
+  playerStats,
+  statsErrors,
+  enabledStats,
+  onStatsChange,
+  onResetPlayerStats,
+  onResetAllStats
+}) => {
+  const titanPlayers = players
+    .map((player, index) => ({ player, index }))
+    .filter(({ player }) => player.team === Team.Titans);
+    
+  const atlanteanPlayers = players
+    .map((player, index) => ({ player, index }))
+    .filter(({ player }) => player.team === Team.Atlanteans);
+  
+  return (
+    <div className="space-y-6">
+      {/* Reset All Button - show only if there are players */}
+      {players.length > 0 && onResetAllStats && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={onResetAllStats}
+            className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg flex items-center text-sm transition-colors"
+          >
+            <Minus size={16} className="mr-2" />
+            Reset All Stats
+          </button>
+        </div>
+      )}
+      {/* Titans Team */}
+      {titanPlayers.length > 0 && (
+        <div className="space-y-4">
+          <h4 className="text-lg font-medium flex items-center text-blue-300">
+            <Shield size={18} className="mr-2" />
+            Titans ({titanPlayers.length} players)
+          </h4>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {titanPlayers.map(({ player, index }) => (
+              <PlayerStatsCard
+                key={index}
+                player={player}
+                playerIndex={index}
+                stats={playerStats.get(index)}
+                errors={statsErrors.get(index)}
+                enabledStats={enabledStats}
+                onStatsChange={(stats) => onStatsChange(index, stats)}
+                onResetStats={onResetPlayerStats}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+      
+      {/* Atlanteans Team */}
+      {atlanteanPlayers.length > 0 && (
+        <div className="space-y-4">
+          <h4 className="text-lg font-medium flex items-center text-red-300">
+            <Shield size={18} className="mr-2" />
+            Atlanteans ({atlanteanPlayers.length} players)
+          </h4>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {atlanteanPlayers.map(({ player, index }) => (
+              <PlayerStatsCard
+                key={index}
+                player={player}
+                playerIndex={index}
+                stats={playerStats.get(index)}
+                errors={statsErrors.get(index)}
+                enabledStats={enabledStats}
+                onStatsChange={(stats) => onStatsChange(index, stats)}
+                onResetStats={onResetPlayerStats}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+      
+      {/* Empty State */}
+      {players.length === 0 && (
+        <div className="text-center text-gray-400 py-8">
+          <Users size={48} className="mx-auto mb-3 opacity-50" />
+          <p>Add players to both teams to enter statistics</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// PlayerStatsCard Component - Individual player statistics entry card
+interface PlayerStatsCardProps {
+  player: PlayerEntry;
+  playerIndex: number;
+  onStatsChange: (stats: PlayerStats) => void;
+  stats?: PlayerStats;
+  errors?: string[];
+  enabledStats: StatCategories;
+  onResetStats?: (playerIndex: number) => void;
+}
+
+const PlayerStatsCard: React.FC<PlayerStatsCardProps> = ({ 
+  player, 
+  playerIndex, 
+  onStatsChange, 
+  stats,
+  errors = [],
+  enabledStats,
+  onResetStats 
+}) => {
+  const currentStats = stats || {};
+  
+  const handleStatChange = (statKey: keyof PlayerStats, value: number) => {
+    const newStats = { ...currentStats, [statKey]: value };
+    onStatsChange(newStats);
+  };
+  
+  // Check if any stats are enabled
+  const hasEnabledStats = Object.values(enabledStats).some(Boolean);
+  
+  // Count how many stats are enabled for grid columns
+  const enabledStatsCount = Object.values(enabledStats).filter(Boolean).length;
+  
+  const teamColorClass = player.team === Team.Titans ? 'border-blue-500' : 'border-red-500';
+  const teamBgClass = player.team === Team.Titans ? 'bg-blue-900/20' : 'bg-red-900/20';
+  
+  return (
+    <div className={`bg-gray-800 rounded-lg p-4 border-2 ${teamColorClass} ${teamBgClass}`}>
+      {/* Player Header */}
+      <div className="flex items-center mb-4 pb-3 border-b border-gray-600">
+        <div className="flex-1">
+          <div className="font-medium text-lg">{player.name || 'Unnamed Player'}</div>
+          <div className="text-sm text-gray-300 flex items-center">
+            <Shield size={14} className="mr-1" />
+            {player.heroName || 'No Hero Selected'}
+          </div>
+        </div>
+        
+        <div className="flex items-center space-x-2">
+          {onResetStats && (
+            <button
+              type="button"
+              onClick={() => onResetStats(playerIndex)}
+              className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white rounded text-xs flex items-center transition-colors"
+              title="Reset this player's stats"
+            >
+              <Minus size={12} className="mr-1" />
+              Reset
+            </button>
+          )}
+          
+          {errors.length > 0 && (
+            <div className="text-red-400 text-sm" title={errors.join(', ')}>
+              <HelpCircle size={16} />
+            </div>
+          )}
+        </div>
+      </div>
+      
+      {/* Statistics Grid - Dynamic layout based on enabled stats */}
+      {hasEnabledStats ? (
+        <div className={`grid gap-4 ${enabledStatsCount <= 3 ? `grid-cols-${enabledStatsCount}` : 'grid-cols-3'}`}>
+          {enabledStats.kills && (
+            <StatInputControl
+              label="Kills"
+              value={currentStats.kills ?? 0}
+              onChange={(value) => handleStatChange('kills', value)}
+              min={0}
+              max={50}
+              enabled={true}
+              icon={<Sword size={14} />}
+            />
+          )}
+          
+          {enabledStats.deaths && (
+            <StatInputControl
+              label="Deaths"
+              value={currentStats.deaths ?? 0}
+              onChange={(value) => handleStatChange('deaths', value)}
+              min={0}
+              max={20}
+              enabled={true}
+              icon={<Heart size={14} />}
+            />
+          )}
+          
+          {enabledStats.assists && (
+            <StatInputControl
+              label="Assists"
+              value={currentStats.assists ?? 0}
+              onChange={(value) => handleStatChange('assists', value)}
+              min={0}
+              max={100}
+              enabled={true}
+              icon={<HandHelping size={14} />}
+            />
+          )}
+          
+          {enabledStats.goldEarned && (
+            <StatInputControl
+              label="Gold"
+              value={currentStats.goldEarned ?? 0}
+              onChange={(value) => handleStatChange('goldEarned', value)}
+              min={0}
+              max={10000}
+              enabled={true}
+              icon={<Coins size={14} />}
+            />
+          )}
+          
+          {enabledStats.minionKills && (
+            <StatInputControl
+              label="Minions"
+              value={currentStats.minionKills ?? 0}
+              onChange={(value) => handleStatChange('minionKills', value)}
+              min={0}
+              max={200}
+              enabled={true}
+              icon={<Target size={14} />}
+            />
+          )}
+          
+          {enabledStats.level && (
+            <StatInputControl
+              label="Level"
+              value={currentStats.level ?? 1}
+              onChange={(value) => handleStatChange('level', value)}
+              min={1}
+              max={8}
+              enabled={true}
+              icon={<Star size={14} />}
+            />
+          )}
+        </div>
+      ) : (
+        <div className="text-center p-6 border border-dashed border-gray-600 rounded-lg text-gray-400">
+          <p className="text-sm">No statistics selected for tracking</p>
+          <p className="text-xs mt-1">Enable stat categories above to start recording</p>
+        </div>
+      )}
+      
+      {/* Error Messages */}
+      {errors.length > 0 && (
+        <div className="mt-3 space-y-1">
+          {errors.map((error, index) => (
+            <div key={index} className="text-red-400 text-xs flex items-center">
+              <HelpCircle size={12} className="mr-1" />
+              {error}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// StatInputControl Component - Individual stat entry control based on EndOfRoundAssistant patterns
+interface StatInputControlProps {
+  label: string;
+  value?: number;
+  onChange: (value: number) => void;
+  min?: number;
+  max?: number;
+  disabled?: boolean;
+  icon?: React.ReactNode;
+  enabled?: boolean; // Whether this stat category is enabled for tracking
+}
+
+const StatInputControl: React.FC<StatInputControlProps> = ({ 
+  label, 
+  value, 
+  onChange, 
+  min = 0, 
+  max = 999, 
+  disabled = false,
+  icon,
+  enabled = true
+}) => {
+  const actualValue = value ?? 0;
+  
+  const handleIncrement = () => {
+    if (actualValue < max) {
+      onChange(actualValue + 1);
+    }
+  };
+  
+  const handleDecrement = () => {
+    if (actualValue > min) {
+      onChange(actualValue - 1);
+    }
+  };
+  
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = parseInt(e.target.value) || 0;
+    if (newValue >= min && newValue <= max) {
+      onChange(newValue);
+    }
+  };
+  
+  // If stat category is not enabled, show N/A state
+  if (!enabled) {
+    return (
+      <div className="flex flex-col items-center space-y-2">
+        <div className="flex items-center text-sm text-gray-500">
+          {icon && <span className="mr-1 opacity-50">{icon}</span>}
+          <span>{label}</span>
+        </div>
+        
+        <div className="flex items-center justify-center w-16 h-8 bg-gray-800 border border-gray-600 rounded-lg text-gray-500 text-sm">
+          N/A
+        </div>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="flex flex-col items-center space-y-2">
+      <div className="flex items-center text-sm text-gray-300">
+        {icon && <span className="mr-1">{icon}</span>}
+        <span>{label}</span>
+      </div>
+      
+      <div className="flex items-center space-x-2">
+        <button
+          type="button"
+          onClick={handleDecrement}
+          disabled={disabled || actualValue <= min}
+          className="w-8 h-8 rounded-full bg-gray-600 hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+        >
+          <Minus size={14} />
+        </button>
+        
+        <input
+          type="number"
+          value={actualValue}
+          onChange={handleInputChange}
+          disabled={disabled}
+          min={min}
+          max={max}
+          className="w-16 h-8 text-center bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
+        />
+        
+        <button
+          type="button"
+          onClick={handleIncrement}
+          disabled={disabled || actualValue >= max}
+          className="w-8 h-8 rounded-full bg-gray-600 hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+        >
+          <Plus size={14} />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 export default RecordMatch;
