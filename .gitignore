@@ -1,2 +1,5 @@
 node_modules/
 dist
+claude/
+CLAUDE.md
+Issues.md
