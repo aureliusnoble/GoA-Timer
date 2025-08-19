@@ -6,7 +6,9 @@ import { getRoleTooltip } from '../../../shared/utils/roleDescriptions';
 
 interface HeroPerformanceProps {
   favoriteHeroes: { heroId: number; heroName: string; count: number }[];
+  allHeroesPlayed: { heroId: number; heroName: string; count: number }[];
   favoriteRoles: { role: string; count: number }[];
+  allRolesPlayed: { role: string; count: number }[];
   totalGames: number;
   matches: any[]; // DBMatchPlayer[] - Player's match participation data
 }
@@ -20,7 +22,9 @@ interface HeroStats {
 
 const HeroPerformance: React.FC<HeroPerformanceProps> = ({
   favoriteHeroes,
+  allHeroesPlayed,
   favoriteRoles,
+  allRolesPlayed: _allRolesPlayed,
   totalGames,
   matches
 }) => {
@@ -259,13 +263,13 @@ const HeroPerformance: React.FC<HeroPerformanceProps> = ({
             Hero Diversity
           </h4>
           <div className="text-2xl font-bold text-blue-400 mb-1">
-            {favoriteHeroes.length}
+            {allHeroesPlayed.length}
           </div>
           <div className="text-sm text-gray-400">
             Different heroes played
           </div>
           <div className="mt-2 text-xs text-gray-500">
-            {totalGames > 0 ? `Avg ${(totalGames / favoriteHeroes.length).toFixed(1)} games per hero` : 'No data'}
+            {totalGames > 0 && allHeroesPlayed.length > 0 ? `Avg ${(totalGames / allHeroesPlayed.length).toFixed(1)} games per hero` : 'No data'}
           </div>
         </div>
 

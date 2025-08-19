@@ -1086,11 +1086,13 @@ class DatabaseService {
   async getPlayerStats(playerId: string): Promise<{
     player: DBPlayer | null;
     favoriteHeroes: { heroId: number, heroName: string, count: number }[];
+    allHeroesPlayed: { heroId: number, heroName: string, count: number }[];
     favoriteRoles: { role: string, count: number }[];
+    allRolesPlayed: { role: string, count: number }[];
     matchesPlayed: DBMatchPlayer[];
   }> {
     const player = await this.getPlayer(playerId);
-    if (!player) return { player: null, favoriteHeroes: [], favoriteRoles: [], matchesPlayed: [] };
+    if (!player) return { player: null, favoriteHeroes: [], allHeroesPlayed: [], favoriteRoles: [], allRolesPlayed: [], matchesPlayed: [] };
     
     const matchesPlayed = await this.getPlayerMatches(playerId);
     
@@ -1114,6 +1116,9 @@ class DatabaseService {
     const favoriteHeroes = Array.from(heroesMap.values())
       .sort((a, b) => b.count - a.count)
       .slice(0, 3);
+
+    const allHeroesPlayed = Array.from(heroesMap.values())
+      .sort((a, b) => b.count - a.count);
     
     // Calculate favorite roles
     const rolesMap = new Map<string, { role: string, count: number }>();
@@ -1136,11 +1141,16 @@ class DatabaseService {
     const favoriteRoles = Array.from(rolesMap.values())
       .sort((a, b) => b.count - a.count)
       .slice(0, 3);
+
+    const allRolesPlayed = Array.from(rolesMap.values())
+      .sort((a, b) => b.count - a.count);
     
     return {
       player,
       favoriteHeroes,
+      allHeroesPlayed,
       favoriteRoles,
+      allRolesPlayed,
       matchesPlayed
     };
   }

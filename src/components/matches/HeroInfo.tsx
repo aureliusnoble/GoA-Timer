@@ -411,6 +411,13 @@ const HeroInfo: React.FC<HeroInfoProps> = ({ onBack }) => {
         </EnhancedTooltip>
       </div>
       
+      {/* Credits Section */}
+      <div className="mb-4 p-3 bg-gray-700/30 rounded-lg text-xs text-gray-400 border-t border-gray-600">
+        <p className="text-center leading-relaxed">
+          Many thanks to the various authors of Hero Guide's on BoardGameGeek who's work aided in the creation of this page, notably: <span className="text-gray-300">Mad_Mike</span> and <span className="text-gray-300">TheTomTraveller</span>, but also <span className="text-gray-300">CCplusplus</span>, <span className="text-gray-300">Eric_McClain</span>, <span className="text-gray-300">Drakonis1</span>, <span className="text-gray-300">bcsj</span>, <span className="text-gray-300">Deiflex</span>, <span className="text-gray-300">Ramsar</span>, <span className="text-gray-300">GoatRogan</span>, and <span className="text-gray-300">NullEnvoy</span>.
+        </p>
+      </div>
+      
       {/* Search and Filter Bar */}
       <div className="bg-gray-700 rounded-lg p-4 mb-6 no-screenshot">
         <div className="flex flex-col md:flex-row gap-4 items-stretch">
@@ -715,6 +722,7 @@ const HeroInfo: React.FC<HeroInfoProps> = ({ onBack }) => {
         </div>
         <p className="mt-2"><strong>Upgrade Potential:</strong> Light blue segments show stats that can be improved through upgrades.</p>
       </div>
+      
     </div>
   );
 };

@@ -297,7 +297,7 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
             <div className="text-sm text-gray-400">Win Rate</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-yellow-400">{stats.favoriteHeroes.length}</div>
+            <div className="text-2xl font-bold text-yellow-400">{stats.allHeroesPlayed.length}</div>
             <div className="text-sm text-gray-400">Heroes Played</div>
           </div>
         </div>
@@ -337,7 +337,9 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
       {/* Hero Performance Analytics */}
       <HeroPerformance
         favoriteHeroes={stats.favoriteHeroes}
+        allHeroesPlayed={stats.allHeroesPlayed}
         favoriteRoles={stats.favoriteRoles}
+        allRolesPlayed={stats.allRolesPlayed}
         totalGames={player.totalGames}
         matches={playerDetails.matches}
       />
