@@ -37,10 +37,10 @@ const getPositionCategory = (playerRating: number, allRatings: number[]) => {
 };
 
 const getTrendCategory = (recentSlope: number) => {
-  if (recentSlope > 10) return { category: 'Rapidly Improving', color: 'text-green-500' };
-  if (recentSlope > 2) return { category: 'Improving', color: 'text-green-400' };
-  if (recentSlope > -2) return { category: 'Stable', color: 'text-blue-400' };
-  if (recentSlope > -10) return { category: 'Declining', color: 'text-orange-400' };
+  if (recentSlope > 20) return { category: 'Rapidly Improving', color: 'text-green-500' };
+  if (recentSlope > 5) return { category: 'Improving', color: 'text-green-400' };
+  if (recentSlope > -5) return { category: 'Stable', color: 'text-blue-400' };
+  if (recentSlope > -20) return { category: 'Declining', color: 'text-orange-400' };
   return { category: 'Rapidly Declining', color: 'text-red-400' };
 };
 
