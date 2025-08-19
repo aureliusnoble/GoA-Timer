@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Calendar, Users, Shield, Swords, Star, Hexagon, ChevronLeft, ChevronRight } from 'lucide-react';
 import dbService, { DBMatch, DBMatchPlayer } from '../../../services/DatabaseService';
 import { getRoleTooltip } from '../../../shared/utils/roleDescriptions';
+import EnhancedTooltip from '../../common/EnhancedTooltip';
 
 interface MatchHistoryProps {
   playerId: string;
@@ -90,24 +91,42 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ playerId }) => {
 
   // Get role icon with tooltip
   const getRoleIcon = (role: string | undefined) => {
-    if (!role) return <span title="Unknown role"><Hexagon size={16} className="text-gray-400" /></span>;
+    if (!role) {
+      return (
+        <EnhancedTooltip text="Unknown role" position="top" maxWidth="max-w-sm">
+          <Hexagon size={16} className="text-gray-400" />
+        </EnhancedTooltip>
+      );
+    }
     
     const tooltip = getRoleTooltip(role);
+    let iconComponent;
     
     switch (role.toLowerCase()) {
       case 'guardian':
       case 'durable':
-        return <span title={tooltip}><Shield size={16} className="text-blue-400" /></span>;
+        iconComponent = <Shield size={16} className="text-blue-400" />;
+        break;
       case 'slayer':
       case 'tactician':
-        return <span title={tooltip}><Swords size={16} className="text-red-400" /></span>;
+        iconComponent = <Swords size={16} className="text-red-400" />;
+        break;
       case 'support':
-        return <span title={tooltip}><Users size={16} className="text-green-400" /></span>;
+        iconComponent = <Users size={16} className="text-green-400" />;
+        break;
       case 'sorcerer':
-        return <span title={tooltip}><Star size={16} className="text-purple-400" /></span>;
+        iconComponent = <Star size={16} className="text-purple-400" />;
+        break;
       default:
-        return <span title={tooltip}><Hexagon size={16} className="text-gray-400" /></span>;
+        iconComponent = <Hexagon size={16} className="text-gray-400" />;
+        break;
     }
+    
+    return (
+      <EnhancedTooltip text={tooltip} position="top" maxWidth="max-w-sm">
+        {iconComponent}
+      </EnhancedTooltip>
+    );
   };
 
 

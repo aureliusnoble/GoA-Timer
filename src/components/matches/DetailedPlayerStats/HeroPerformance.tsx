@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Shield, Swords, Users, Star, TrendingUp, Hexagon } from 'lucide-react';
 import dbService from '../../../services/DatabaseService';
 import { getRoleTooltip } from '../../../shared/utils/roleDescriptions';
+import EnhancedTooltip from '../../common/EnhancedTooltip';
 
 interface HeroPerformanceProps {
   favoriteHeroes: { heroId: number; heroName: string; count: number }[];
@@ -100,21 +101,19 @@ const HeroPerformance: React.FC<HeroPerformanceProps> = ({
 
   // Get role icon with tooltip
   const getRoleIcon = (role: string) => {
-    const tooltip = getRoleTooltip(role);
-    
     switch (role.toLowerCase()) {
       case 'guardian':
       case 'durable':
-        return <span title={tooltip}><Shield size={16} className="text-blue-400" /></span>;
+        return <Shield size={16} className="text-blue-400" />;
       case 'slayer':
       case 'tactician':
-        return <span title={tooltip}><Swords size={16} className="text-red-400" /></span>;
+        return <Swords size={16} className="text-red-400" />;
       case 'support':
-        return <span title={tooltip}><Users size={16} className="text-green-400" /></span>;
+        return <Users size={16} className="text-green-400" />;
       case 'sorcerer':
-        return <span title={tooltip}><Star size={16} className="text-purple-400" /></span>;
+        return <Star size={16} className="text-purple-400" />;
       default:
-        return <span title={tooltip}><Hexagon size={16} className="text-gray-400" /></span>;
+        return <Hexagon size={16} className="text-gray-400" />;
     }
   };
 
@@ -232,12 +231,18 @@ const HeroPerformance: React.FC<HeroPerformanceProps> = ({
             return (
               <div key={role.role} className="bg-gray-800 p-3 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center">
-                    {getRoleIcon(role.role)}
-                    <span className={`ml-2 font-medium ${getRoleColor(role.role)}`} title={getRoleTooltip(role.role)}>
-                      {role.role}
-                    </span>
-                  </div>
+                  <EnhancedTooltip 
+                    text={getRoleTooltip(role.role)}
+                    position="top"
+                    maxWidth="max-w-sm"
+                  >
+                    <div className="flex items-center cursor-help">
+                      {getRoleIcon(role.role)}
+                      <span className={`ml-2 font-medium ${getRoleColor(role.role)}`}>
+                        {role.role}
+                      </span>
+                    </div>
+                  </EnhancedTooltip>
                 </div>
                 <div className="text-lg font-bold text-white">{role.count}</div>
                 <div className="text-xs text-gray-400 mb-2">
