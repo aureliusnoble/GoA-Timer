@@ -539,7 +539,7 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
             <Info size={16} className="mr-2 text-blue-400 mt-0.5 flex-shrink-0" />
             <div>
               <p className="mb-2">
-                Match data is stored locally on this device using your browser's storage.
+                Match data is stored locally on this device using your browser's storage. It is recommended you back up your data locally with Export Data (in case your browser's storage gets cleared).
               </p>
               <p>
                 Use direct data sharing, or manually import and export data to transfer
