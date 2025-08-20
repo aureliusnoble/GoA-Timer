@@ -29,9 +29,11 @@ interface GameTimerProps {
   moveTimerActive: boolean;
   onStartStrategyTimer: () => void;
   onPauseStrategyTimer: () => void;
+  onResetStrategyTimer: () => void;
   onEndStrategyPhase: () => void;
   onStartMoveTimer: () => void;
   onPauseMoveTimer: () => void;
+  onResetMoveTimer: () => void;
   onSelectPlayer: (playerIndex: number) => void;
   onCompletePlayerTurn: () => void;
   onStartNextTurn: () => void;
@@ -57,9 +59,11 @@ const GameTimer: React.FC<GameTimerProps> = ({
   moveTimerActive,
   onStartStrategyTimer,
   onPauseStrategyTimer,
+  onResetStrategyTimer,
   onEndStrategyPhase,
   onStartMoveTimer,
   onPauseMoveTimer,
+  onResetMoveTimer,
   onSelectPlayer,
   onCompletePlayerTurn,
   onStartNextTurn,
@@ -171,6 +175,16 @@ const GameTimer: React.FC<GameTimerProps> = ({
   const handlePauseMoveTimer = () => {
     playSound('buttonClick');
     onPauseMoveTimer();
+  };
+  
+  const handleResetStrategyTimer = () => {
+    playSound('buttonClick');
+    onResetStrategyTimer();
+  };
+  
+  const handleResetMoveTimer = () => {
+    playSound('buttonClick');
+    onResetMoveTimer();
   };
   
   const handleCompletePlayerTurn = () => {
@@ -519,6 +533,17 @@ const GameTimer: React.FC<GameTimerProps> = ({
                 )
               )}
               
+              {/* Only show reset button if timer is enabled */}
+              {strategyTimerEnabled && (
+                <button 
+                  className="bg-gray-600 hover:bg-gray-500 px-6 py-3 rounded-lg text-white font-medium flex items-center"
+                  onClick={handleResetStrategyTimer}
+                >
+                  <RotateCcw size={18} className="mr-2" />
+                  Reset Timer
+                </button>
+              )}
+              
               {/* Always show End Strategy Phase button */}
               <button 
                 className="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-lg text-white font-medium"
@@ -598,6 +623,17 @@ const GameTimer: React.FC<GameTimerProps> = ({
                           Resume
                         </button>
                       )
+                    )}
+                    
+                    {/* Only show reset button if timer is enabled */}
+                    {moveTimerEnabled && (
+                      <button 
+                        className="bg-gray-600 hover:bg-gray-500 px-6 py-3 rounded-lg text-white font-medium flex items-center"
+                        onClick={handleResetMoveTimer}
+                      >
+                        <RotateCcw size={18} className="mr-2" />
+                        Reset Timer
+                      </button>
                     )}
                     
                     {/* Always show Complete Turn button */}

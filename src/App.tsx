@@ -1417,6 +1417,18 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
     dispatch({ type: 'END_STRATEGY' });
   };
 
+  // Reset strategy timer to original duration
+  const resetStrategyTimer = () => {
+    playSound('buttonClick');
+    setStrategyTimeRemaining(strategyTime);
+  };
+
+  // Reset move timer to original duration  
+  const resetMoveTimer = () => {
+    playSound('buttonClick');
+    setMoveTimeRemaining(moveTime);
+  };
+
   // Adjust team life counter
   const adjustTeamLife = (team: Team, delta: number) => {
     playSound('lifeChange');
@@ -1886,9 +1898,11 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
           moveTimerActive={moveTimerActive}
           onStartStrategyTimer={() => setStrategyTimerActive(true)}
           onPauseStrategyTimer={() => setStrategyTimerActive(false)}
+          onResetStrategyTimer={resetStrategyTimer}
           onEndStrategyPhase={endStrategyPhase}
           onStartMoveTimer={() => setMoveTimerActive(true)}
           onPauseMoveTimer={() => setMoveTimerActive(false)}
+          onResetMoveTimer={resetMoveTimer}
           onSelectPlayer={selectPlayer}
           onCompletePlayerTurn={completePlayerTurn}
           onStartNextTurn={startNextTurn}
