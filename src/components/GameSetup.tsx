@@ -665,7 +665,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
   </div>
       
      <p className="mt-4 text-xs text-gray-300 text-center mb-2">
-        Disclaimer: This is not an official product and has not been approved by Wolff Designa. All game content is the sole property of Wolff Designa.
+        Disclaimer: This is not a professional product and it is always recommended you back up your data (View Matches&gt;Export Data). This is not an official product and has not been approved by Wolff Designa. All game content is the sole property of Wolff Designa. 
       </p>
     </div>
   );
