@@ -1,8 +1,9 @@
 // src/components/matches/MatchesMenu.tsx - Updated to include Hero Info
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Users, History, Shield, Download, Upload, Trash2, Info, AlertTriangle, Shuffle, FileText, Share2, Wifi, File, Book } from 'lucide-react';
+import { ChevronLeft, Users, History, Shield, Download, Upload, Trash2, Info, AlertTriangle, Shuffle, FileText, Share2, Wifi, File, Book, UserCheck } from 'lucide-react';
 import EnhancedTooltip from '../common/EnhancedTooltip';
 import { ConnectionModal } from '../common/ConnectionModal';
+import { EditPlayerDataModal } from './EditPlayerDataModal';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
 import { useConnection } from '../../context/ConnectionContext';
@@ -27,16 +28,32 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
   const [showImportOptions, setShowImportOptions] = useState<boolean>(false);
   const [importMode, setImportMode] = useState<'replace' | 'merge'>('replace');
   
+  // State for Edit Player Data modal
+  const [showEditPlayerModal, setShowEditPlayerModal] = useState<boolean>(false);
+  const [hasZeroGamePlayers, setHasZeroGamePlayers] = useState<boolean>(false);
+  
   
   // Check if we have any match data
   const checkForMatchData = async () => {
     const hasMatchData = await dbService.hasMatchData();
     setHasData(hasMatchData);
   };
+
+  // Check if there are players with zero games
+  const checkForZeroGamePlayers = async () => {
+    try {
+      const zeroGamePlayers = await dbService.getPlayersWithNoGames();
+      setHasZeroGamePlayers(zeroGamePlayers.length > 0);
+    } catch (error) {
+      console.error('Error checking for zero-game players:', error);
+      setHasZeroGamePlayers(false);
+    }
+  };
   
-  // Check if we have any match data on component mount
+  // Check data on component mount
   useEffect(() => {
     checkForMatchData();
+    checkForZeroGamePlayers();
   }, []);
   
   // Handle menu navigation with sound
@@ -66,6 +83,23 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
   const handleDataReceived = () => {
     console.log("Data received, refreshing match data status");
     checkForMatchData();
+  };
+
+  // Handle opening Edit Player Data modal
+  const handleOpenEditPlayerModal = () => {
+    playSound('buttonClick');
+    setShowEditPlayerModal(true);
+  };
+
+  // Handle closing Edit Player Data modal
+  const handleCloseEditPlayerModal = () => {
+    setShowEditPlayerModal(false);
+  };
+
+  // Handle player deletion - refresh zero game players state
+  const handlePlayerDeleted = () => {
+    checkForZeroGamePlayers();
+    checkForMatchData(); // Also refresh match data in case all players were deleted
   };
   
   // Handle exporting match data
@@ -505,6 +539,19 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
                     </button>
                   </EnhancedTooltip>
                   
+                  {/* Edit Player Data Button - Only show if there are players with 0 games */}
+                  {hasZeroGamePlayers && (
+                    <EnhancedTooltip text="Manage players with no recorded matches. You can view their data and delete them if needed.">
+                      <button
+                        onClick={handleOpenEditPlayerModal}
+                        className="px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded-lg flex items-center"
+                      >
+                        <UserCheck size={18} className="mr-2" />
+                        <span>Edit Player Data</span>
+                      </button>
+                    </EnhancedTooltip>
+                  )}
+                  
                   {/* Delete Data Button */}
                   <EnhancedTooltip text="Delete all match statistics data permanently">
                     <button
@@ -555,6 +602,13 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
         isOpen={showConnectionModal}
         onClose={handleCloseConnectionModal}
         onDataReceived={handleDataReceived}
+      />
+      
+      {/* Edit Player Data Modal */}
+      <EditPlayerDataModal
+        isOpen={showEditPlayerModal}
+        onClose={handleCloseEditPlayerModal}
+        onPlayerDeleted={handlePlayerDeleted}
       />
       
     </div>

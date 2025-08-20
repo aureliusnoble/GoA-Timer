@@ -1753,6 +1753,68 @@ class DatabaseService {
       await store.put(updatedRecord);
     }
   }
+
+  /**
+   * Get players with zero games recorded
+   */
+  async getPlayersWithNoGames(): Promise<DBPlayer[]> {
+    if (!this.db) await this.initialize();
+    if (!this.db) return [];
+
+    const allPlayers = await this.getAllPlayers();
+    return allPlayers.filter(player => player.totalGames === 0);
+  }
+
+  /**
+   * Delete a player by ID (only if they have no recorded matches)
+   * Returns true if successfully deleted, false otherwise
+   */
+  async deletePlayer(playerId: string): Promise<boolean> {
+    if (!this.db) await this.initialize();
+    if (!this.db) return false;
+
+    try {
+      // First, validate that the player exists
+      const player = await this.getPlayer(playerId);
+      if (!player) {
+        console.warn(`Player with ID ${playerId} not found`);
+        return false;
+      }
+
+      // Double-check that the player has no games recorded
+      if (player.totalGames !== 0) {
+        console.warn(`Cannot delete player ${playerId}: has ${player.totalGames} games recorded`);
+        return false;
+      }
+
+      // Also verify no match records exist (extra safety check)
+      const playerMatches = await this.getPlayerMatches(playerId);
+      if (playerMatches.length > 0) {
+        console.warn(`Cannot delete player ${playerId}: has ${playerMatches.length} match records`);
+        return false;
+      }
+
+      // Proceed with deletion
+      return new Promise((resolve, reject) => {
+        const transaction = this.db!.transaction([TABLES.PLAYERS], 'readwrite');
+        const playerStore = transaction.objectStore(TABLES.PLAYERS);
+        const request = playerStore.delete(playerId);
+
+        request.onsuccess = () => {
+          console.log(`Successfully deleted player ${playerId}`);
+          resolve(true);
+        };
+
+        request.onerror = () => {
+          console.error(`Error deleting player ${playerId}:`, request.error);
+          reject(request.error);
+        };
+      });
+    } catch (error) {
+      console.error(`Error deleting player ${playerId}:`, error);
+      return false;
+    }
+  }
 }
 
 // Export a singleton instance
