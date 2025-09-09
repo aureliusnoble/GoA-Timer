@@ -1,11 +1,12 @@
 // src/components/matches/MatchHistory.tsx
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Search, Calendar, Filter, ChevronDown, ChevronUp, Trash2, Shield, Award, Swords, Skull, Users, Coins } from 'lucide-react';
+import { ChevronLeft, Search, Calendar, Filter, ChevronDown, ChevronUp, Trash2, Edit, Shield, Award, Swords, Skull, Users, Coins } from 'lucide-react';
 import { DBMatch, DBMatchPlayer} from '../../services/DatabaseService';
 import dbService from '../../services/DatabaseService';
 import { Team, GameLength } from '../../types';
 import { useSound } from '../../context/SoundContext';
 import EnhancedTooltip from '../common/EnhancedTooltip';
+import EditMatchModal from './EditMatchModal';
 
 interface MatchHistoryProps {
   onBack: () => void;
@@ -27,53 +28,58 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ onBack }) => {
   const [showFilterMenu, setShowFilterMenu] = useState<boolean>(false);
   const [deletingMatch, setDeletingMatch] = useState<string | null>(null);
   
+  // Edit match modal state
+  const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState<boolean>(false);
+  
+  // Load match data function
+  const loadMatches = async () => {
+    setLoading(true);
+    try {
+      // Get all matches from the database
+      const allMatches = await dbService.getAllMatches();
+      
+      // Sort by date (newest first by default)
+      allMatches.sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        return dateB - dateA;
+      });
+      
+      // Get players for each match
+      const matchesWithPlayers = await Promise.all(
+        allMatches.map(async (match) => {
+          const matchPlayers = await dbService.getMatchPlayers(match.id);
+          
+          // Get player names
+          const playersWithNames = await Promise.all(
+            matchPlayers.map(async (matchPlayer) => {
+              const player = await dbService.getPlayer(matchPlayer.playerId);
+              return {
+                ...matchPlayer,
+                playerName: player?.name || 'Unknown Player'
+              };
+            })
+          );
+          
+          return {
+            ...match,
+            players: playersWithNames,
+            expanded: false
+          };
+        })
+      );
+      
+      setMatches(matchesWithPlayers);
+    } catch (error) {
+      console.error('Error loading match history:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
   // Load match data on component mount
   useEffect(() => {
-    const loadMatches = async () => {
-      setLoading(true);
-      try {
-        // Get all matches from the database
-        const allMatches = await dbService.getAllMatches();
-        
-        // Sort by date (newest first by default)
-        allMatches.sort((a, b) => {
-          const dateA = new Date(a.date).getTime();
-          const dateB = new Date(b.date).getTime();
-          return dateB - dateA;
-        });
-        
-        // Get players for each match
-        const matchesWithPlayers = await Promise.all(
-          allMatches.map(async (match) => {
-            const matchPlayers = await dbService.getMatchPlayers(match.id);
-            
-            // Get player names
-            const playersWithNames = await Promise.all(
-              matchPlayers.map(async (matchPlayer) => {
-                const player = await dbService.getPlayer(matchPlayer.playerId);
-                return {
-                  ...matchPlayer,
-                  playerName: player?.name || 'Unknown Player'
-                };
-              })
-            );
-            
-            return {
-              ...match,
-              players: playersWithNames,
-              expanded: false
-            };
-          })
-        );
-        
-        setMatches(matchesWithPlayers);
-      } catch (error) {
-        console.error('Error loading match history:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
     loadMatches();
   }, []);
   
@@ -112,6 +118,34 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ onBack }) => {
       setDeletingMatch(null);
     } catch (error) {
       console.error('Error deleting match:', error);
+    }
+  };
+  
+  // Handle match editing
+  const handleEditMatch = (matchId: string) => {
+    playSound('buttonClick');
+    setEditingMatchId(matchId);
+    setShowEditModal(true);
+  };
+  
+  // Handle edit modal close
+  const handleEditModalClose = () => {
+    playSound('buttonClick');
+    setShowEditModal(false);
+    setEditingMatchId(null);
+  };
+  
+  // Handle edit completion - refresh match data
+  const handleEditComplete = async () => {
+    playSound('phaseChange'); // Success sound
+    setShowEditModal(false);
+    setEditingMatchId(null);
+    
+    // Reload all matches to ensure data consistency
+    try {
+      await loadMatches();
+    } catch (error) {
+      console.error('Error reloading matches after edit:', error);
     }
   };
   
@@ -486,8 +520,21 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ onBack }) => {
                         </div>
                       </div>
                       
-                      {/* Delete Button */}
-                      <div className="mt-4 flex justify-end">
+                      {/* Edit and Delete Buttons */}
+                      <div className="mt-4 flex justify-end space-x-2">
+                        <EnhancedTooltip text="Edit this match data">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditMatch(match.id);
+                            }}
+                            className="px-3 py-1 bg-blue-700 hover:bg-blue-600 rounded-lg flex items-center"
+                          >
+                            <Edit size={16} className="mr-2" />
+                            <span>Edit Match</span>
+                          </button>
+                        </EnhancedTooltip>
+                        
                         <EnhancedTooltip text="Delete this match and its data">
                           <button
                             onClick={(e) => {
@@ -529,6 +576,16 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ onBack }) => {
             </div>
           )}
         </div>
+      )}
+
+      {/* Edit Match Modal */}
+      {showEditModal && editingMatchId && (
+        <EditMatchModal
+          isOpen={showEditModal}
+          matchId={editingMatchId}
+          onClose={handleEditModalClose}
+          onSaveComplete={handleEditComplete}
+        />
       )}
     </div>
   );

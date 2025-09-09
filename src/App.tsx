@@ -1924,7 +1924,8 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
           onReturnToSetup={resetToSetup}
           players={localPlayers}
           gameLength={gameLength}
-          doubleLanes={gameState.hasMultipleLanes} 
+          doubleLanes={gameState.hasMultipleLanes}
+          onUpdatePlayerStats={handleSavePlayerStats}
         />
       )}
 

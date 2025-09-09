@@ -1,10 +1,11 @@
 // src/components/VictoryScreen.tsx
 import React, { useEffect, useState } from 'react';
 import { Team, GameLength, Player } from '../types';
-import { Trophy, Home, Database, AlertTriangle } from 'lucide-react';
+import { Trophy, Home, Database, AlertTriangle, CheckCircle } from 'lucide-react';
 import { useSound } from '../context/SoundContext';
 import dbService from '../services/DatabaseService';
 import EnhancedTooltip from './common/EnhancedTooltip';
+import EndOfRoundAssistant, { PlayerRoundStats } from './EndOfRoundAssistant';
 
 interface VictoryScreenProps {
   winningTeam: Team;
@@ -12,6 +13,8 @@ interface VictoryScreenProps {
   players: Player[]; // Need players to save match data
   gameLength: GameLength;
   doubleLanes: boolean;
+  // NEW: Function to update player stats with final round data
+  onUpdatePlayerStats?: (playerStats: { [playerId: number]: PlayerRoundStats }) => void;
 }
 
 const VictoryScreen: React.FC<VictoryScreenProps> = ({ 
@@ -19,12 +22,16 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
   onReturnToSetup,
   players,
   gameLength,
-  doubleLanes
+  doubleLanes,
+  onUpdatePlayerStats
 }) => {
   const [animationComplete, setAnimationComplete] = useState(false);
   const [isSavingMatchData, setSavingMatchData] = useState(false);
   const [matchDataSaved, setMatchDataSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // NEW: State for managing final round stats collection
+  const [showStatsCollection, setShowStatsCollection] = useState<boolean>(false);
+  const [finalRoundStatsRecorded, setFinalRoundStatsRecorded] = useState<boolean>(false);
   const { playSound } = useSound();
   
   useEffect(() => {
@@ -90,6 +97,21 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
       setSavingMatchData(false);
     }
   };
+
+  // NEW: Handler for final round stats collection
+  const handleFinalRoundStats = (stats?: { [playerId: number]: PlayerRoundStats }) => {
+    playSound('buttonClick');
+    
+    // If stats provided and we have the update function, integrate them
+    if (stats && onUpdatePlayerStats) {
+      onUpdatePlayerStats(stats);
+    }
+    
+    // Mark as recorded and hide the assistant
+    setFinalRoundStatsRecorded(true);
+    setShowStatsCollection(false);
+    playSound('phaseChange');
+  };
   
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center">
@@ -151,6 +173,26 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
             Return to Setup
           </button>
           
+          {/* NEW: Record Final Round Stats button - only show if not recorded yet */}
+          {!finalRoundStatsRecorded && animationComplete && (
+            <EnhancedTooltip text="Record statistics for the final round before saving">
+              <button
+                onClick={() => {
+                  playSound('buttonClick');
+                  setShowStatsCollection(true);
+                }}
+                className={`px-6 py-3 rounded-lg text-white font-medium flex items-center mx-auto ${
+                  winningTeam === Team.Titans 
+                    ? 'bg-blue-700 hover:bg-blue-600' 
+                    : 'bg-red-700 hover:bg-red-600'
+                }`}
+              >
+                <Database size={20} className="mr-2" />
+                Record Final Round Stats
+              </button>
+            </EnhancedTooltip>
+          )}
+          
           {/* Save Match Data button - always visible, but color changes when saved */}
           {animationComplete && (
             <EnhancedTooltip text={matchDataSaved ? "Match data saved successfully" : "Save match results to your statistics"}>
@@ -189,6 +231,16 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
         {/* Match Data Saved Confirmation - shown below the buttons */}
 
         
+        {/* NEW: Final Round Stats Recorded Confirmation */}
+        {finalRoundStatsRecorded && animationComplete && (
+          <div className="mt-4 px-5 py-3 bg-green-800/70 rounded-lg inline-block">
+            <p className="flex items-center text-green-200">
+              <CheckCircle size={16} className="mr-2" />
+              Final round statistics recorded
+            </p>
+          </div>
+        )}
+        
         {/* Error Message */}
         {saveError && (
           <div className="mt-4 px-5 py-3 bg-red-800/70 rounded-lg inline-block">
@@ -199,6 +251,13 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
           </div>
         )}
       </div>
+      
+      {/* NEW: End of Round Assistant for final round stats collection */}
+      <EndOfRoundAssistant 
+        players={players}
+        onComplete={handleFinalRoundStats}
+        isVisible={showStatsCollection}
+      />
       
       {/* Add CSS animation */}
       <style>{`

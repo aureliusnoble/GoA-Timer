@@ -1815,6 +1815,356 @@ class DatabaseService {
       return false;
     }
   }
+
+  // ========== MATCH EDITING EXTENSIONS ==========
+
+  /**
+   * Update match metadata (date, winner, game length, etc.)
+   */
+  async updateMatch(matchId: string, updates: Partial<DBMatch>): Promise<void> {
+    if (!this.db) await this.initialize();
+    if (!this.db) throw new Error('Database not initialized');
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([TABLES.MATCHES], 'readwrite');
+      const matchStore = transaction.objectStore(TABLES.MATCHES);
+      
+      // Get existing match first
+      const getRequest = matchStore.get(matchId);
+      
+      getRequest.onsuccess = () => {
+        const existingMatch = getRequest.result;
+        if (!existingMatch) {
+          reject(new Error(`Match with ID ${matchId} not found`));
+          return;
+        }
+
+        // Apply updates
+        const updatedMatch = { ...existingMatch, ...updates };
+        const putRequest = matchStore.put(updatedMatch);
+        
+        putRequest.onsuccess = () => resolve();
+        putRequest.onerror = () => reject(putRequest.error);
+      };
+
+      getRequest.onerror = () => reject(getRequest.error);
+    });
+  }
+
+  /**
+   * Update multiple match players atomically
+   */
+  async updateMatchPlayers(updates: Array<{
+    id: string;
+    updates: Partial<DBMatchPlayer>;
+  }>): Promise<void> {
+    if (!this.db) await this.initialize();
+    if (!this.db) throw new Error('Database not initialized');
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([TABLES.MATCH_PLAYERS], 'readwrite');
+      const store = transaction.objectStore(TABLES.MATCH_PLAYERS);
+      
+      let pendingOperations = updates.length;
+      let hasError = false;
+
+      if (pendingOperations === 0) {
+        resolve();
+        return;
+      }
+
+      updates.forEach((update) => {
+        const getRequest = store.get(update.id);
+        
+        getRequest.onsuccess = () => {
+          if (hasError) return;
+          
+          const existingRecord = getRequest.result;
+          if (!existingRecord) {
+            hasError = true;
+            reject(new Error(`Match player with ID ${update.id} not found`));
+            return;
+          }
+
+          const updatedRecord = { ...existingRecord, ...update.updates };
+          const putRequest = store.put(updatedRecord);
+          
+          putRequest.onsuccess = () => {
+            pendingOperations--;
+            if (pendingOperations === 0) {
+              resolve();
+            }
+          };
+          
+          putRequest.onerror = () => {
+            hasError = true;
+            reject(putRequest.error);
+          };
+        };
+        
+        getRequest.onerror = () => {
+          hasError = true;
+          reject(getRequest.error);
+        };
+      });
+    });
+  }
+
+  /**
+   * Validate match edit data before saving
+   */
+  validateMatchEdit(matchData: DBMatch, playersData: DBMatchPlayer[]): ValidationResult {
+    const errors: ValidationError[] = [];
+    const warnings: ValidationError[] = [];
+
+    // Team balance validation
+    const titanPlayers = playersData.filter(p => p.team === Team.Titans);
+    const atlanteanPlayers = playersData.filter(p => p.team === Team.Atlanteans);
+    
+    if (titanPlayers.length === 0) {
+      errors.push({
+        field: 'teams',
+        message: 'Titans team cannot be empty',
+        severity: 'error'
+      });
+    }
+    
+    if (atlanteanPlayers.length === 0) {
+      errors.push({
+        field: 'teams', 
+        message: 'Atlanteans team cannot be empty',
+        severity: 'error'
+      });
+    }
+
+    // Significant team size imbalance warning
+    const sizeDifference = Math.abs(titanPlayers.length - atlanteanPlayers.length);
+    if (sizeDifference > 1) {
+      warnings.push({
+        field: 'teams',
+        message: `Team sizes are unbalanced (Titans: ${titanPlayers.length}, Atlanteans: ${atlanteanPlayers.length})`,
+        severity: 'warning'
+      });
+    }
+
+    // Hero duplicate validation
+    const heroUsage = new Map<number, string[]>();
+    playersData.forEach(player => {
+      if (!heroUsage.has(player.heroId)) {
+        heroUsage.set(player.heroId, []);
+      }
+      heroUsage.get(player.heroId)!.push(player.playerId);
+    });
+
+    heroUsage.forEach((playerIds, heroId) => {
+      if (playerIds.length > 1) {
+        errors.push({
+          field: 'hero',
+          message: `Hero ID ${heroId} is assigned to multiple players: ${playerIds.join(', ')}`,
+          severity: 'error'
+        });
+      }
+    });
+
+    // Statistics validation
+    playersData.forEach(player => {
+      // Unrealistic kill counts for game length
+      if (player.kills && player.kills > 0) {
+        const maxKillsQuick = 10;
+        const maxKillsLong = 20;
+        const maxKills = matchData.gameLength === GameLength.Quick ? maxKillsQuick : maxKillsLong;
+        
+        if (player.kills > maxKills) {
+          warnings.push({
+            field: 'kills',
+            playerId: player.playerId,
+            message: `${player.kills} kills seems high for ${matchData.gameLength} match`,
+            severity: 'warning'
+          });
+        }
+      }
+
+      // Unrealistic death counts
+      if (player.deaths && player.deaths > 15) {
+        warnings.push({
+          field: 'deaths',
+          playerId: player.playerId,
+          message: `${player.deaths} deaths seems very high`,
+          severity: 'warning'
+        });
+      }
+
+      // Negative statistics
+      ['kills', 'deaths', 'assists', 'goldEarned', 'minionKills'].forEach(field => {
+        const value = player[field as keyof DBMatchPlayer] as number;
+        if (value !== undefined && value < 0) {
+          errors.push({
+            field,
+            playerId: player.playerId,
+            message: `${field} cannot be negative`,
+            severity: 'error'
+          });
+        }
+      });
+
+      // Level validation
+      if (player.level !== undefined && (player.level < 1 || player.level > 10)) {
+        errors.push({
+          field: 'level',
+          playerId: player.playerId,
+          message: 'Level must be between 1 and 10',
+          severity: 'error'
+        });
+      }
+    });
+
+    // Date validation
+    const matchDate = new Date(matchData.date);
+    const now = new Date();
+    
+    if (matchDate > now) {
+      warnings.push({
+        field: 'date',
+        message: 'Match date is in the future',
+        severity: 'warning'
+      });
+    }
+
+    // Very old dates might be typos
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    
+    if (matchDate < oneYearAgo) {
+      warnings.push({
+        field: 'date',
+        message: 'Match date is more than a year old',
+        severity: 'warning'
+      });
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors,
+      warnings
+    };
+  }
+
+  /**
+   * Complete match edit - atomic operation that updates match, players, and recalculates stats
+   */
+  async editMatch(
+    matchId: string, 
+    matchUpdates: Partial<DBMatch>, 
+    playerUpdates: Array<{
+      id: string;
+      updates: Partial<DBMatchPlayer>;
+    }>
+  ): Promise<void> {
+    if (!this.db) await this.initialize();
+    if (!this.db) throw new Error('Database not initialized');
+
+    // Step 1: Get current data for validation
+    const currentMatch = await this.getMatch(matchId);
+    if (!currentMatch) {
+      throw new Error(`Match with ID ${matchId} not found`);
+    }
+
+    const currentPlayers = await this.getMatchPlayers(matchId);
+    
+    // Step 2: Apply updates to create proposed data
+    const proposedMatch = { ...currentMatch, ...matchUpdates };
+    const proposedPlayers = currentPlayers.map(player => {
+      const update = playerUpdates.find(u => u.id === player.id);
+      return update ? { ...player, ...update.updates } : player;
+    });
+
+    // Step 3: Validate the proposed changes
+    const validation = this.validateMatchEdit(proposedMatch, proposedPlayers);
+    if (!validation.isValid) {
+      throw new Error(`Validation failed: ${validation.errors.map(e => e.message).join(', ')}`);
+    }
+
+    // Step 4: Perform the atomic update
+    try {
+      // Use Promise.all to perform updates concurrently but atomically
+      await Promise.all([
+        this.updateMatch(matchId, matchUpdates),
+        this.updateMatchPlayers(playerUpdates)
+      ]);
+
+      // Step 5: Recalculate player statistics (this handles rating recalculation)
+      await this.recalculatePlayerStats();
+
+      console.log(`Successfully edited match ${matchId}`);
+    } catch (error) {
+      console.error(`Error editing match ${matchId}:`, error);
+      throw new Error(`Failed to edit match: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * Get editable match data with all necessary information for editing UI
+   */
+  async getEditableMatch(matchId: string): Promise<{
+    match: DBMatch;
+    players: (DBMatchPlayer & { playerName: string })[];
+  } | null> {
+    try {
+      const match = await this.getMatch(matchId);
+      if (!match) return null;
+
+      const matchPlayers = await this.getMatchPlayers(matchId);
+      
+      // Get player names
+      const playersWithNames = await Promise.all(
+        matchPlayers.map(async (matchPlayer) => {
+          const player = await this.getPlayer(matchPlayer.playerId);
+          return {
+            ...matchPlayer,
+            playerName: player?.name || 'Unknown Player'
+          };
+        })
+      );
+
+      return {
+        match,
+        players: playersWithNames
+      };
+    } catch (error) {
+      console.error(`Error getting editable match ${matchId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Check if a match can be safely edited (no data integrity issues)
+   */
+  async canEditMatch(matchId: string): Promise<{ canEdit: boolean; reason?: string }> {
+    try {
+      const match = await this.getMatch(matchId);
+      if (!match) {
+        return { canEdit: false, reason: 'Match not found' };
+      }
+
+      const matchPlayers = await this.getMatchPlayers(matchId);
+      if (matchPlayers.length === 0) {
+        return { canEdit: false, reason: 'Match has no player data' };
+      }
+
+      // Check if all players still exist
+      for (const matchPlayer of matchPlayers) {
+        const player = await this.getPlayer(matchPlayer.playerId);
+        if (!player) {
+          return { canEdit: false, reason: `Player ${matchPlayer.playerId} no longer exists` };
+        }
+      }
+
+      return { canEdit: true };
+    } catch (error) {
+      console.error(`Error checking if match ${matchId} can be edited:`, error);
+      return { canEdit: false, reason: 'Error checking match editability' };
+    }
+  }
 }
 
 // Export a singleton instance
@@ -1823,3 +2173,17 @@ export default dbService;
 
 // Export utility functions
 export const getDisplayRating = (player: DBPlayer) => dbService.getDisplayRating(player);
+
+// Export validation interfaces for UI components
+export interface ValidationError {
+  field: string;
+  playerId?: string;
+  message: string;
+  severity: 'error' | 'warning';
+}
+
+export interface ValidationResult {
+  isValid: boolean;
+  errors: ValidationError[];
+  warnings: ValidationError[];
+}
