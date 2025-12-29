@@ -63,14 +63,23 @@ const WinProbabilityVisualization: React.FC<{
         <div className="flex items-center mb-3">
           <span className="text-blue-400 font-medium relative -top-4">{team1Name}</span>
         </div>
-        <div className="relative h-8 bg-gray-700 rounded-lg">
-          
+        <div className="relative h-8 bg-gray-700 rounded-lg overflow-hidden">
+
+          {/* 95% Confidence Interval Band */}
+          <div
+            className="absolute top-0 bottom-0 bg-blue-500/30"
+            style={{
+              left: `${probability.team1Lower}%`,
+              width: `${probability.team1Upper - probability.team1Lower}%`
+            }}
+          />
+
           {/* Point estimate diamond */}
-          <div className="absolute top-1/2 -translate-y-1/2" style={{ left: `${probability.team1Probability}%` }}>
+          <div className="absolute top-1/2 -translate-y-1/2 z-10" style={{ left: `${probability.team1Probability}%` }}>
             <div className="relative">
-              {/* Centered probability label */}
-              <span className="absolute -top-8 left-1/2 transform -translate-x-5 text-sm font-bold text-white whitespace-nowrap">
-                {probability.team1Probability}%
+              {/* Centered probability label with CI range */}
+              <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 text-sm font-bold text-white whitespace-nowrap">
+                {probability.team1Probability}% ({probability.team1Lower}-{probability.team1Upper}%)
               </span>
               {/* Diamond */}
               <div className="w-4 h-4 bg-blue-500 transform rotate-45 -translate-x-1/2" />
@@ -84,14 +93,23 @@ const WinProbabilityVisualization: React.FC<{
         <div className="flex items-center mb-3">
           <span className="text-red-400 font-medium relative -top-4">{team2Name}</span>
         </div>
-        <div className="relative h-8 bg-gray-700 rounded-lg">
-         
+        <div className="relative h-8 bg-gray-700 rounded-lg overflow-hidden">
+
+          {/* 95% Confidence Interval Band */}
+          <div
+            className="absolute top-0 bottom-0 bg-red-500/30"
+            style={{
+              left: `${probability.team2Lower}%`,
+              width: `${probability.team2Upper - probability.team2Lower}%`
+            }}
+          />
+
           {/* Point estimate diamond */}
-          <div className="absolute top-1/2 -translate-y-1/2" style={{ left: `${probability.team2Probability}%` }}>
+          <div className="absolute top-1/2 -translate-y-1/2 z-10" style={{ left: `${probability.team2Probability}%` }}>
             <div className="relative">
-              {/* Centered probability label */}
-              <span className="absolute -top-8 left-1/2 transform -translate-x-5 text-sm font-bold text-white whitespace-nowrap">
-                {probability.team2Probability}%
+              {/* Centered probability label with CI range */}
+              <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 text-sm font-bold text-white whitespace-nowrap">
+                {probability.team2Probability}% ({probability.team2Lower}-{probability.team2Upper}%)
               </span>
               {/* Diamond */}
               <div className="w-4 h-4 bg-red-500 transform rotate-45 -translate-x-1/2" />
@@ -935,9 +953,11 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                   
                   <div className="mt-4 text-sm text-gray-300">
                     <p className="mb-2">
-                      Prediction based on TrueSkill ratings. The scale shows win probability from 0% to 100%.
+                      Prediction based on TrueSkill ratings. The diamond shows the point estimate, and the shaded region shows the 95% confidence interval.
                     </p>
-             
+                    <p>
+                      <strong>Wider bands</strong> indicate less certainty (teams with newer players). <strong>Narrow bands</strong> indicate high confidence in the prediction.
+                    </p>
                   </div>
                 </div>
               )}
