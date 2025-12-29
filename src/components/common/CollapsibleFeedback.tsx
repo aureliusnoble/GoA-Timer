@@ -6,11 +6,18 @@ interface CollapsibleFeedbackProps {
 }
 
 const CollapsibleFeedback: React.FC<CollapsibleFeedbackProps> = ({ feedbackUrl }) => {
-  // start expanded
-  const [isExpanded, setIsExpanded] = useState(true);
+  // Load initial state from localStorage, default to expanded
+  const [isExpanded, setIsExpanded] = useState(() => {
+    const saved = localStorage.getItem('feedbackBar_expanded');
+    return saved !== null ? saved === 'true' : true;
+  });
 
   const toggleExpand = () => {
-    setIsExpanded((prev) => !prev);
+    setIsExpanded((prev) => {
+      const newValue = !prev;
+      localStorage.setItem('feedbackBar_expanded', String(newValue));
+      return newValue;
+    });
   };
 
   return (
