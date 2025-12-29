@@ -291,11 +291,35 @@ class DatabaseService {
 
   /**
    * Get hero statistics based on match history
+   * @param minGamesForRelationships - Minimum games required to show relationship stats (default: 1)
+   * @param startDate - Optional start date for filtering matches (inclusive)
+   * @param endDate - Optional end date for filtering matches (inclusive)
    */
-  async getHeroStats(): Promise<any[]> {
+  async getHeroStats(
+    minGamesForRelationships: number = 1,
+    startDate?: Date,
+    endDate?: Date
+  ): Promise<any[]> {
     try {
-      const allMatchPlayers = await this.getAllMatchPlayers();
-      const allMatches = await this.getAllMatches();
+      const allMatchPlayersRaw = await this.getAllMatchPlayers();
+      let allMatches = await this.getAllMatches();
+
+      // Filter matches by date range if specified
+      if (startDate || endDate) {
+        allMatches = allMatches.filter(match => {
+          const matchDate = new Date(match.date);
+          if (startDate && matchDate < startDate) return false;
+          if (endDate && matchDate > endDate) return false;
+          return true;
+        });
+      }
+
+      // Create a set of valid match IDs for filtering match players
+      const validMatchIds = new Set(allMatches.map(m => m.id));
+
+      // Filter match players to only include those from valid matches
+      const allMatchPlayers = allMatchPlayersRaw.filter(mp => validMatchIds.has(mp.matchId));
+
       const matchesMap = new Map(allMatches.map(m => [m.id, m]));
       
       const heroMap = new Map<number, {
@@ -408,7 +432,7 @@ class DatabaseService {
         const winRate = hero.totalGames > 0 ? (hero.wins / hero.totalGames) * 100 : 0;
         
         const bestTeammates = Array.from(hero.teammates.entries())
-          .filter(([_, stats]) => stats.games >= 1)
+          .filter(([_, stats]) => stats.games >= minGamesForRelationships)
           .map(([teammateId, stats]) => {
             const teammateHero = heroMap.get(teammateId);
             if (!teammateHero) return null;
@@ -426,7 +450,7 @@ class DatabaseService {
           .slice(0, 3);
         
         const bestAgainst = Array.from(hero.opponents.entries())
-          .filter(([_, stats]) => stats.games >= 1)
+          .filter(([_, stats]) => stats.games >= minGamesForRelationships)
           .map(([opponentId, stats]) => {
             const opponentHero = heroMap.get(opponentId);
             if (!opponentHero) return null;
@@ -444,7 +468,7 @@ class DatabaseService {
           .slice(0, 3);
         
         const worstAgainst = Array.from(hero.opponents.entries())
-          .filter(([_, stats]) => stats.games >= 1)
+          .filter(([_, stats]) => stats.games >= minGamesForRelationships)
           .map(([opponentId, stats]) => {
             const opponentHero = heroMap.get(opponentId);
             if (!opponentHero) return null;
@@ -491,6 +515,308 @@ class DatabaseService {
     } catch (error) {
       console.error('Error getting hero stats:', error);
       return [];
+    }
+  }
+
+  /**
+   * Get all player statistics filtered by date range
+   * @param startDate - Optional start date for filtering matches (inclusive)
+   * @param endDate - Optional end date for filtering matches (inclusive)
+   * @param recalculateTrueSkill - If true, recalculate TrueSkill using only matches in the period
+   */
+  async getFilteredPlayerStats(
+    startDate?: Date,
+    endDate?: Date,
+    recalculateTrueSkill: boolean = false
+  ): Promise<{
+    players: Array<{
+      id: string;
+      name: string;
+      gamesPlayed: number;
+      wins: number;
+      losses: number;
+      winRate: number;
+      kills: number;
+      deaths: number;
+      assists: number;
+      kdRatio: number;
+      totalGold: number;
+      totalMinionKills: number;
+      averageGold: number;
+      averageMinionKills: number;
+      hasCombatStats: boolean;
+      favoriteHeroes: { heroId: number; heroName: string; count: number }[];
+      favoriteRoles: { role: string; count: number }[];
+      displayRating: number;
+      lastPlayed: Date | null;
+    }>;
+    dateRange: { start: Date; end: Date } | null;
+  }> {
+    try {
+      const allPlayers = await this.getAllPlayers();
+      let allMatches = await this.getAllMatches();
+      const allMatchPlayersRaw = await this.getAllMatchPlayers();
+
+      // Determine date range
+      let dateRange: { start: Date; end: Date } | null = null;
+      if (startDate || endDate) {
+        dateRange = {
+          start: startDate || new Date(0),
+          end: endDate || new Date()
+        };
+      }
+
+      // Filter matches by date range if specified
+      if (startDate || endDate) {
+        allMatches = allMatches.filter(match => {
+          const matchDate = new Date(match.date);
+          if (startDate && matchDate < startDate) return false;
+          if (endDate && matchDate > endDate) return false;
+          return true;
+        });
+      }
+
+      // Create a set of valid match IDs
+      const validMatchIds = new Set(allMatches.map(m => m.id));
+
+      // Filter match players to only include those from valid matches
+      const filteredMatchPlayers = allMatchPlayersRaw.filter(mp => validMatchIds.has(mp.matchId));
+
+      // Create matches map for quick lookup
+      const matchesMap = new Map(allMatches.map(m => [m.id, m]));
+
+      // Get current TrueSkill ratings (cumulative)
+      let trueSkillRatings: Record<string, number> = {};
+      if (!recalculateTrueSkill) {
+        trueSkillRatings = await this.getCurrentTrueSkillRatings();
+      } else {
+        // Recalculate TrueSkill using only filtered matches
+        trueSkillRatings = await this.calculateTrueSkillForMatches(allMatches);
+      }
+
+      // Calculate stats for each player
+      const playerStatsArray: Array<{
+        id: string;
+        name: string;
+        gamesPlayed: number;
+        wins: number;
+        losses: number;
+        winRate: number;
+        kills: number;
+        deaths: number;
+        assists: number;
+        kdRatio: number;
+        totalGold: number;
+        totalMinionKills: number;
+        averageGold: number;
+        averageMinionKills: number;
+        hasCombatStats: boolean;
+        favoriteHeroes: { heroId: number; heroName: string; count: number }[];
+        favoriteRoles: { role: string; count: number }[];
+        displayRating: number;
+        lastPlayed: Date | null;
+      }> = [];
+
+      for (const player of allPlayers) {
+        // Get this player's match records from filtered data
+        const playerMatches = filteredMatchPlayers.filter(mp => mp.playerId === player.id);
+
+        // Skip players with no games in the period
+        if (playerMatches.length === 0) continue;
+
+        // Calculate wins and losses
+        let wins = 0;
+        let losses = 0;
+        let kills = 0;
+        let deaths = 0;
+        let assists = 0;
+        let totalGold = 0;
+        let totalMinionKills = 0;
+        let hasCombatStats = false;
+        let lastPlayedDate: Date | null = null;
+
+        const heroCount = new Map<number, { heroId: number; heroName: string; count: number }>();
+        const roleCount = new Map<string, number>();
+
+        for (const mp of playerMatches) {
+          const match = matchesMap.get(mp.matchId);
+          if (!match) continue;
+
+          // Track last played
+          const matchDate = new Date(match.date);
+          if (!lastPlayedDate || matchDate > lastPlayedDate) {
+            lastPlayedDate = matchDate;
+          }
+
+          // Win/Loss
+          if (mp.team === match.winningTeam) {
+            wins++;
+          } else {
+            losses++;
+          }
+
+          // Combat stats
+          if (mp.kills !== undefined) {
+            kills += mp.kills;
+            hasCombatStats = true;
+          }
+          if (mp.deaths !== undefined) {
+            deaths += mp.deaths;
+          }
+          if (mp.assists !== undefined) {
+            assists += mp.assists;
+          }
+          if (mp.goldEarned !== undefined) {
+            totalGold += mp.goldEarned;
+          }
+          if (mp.minionKills !== undefined) {
+            totalMinionKills += mp.minionKills;
+          }
+
+          // Favorite heroes
+          if (mp.heroId !== undefined) {
+            const existing = heroCount.get(mp.heroId);
+            if (existing) {
+              existing.count++;
+            } else {
+              heroCount.set(mp.heroId, { heroId: mp.heroId, heroName: mp.heroName, count: 1 });
+            }
+          }
+
+          // Favorite roles
+          if (mp.heroRoles) {
+            for (const role of mp.heroRoles) {
+              roleCount.set(role, (roleCount.get(role) || 0) + 1);
+            }
+          }
+        }
+
+        const gamesPlayed = playerMatches.length;
+        const winRate = gamesPlayed > 0 ? (wins / gamesPlayed) * 100 : 0;
+        const kdRatio = deaths > 0 ? kills / deaths : kills;
+
+        // Sort favorite heroes and roles
+        const favoriteHeroes = Array.from(heroCount.values())
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 3);
+
+        const favoriteRoles = Array.from(roleCount.entries())
+          .map(([role, count]) => ({ role, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 3);
+
+        playerStatsArray.push({
+          id: player.id,
+          name: player.name,
+          gamesPlayed,
+          wins,
+          losses,
+          winRate,
+          kills,
+          deaths,
+          assists,
+          kdRatio,
+          totalGold,
+          totalMinionKills,
+          averageGold: gamesPlayed > 0 ? totalGold / gamesPlayed : 0,
+          averageMinionKills: gamesPlayed > 0 ? totalMinionKills / gamesPlayed : 0,
+          hasCombatStats,
+          favoriteHeroes,
+          favoriteRoles,
+          displayRating: trueSkillRatings[player.id] || 1200,
+          lastPlayed: lastPlayedDate
+        });
+      }
+
+      return { players: playerStatsArray, dateRange };
+    } catch (error) {
+      console.error('Error getting filtered player stats:', error);
+      return { players: [], dateRange: null };
+    }
+  }
+
+  /**
+   * Calculate TrueSkill ratings using only the provided matches
+   * @param matches - Array of matches to use for calculation
+   */
+  private async calculateTrueSkillForMatches(matches: DBMatch[]): Promise<Record<string, number>> {
+    try {
+      // Sort matches by date
+      const sortedMatches = [...matches].sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        return dateA - dateB;
+      });
+
+      // Initialize all players with default rating
+      const players = await this.getAllPlayers();
+      const playerRatings: { [playerId: string]: any } = {};
+
+      for (const player of players) {
+        playerRatings[player.id] = rating();
+      }
+
+      // Process each match
+      for (const match of sortedMatches) {
+        const matchPlayers = await this.getMatchPlayers(match.id);
+
+        // Separate into teams
+        const titanPlayers: string[] = [];
+        const titanRatings: any[] = [];
+        const atlanteanPlayers: string[] = [];
+        const atlanteanRatings: any[] = [];
+
+        for (const mp of matchPlayers) {
+          if (mp.team === Team.Titans) {
+            titanPlayers.push(mp.playerId);
+            titanRatings.push(playerRatings[mp.playerId] || rating());
+          } else {
+            atlanteanPlayers.push(mp.playerId);
+            atlanteanRatings.push(playerRatings[mp.playerId] || rating());
+          }
+        }
+
+        // Skip if either team is empty
+        if (titanRatings.length === 0 || atlanteanRatings.length === 0) {
+          continue;
+        }
+
+        // Determine ranks
+        let ranks: number[];
+        if (match.winningTeam === Team.Titans) {
+          ranks = [1, 2];
+        } else {
+          ranks = [2, 1];
+        }
+
+        // Update ratings
+        const result = rate([titanRatings, atlanteanRatings], {
+          rank: ranks,
+          beta: TRUESKILL_BETA,
+          tau: TRUESKILL_TAU
+        });
+
+        // Store updated ratings
+        for (let i = 0; i < titanPlayers.length; i++) {
+          playerRatings[titanPlayers[i]] = result[0][i];
+        }
+        for (let i = 0; i < atlanteanPlayers.length; i++) {
+          playerRatings[atlanteanPlayers[i]] = result[1][i];
+        }
+      }
+
+      // Convert to display ratings
+      const displayRatings: Record<string, number> = {};
+      for (const playerId in playerRatings) {
+        const playerRating = playerRatings[playerId];
+        const ordinalValue = ordinal(playerRating);
+        displayRatings[playerId] = Math.round((ordinalValue + 25) * 40 + 200);
+      }
+
+      return displayRatings;
+    } catch (error) {
+      console.error('Error calculating TrueSkill for matches:', error);
+      return {};
     }
   }
 
@@ -1635,6 +1961,7 @@ class DatabaseService {
     date: string;
     matchNumber: number;
     ratings: { [playerId: string]: number };
+    participants: string[];
   }>> {
     try {
       // Get all matches sorted by date
@@ -1653,14 +1980,31 @@ class DatabaseService {
       for (const player of players) {
         playerRatings[player.id] = rating();
       }
-      
+
       // Track rating history
       const ratingHistory: Array<{
         date: string;
         matchNumber: number;
         ratings: { [playerId: string]: number };
+        participants: string[];
       }> = [];
-      
+
+      // Add initial snapshot (game 0) - default ratings before any matches
+      const initialSnapshot: { [playerId: string]: number } = {};
+      for (const playerId in playerRatings) {
+        const playerRating = playerRatings[playerId];
+        const ordinalValue = ordinal(playerRating);
+        const displayRating = Math.round((ordinalValue + 25) * 40 + 200);
+        initialSnapshot[playerId] = displayRating;
+      }
+
+      ratingHistory.push({
+        date: allMatches.length > 0 ? allMatches[0].date.toString() : new Date().toISOString(),
+        matchNumber: 0,
+        ratings: initialSnapshot,
+        participants: []  // No participants for initial snapshot (game 0)
+      });
+
       // Process each match chronologically
       for (let matchIndex = 0; matchIndex < allMatches.length; matchIndex++) {
         const match = allMatches[matchIndex];
@@ -1722,7 +2066,8 @@ class DatabaseService {
         ratingHistory.push({
           date: match.date.toString(),
           matchNumber: matchIndex + 1,
-          ratings: snapshot
+          ratings: snapshot,
+          participants: matchPlayers.map(mp => mp.playerId)
         });
       }
       

@@ -1,6 +1,8 @@
 // src/components/matches/DetailedPlayerStats/SkillProgression.tsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import {
+  VictoryChart, VictoryLine, VictoryScatter, VictoryAxis, VictoryArea
+} from 'victory';
 import { TrendingUp, Info, ArrowUp, ArrowDown } from 'lucide-react';
 import dbService from '../../../services/DatabaseService';
 import EnhancedTooltip from '../../common/EnhancedTooltip';
@@ -11,10 +13,58 @@ interface SkillProgressionProps {
 }
 
 interface ChartDataPoint {
-  matchNumber: number;
-  playerRating: number;
-  groupMean: number;
+  matchNumber: number;      // Global match number
   date: string;
+  playerRating: number;
+  p10: number;              // 10th percentile (smoothed)
+  p25: number;              // 25th percentile (smoothed)
+  p50: number;              // Median (smoothed)
+  p75: number;              // 75th percentile (smoothed)
+  p90: number;              // 90th percentile (smoothed)
+  mean: number;             // Group mean (smoothed)
+}
+
+// LOESS (Locally Weighted Scatterplot Smoothing) implementation
+function loess(data: number[], bandwidth: number = 0.4): number[] {
+  const n = data.length;
+  if (n === 0) return [];
+  if (n === 1) return [...data];
+
+  const result: number[] = [];
+  const h = Math.max(Math.floor(n * bandwidth), 2);
+
+  for (let i = 0; i < n; i++) {
+    let sumWeights = 0;
+    let sumWeightedY = 0;
+
+    for (let j = 0; j < n; j++) {
+      const distance = Math.abs(i - j) / h;
+      if (distance < 1) {
+        // Tricube weight function: (1 - |d|^3)^3
+        const weight = Math.pow(1 - Math.pow(distance, 3), 3);
+        sumWeights += weight;
+        sumWeightedY += weight * data[j];
+      }
+    }
+
+    result.push(sumWeights > 0 ? sumWeightedY / sumWeights : data[i]);
+  }
+
+  return result;
+}
+
+// Calculate percentile from sorted array
+function percentile(sortedArr: number[], p: number): number {
+  if (sortedArr.length === 0) return 0;
+  if (sortedArr.length === 1) return sortedArr[0];
+
+  const index = (p / 100) * (sortedArr.length - 1);
+  const lower = Math.floor(index);
+  const upper = Math.ceil(index);
+  const fraction = index - lower;
+
+  if (lower === upper) return sortedArr[lower];
+  return sortedArr[lower] * (1 - fraction) + sortedArr[upper] * fraction;
 }
 
 // Helper functions for metric categorization
@@ -22,18 +72,17 @@ const getPositionCategory = (playerRating: number, allRatings: number[]) => {
   if (allRatings.length === 0) {
     return { category: 'Average', color: 'text-blue-400', description: 'similar to', percentile: 50 };
   }
-  
-  // Calculate percentile rank
+
   const sortedRatings = [...allRatings].sort((a, b) => a - b);
   const playerIndex = sortedRatings.findIndex(rating => rating >= playerRating);
-  const percentile = playerIndex === -1 ? 100 : Math.round((playerIndex / sortedRatings.length) * 100);
-  
-  if (percentile >= 95) return { category: 'Top 5%', color: 'text-green-500', description: 'in top 5% of', percentile };
-  if (percentile >= 80) return { category: 'Top 20%', color: 'text-green-400', description: 'in top 20% of', percentile };
-  if (percentile >= 60) return { category: 'Above Average', color: 'text-blue-400', description: 'above average of', percentile };
-  if (percentile >= 40) return { category: 'Average', color: 'text-gray-400', description: 'average among', percentile };
-  if (percentile >= 20) return { category: 'Below Average', color: 'text-orange-400', description: 'below average of', percentile };
-  return { category: 'Bottom 20%', color: 'text-red-400', description: 'in bottom 20% of', percentile };
+  const pct = playerIndex === -1 ? 100 : Math.round((playerIndex / sortedRatings.length) * 100);
+
+  if (pct >= 95) return { category: 'Top 5%', color: 'text-green-500', description: 'in top 5% of', percentile: pct };
+  if (pct >= 80) return { category: 'Top 20%', color: 'text-green-400', description: 'in top 20% of', percentile: pct };
+  if (pct >= 60) return { category: 'Above Average', color: 'text-blue-400', description: 'above average of', percentile: pct };
+  if (pct >= 40) return { category: 'Average', color: 'text-gray-400', description: 'average among', percentile: pct };
+  if (pct >= 20) return { category: 'Below Average', color: 'text-orange-400', description: 'below average of', percentile: pct };
+  return { category: 'Bottom 20%', color: 'text-red-400', description: 'in bottom 20% of', percentile: pct };
 };
 
 const getTrendCategory = (recentSlope: number) => {
@@ -56,6 +105,15 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({ playerId, playerNam
   const [loading, setLoading] = useState(true);
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [allCurrentRatings, setAllCurrentRatings] = useState<number[]>([]);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile viewport
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Load historical data
   useEffect(() => {
@@ -66,29 +124,72 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({ playerId, playerNam
           dbService.getHistoricalRatings(),
           dbService.getCurrentTrueSkillRatings()
         ]);
-        
-        // Store all current ratings for percentile calculation
+
         setAllCurrentRatings(Object.values(currentRatings));
-        
-        // Process data for individual player and group mean
-        const processedData: ChartDataPoint[] = [];
-        
+
+        // Step 1: Collect raw data for matches where player participated
+        const rawData: { matchNumber: number; date: string; playerRating: number; allRatings: number[] }[] = [];
+
         for (const snapshot of historicalRatings) {
-          // Only include snapshots where this player participated
-          if (snapshot.ratings[playerId]) {
-            const allRatings = Object.values(snapshot.ratings);
-            const groupMean = allRatings.length > 0 
-              ? allRatings.reduce((sum, rating) => sum + rating, 0) / allRatings.length 
-              : 0;
-            
-            processedData.push({
+          // Only include matches where this player participated
+          if (snapshot.participants.includes(playerId) && snapshot.matchNumber > 0) {
+            const allRatings = Object.values(snapshot.ratings).sort((a, b) => a - b);
+            rawData.push({
               matchNumber: snapshot.matchNumber,
+              date: snapshot.date,
               playerRating: snapshot.ratings[playerId],
-              groupMean: Math.round(groupMean),
-              date: snapshot.date
+              allRatings
             });
           }
         }
+
+        if (rawData.length === 0) {
+          setChartData([]);
+          setLoading(false);
+          return;
+        }
+
+        // Add match 0 (starting point at 1200) at the beginning
+        // Use the first match's date for the starting point
+        const firstMatchDate = rawData[0].date;
+        const startingAllRatings = rawData[0].allRatings.map(() => 1200); // Everyone starts at 1200
+        rawData.unshift({
+          matchNumber: 0,
+          date: firstMatchDate,
+          playerRating: 1200,
+          allRatings: startingAllRatings
+        });
+
+        // Step 2: Calculate raw percentiles and mean for each data point
+        const rawP10 = rawData.map(d => percentile(d.allRatings, 10));
+        const rawP25 = rawData.map(d => percentile(d.allRatings, 25));
+        const rawP50 = rawData.map(d => percentile(d.allRatings, 50));
+        const rawP75 = rawData.map(d => percentile(d.allRatings, 75));
+        const rawP90 = rawData.map(d => percentile(d.allRatings, 90));
+        const rawMean = rawData.map(d =>
+          d.allRatings.reduce((sum, r) => sum + r, 0) / d.allRatings.length
+        );
+
+        // Step 3: Apply LOESS smoothing to percentile series and mean
+        const smoothP10 = loess(rawP10);
+        const smoothP25 = loess(rawP25);
+        const smoothP50 = loess(rawP50);
+        const smoothP75 = loess(rawP75);
+        const smoothP90 = loess(rawP90);
+        const smoothMean = loess(rawMean);
+
+        // Step 4: Build final chart data
+        const processedData: ChartDataPoint[] = rawData.map((d, i) => ({
+          matchNumber: d.matchNumber,
+          date: d.date,
+          playerRating: d.playerRating,
+          p10: Math.round(smoothP10[i]),
+          p25: Math.round(smoothP25[i]),
+          p50: Math.round(smoothP50[i]),
+          p75: Math.round(smoothP75[i]),
+          p90: Math.round(smoothP90[i]),
+          mean: Math.round(smoothMean[i])
+        }));
 
         setChartData(processedData);
       } catch (error) {
@@ -105,34 +206,28 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({ playerId, playerNam
   const progressionStats = useMemo(() => {
     if (chartData.length === 0) return null;
 
-    const firstRating = chartData[0]?.playerRating || 0;
+    const startingRating = 1200; // Everyone starts at 1200
     const lastRating = chartData[chartData.length - 1]?.playerRating || 0;
-    const firstGroupMean = chartData[0]?.groupMean || 0;
-    const lastGroupMean = chartData[chartData.length - 1]?.groupMean || 0;
-    
-    const playerChange = lastRating - firstRating;
-    const groupChange = lastGroupMean - firstGroupMean;
+    const lastMedian = chartData[chartData.length - 1]?.p50 || 0;
+
+    // Calculate change from 1200 starting point
+    const playerChange = lastRating - startingRating;
+    const groupChange = lastMedian - startingRating;
     const relativeToGroup = playerChange - groupChange;
-    
-    // Calculate current position relative to group
-    const currentDifference = lastRating - lastGroupMean;
+
+    const currentDifference = lastRating - lastMedian;
     const isAboveAverage = currentDifference > 0;
 
-    // Calculate group standard deviation for position categorization
-    const currentRatings = [lastRating, lastGroupMean]; // Simplified - in real implementation would use all player ratings
-    const groupMean = currentRatings.reduce((sum, rating) => sum + rating, 0) / currentRatings.length;
-    const groupStdDev = Math.sqrt(
-      currentRatings.reduce((sum, rating) => sum + Math.pow(rating - groupMean, 2), 0) / currentRatings.length
-    ) || 50; // Fallback to reasonable default
-
     // Calculate volatility (standard deviation of rating changes)
-    const ratingChanges = chartData.slice(1).map((point, index) => 
+    const ratingChanges = chartData.slice(1).map((point, index) =>
       point.playerRating - chartData[index].playerRating
     );
-    const avgChange = ratingChanges.reduce((sum, change) => sum + change, 0) / ratingChanges.length;
-    const volatility = Math.sqrt(
-      ratingChanges.reduce((sum, change) => sum + Math.pow(change - avgChange, 2), 0) / ratingChanges.length
-    );
+    const avgChange = ratingChanges.length > 0
+      ? ratingChanges.reduce((sum, change) => sum + change, 0) / ratingChanges.length
+      : 0;
+    const volatility = ratingChanges.length > 0
+      ? Math.sqrt(ratingChanges.reduce((sum, change) => sum + Math.pow(change - avgChange, 2), 0) / ratingChanges.length)
+      : 0;
 
     // Calculate recent trend (last 5 games slope)
     let recentSlope = 0;
@@ -145,13 +240,12 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({ playerId, playerNam
       }
     }
 
-    // Get categorized metrics
     const positionCategory = getPositionCategory(lastRating, allCurrentRatings);
     const trendCategory = getTrendCategory(recentSlope);
     const volatilityInfo = getVolatilityDescription(Math.round(volatility));
 
     return {
-      startRating: firstRating,
+      startRating: startingRating,
       endRating: lastRating,
       playerChange,
       groupChange,
@@ -159,39 +253,32 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({ playerId, playerNam
       isAboveAverage,
       currentDifference: Math.abs(currentDifference),
       volatility: Math.round(volatility),
-      totalMatches: chartData.length,
+      totalMatches: chartData.length - 1, // Subtract 1 to exclude match 0 (starting point)
       trend: playerChange >= 0 ? 'up' : 'down',
-      // Enhanced categorized metrics
       positionCategory,
       trendCategory,
       volatilityInfo,
       recentSlope,
-      groupStdDev,
-      lastGroupMean
+      lastMedian
     };
   }, [chartData, allCurrentRatings]);
 
-  // Custom tooltip for the chart
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="bg-gray-800 p-3 rounded-lg shadow-lg border border-gray-700">
-          <p className="font-semibold mb-2">Match #{label}</p>
-          <p className="text-blue-400">
-            {playerName}: <span className="font-medium">{data.playerRating}</span>
-          </p>
-          <p className="text-gray-400">
-            Group Average: <span className="font-medium">{data.groupMean}</span>
-          </p>
-          <p className="text-xs text-gray-500 mt-1">
-            {new Date(data.date).toLocaleDateString()}
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
+  // Calculate chart domains
+  const yDomain = useMemo((): [number, number] => {
+    if (chartData.length === 0) return [1000, 1400];
+
+    const allValues = chartData.flatMap(d => [d.playerRating, d.p10, d.p90, 1200]);
+    const min = Math.min(...allValues);
+    const max = Math.max(...allValues);
+
+    return [Math.floor(min / 50) * 50 - 50, Math.ceil(max / 50) * 50 + 50];
+  }, [chartData]);
+
+  const xDomain = useMemo((): [number, number] => {
+    if (chartData.length === 0) return [0, 10];
+    const matchNumbers = chartData.map(d => d.matchNumber);
+    return [Math.min(...matchNumbers) - 0.5, Math.max(...matchNumbers) + 0.5];
+  }, [chartData]);
 
   if (loading) {
     return (
@@ -227,9 +314,9 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({ playerId, playerNam
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
         <h3 className="text-xl font-bold flex items-center">
           <TrendingUp size={20} className="mr-2 text-blue-400" />
-          Skill Progression vs Group Average
+          Skill Progression vs Group
         </h3>
-        
+
         {progressionStats && (
           <div className="flex items-center gap-4">
             <div className="text-right">
@@ -259,7 +346,7 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({ playerId, playerNam
                 {progressionStats.currentDifference}
               </div>
               <div className="text-sm text-gray-400">
-                vs group
+                vs median
               </div>
             </div>
           </div>
@@ -267,56 +354,173 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({ playerId, playerNam
       </div>
 
       {/* Chart */}
-      <div style={{ width: '100%', height: 400 }}>
-        <ResponsiveContainer>
-          <LineChart 
-            data={chartData} 
-            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-          >
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-            <XAxis 
-              dataKey="matchNumber" 
-              stroke="#9CA3AF"
-              label={{ 
-                value: 'Match Number', 
-                position: 'insideBottom', 
-                offset: -5,
-                style: { textAnchor: 'middle' }
-              }}
-            />
-            <YAxis 
-              stroke="#9CA3AF"
-              label={{ 
-                value: 'Skill Rating', 
-                angle: -90, 
-                position: 'insideLeft',
-                style: { textAnchor: 'middle' }
-              }}
-            />
-            <Tooltip 
-              content={<CustomTooltip />}
-              wrapperStyle={{ zIndex: 100 }}
-            />
-            <Legend />
-            <Line
-              type="monotone"
-              dataKey="playerRating"
-              stroke="#3B82F6"
-              strokeWidth={3}
-              dot={{ fill: '#3B82F6', strokeWidth: 2, r: 4 }}
-              name={playerName}
-            />
-            <Line
-              type="monotone"
-              dataKey="groupMean"
-              stroke="#6B7280"
-              strokeWidth={2}
-              strokeDasharray="5 5"
-              dot={false}
-              name="Group Average"
-            />
-          </LineChart>
-        </ResponsiveContainer>
+      <div style={{ width: '100%', height: isMobile ? 400 : 550 }}>
+        <VictoryChart
+          width={isMobile ? 400 : 1000}
+          height={isMobile ? 380 : 530}
+          domain={{ x: xDomain, y: yDomain }}
+          padding={{ top: 30, bottom: 60, left: 70, right: 30 }}
+        >
+          {/* X Axis - Match Numbers */}
+          <VictoryAxis
+            label="Match Number"
+            tickValues={chartData.map(d => d.matchNumber)}
+            tickFormat={(t) => Math.round(t)}
+            style={{
+              axis: { stroke: '#6B7280' },
+              axisLabel: { fill: '#9CA3AF', fontSize: isMobile ? 12 : 16, padding: 40 },
+              tickLabels: { fill: '#9CA3AF', fontSize: isMobile ? 10 : 14 },
+              grid: { stroke: '#374151', strokeDasharray: '3,3' }
+            }}
+          />
+
+          {/* Y Axis - Skill Rating */}
+          <VictoryAxis
+            dependentAxis
+            label="Skill Rating"
+            style={{
+              axis: { stroke: '#6B7280' },
+              axisLabel: { fill: '#9CA3AF', fontSize: isMobile ? 12 : 16, padding: 50 },
+              tickLabels: { fill: '#9CA3AF', fontSize: isMobile ? 10 : 14 },
+              grid: { stroke: '#374151', strokeDasharray: '3,3' }
+            }}
+          />
+
+          {/* Percentile Bands - Bottom 10% (p10 to p25) */}
+          <VictoryArea
+            data={chartData}
+            x="matchNumber"
+            y="p25"
+            y0="p10"
+            interpolation="monotoneX"
+            style={{
+              data: { fill: '#EF4444', fillOpacity: 0.15, stroke: 'none' }
+            }}
+          />
+
+          {/* Percentile Bands - Bottom 25% (p25 to p50) */}
+          <VictoryArea
+            data={chartData}
+            x="matchNumber"
+            y="p50"
+            y0="p25"
+            interpolation="monotoneX"
+            style={{
+              data: { fill: '#EF4444', fillOpacity: 0.25, stroke: 'none' }
+            }}
+          />
+
+          {/* Percentile Bands - Top 25% (p50 to p75) */}
+          <VictoryArea
+            data={chartData}
+            x="matchNumber"
+            y="p75"
+            y0="p50"
+            interpolation="monotoneX"
+            style={{
+              data: { fill: '#EF4444', fillOpacity: 0.25, stroke: 'none' }
+            }}
+          />
+
+          {/* Percentile Bands - Top 10% (p75 to p90) */}
+          <VictoryArea
+            data={chartData}
+            x="matchNumber"
+            y="p90"
+            y0="p75"
+            interpolation="monotoneX"
+            style={{
+              data: { fill: '#EF4444', fillOpacity: 0.15, stroke: 'none' }
+            }}
+          />
+
+          {/* Starting Rating Line (1200) */}
+          <VictoryLine
+            data={[
+              { x: xDomain[0], y: 1200 },
+              { x: xDomain[1], y: 1200 }
+            ]}
+            style={{
+              data: { stroke: '#6B7280', strokeWidth: 2, strokeDasharray: '10 5' }
+            }}
+          />
+
+          {/* Group Mean Line (dashed red) */}
+          <VictoryLine
+            data={chartData}
+            x="matchNumber"
+            y="mean"
+            interpolation="monotoneX"
+            style={{
+              data: { stroke: '#EF4444', strokeWidth: 2.5, strokeDasharray: '8 4' }
+            }}
+          />
+
+          {/* Median Line (Group Center - solid red) */}
+          <VictoryLine
+            data={chartData}
+            x="matchNumber"
+            y="p50"
+            interpolation="monotoneX"
+            style={{
+              data: { stroke: '#EF4444', strokeWidth: 2.5 }
+            }}
+          />
+
+          {/* Player's Rating Line (simple linear) */}
+          <VictoryLine
+            data={chartData}
+            x="matchNumber"
+            y="playerRating"
+            interpolation="linear"
+            style={{
+              data: { stroke: '#3B82F6', strokeWidth: 4 }
+            }}
+          />
+
+          {/* Player's Rating Dots */}
+          <VictoryScatter
+            data={chartData}
+            x="matchNumber"
+            y="playerRating"
+            size={7}
+            style={{
+              data: { fill: '#3B82F6' }
+            }}
+          />
+        </VictoryChart>
+      </div>
+
+      {/* Custom Legend */}
+      <div className="flex flex-wrap gap-4 mt-4 justify-center p-3 bg-gray-800 rounded-lg">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded-full bg-blue-500" />
+          <span className="text-sm text-gray-300">{playerName}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-0.5 bg-red-500" />
+          <span className="text-sm text-gray-300">Group Median</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <svg width="24" height="8" className="flex-shrink-0">
+            <line x1="0" y1="4" x2="24" y2="4" stroke="#EF4444" strokeWidth="2" strokeDasharray="6 3" />
+          </svg>
+          <span className="text-sm text-gray-300">Group Mean</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-3 rounded" style={{ backgroundColor: 'rgba(239,68,68,0.25)' }} />
+          <span className="text-sm text-gray-300">25th-75th %ile</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-3 rounded" style={{ backgroundColor: 'rgba(239,68,68,0.15)' }} />
+          <span className="text-sm text-gray-300">10th-90th %ile</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <svg width="24" height="8" className="flex-shrink-0">
+            <line x1="0" y1="4" x2="24" y2="4" stroke="#6B7280" strokeWidth="1.5" strokeDasharray="8 4" />
+          </svg>
+          <span className="text-sm text-gray-300">Starting (1200)</span>
+        </div>
       </div>
 
       {/* Statistics Summary */}
@@ -326,7 +530,7 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({ playerId, playerNam
             <h4 className="font-semibold mb-2 text-gray-300">Performance vs Group</h4>
             <div className="space-y-2">
               <div className="flex justify-between">
-                <EnhancedTooltip 
+                <EnhancedTooltip
                   text={`Shows where you rank compared to all players.
 
 ${progressionStats.positionCategory.category}: You are ${progressionStats.positionCategory.description} all players.
@@ -343,10 +547,10 @@ Percentile rank: ${progressionStats.positionCategory.percentile}th percentile`}
                 </span>
               </div>
               <div className="flex justify-between">
-                <EnhancedTooltip 
-                  text={`Gap between your rating and group average.
+                <EnhancedTooltip
+                  text={`Gap between your rating and group median.
 
-${Math.abs(progressionStats.currentDifference)} points ${progressionStats.isAboveAverage ? 'above' : 'below'} average.
+${Math.abs(progressionStats.currentDifference)} points ${progressionStats.isAboveAverage ? 'above' : 'below'} median.
 
 Larger gaps = more distinctive skill level.`}
                   position="right"
@@ -357,14 +561,14 @@ Larger gaps = more distinctive skill level.`}
                 <span className="font-medium">{progressionStats.currentDifference} pts</span>
               </div>
               <div className="flex justify-between">
-                <EnhancedTooltip 
+                <EnhancedTooltip
                   text={`Your improvement vs everyone else's.
 
 You: ${progressionStats.playerChange >= 0 ? '+' : ''}${progressionStats.playerChange} points since start
-Group: ${progressionStats.groupChange >= 0 ? '+' : ''}${progressionStats.groupChange} points average
+Group: ${progressionStats.groupChange >= 0 ? '+' : ''}${progressionStats.groupChange} points median change
 
-Positive = improved faster than average
-Negative = improved slower than average`}
+Positive = improved faster than median
+Negative = improved slower than median`}
                   position="right"
                   maxWidth="max-w-sm"
                 >
@@ -389,7 +593,7 @@ Negative = improved slower than average`}
                 <span className="font-medium">{progressionStats.endRating}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-gray-400">Total Matches</span>
+                <span className="text-sm text-gray-400">Matches Played</span>
                 <span className="font-medium">{progressionStats.totalMatches}</span>
               </div>
             </div>
@@ -399,7 +603,7 @@ Negative = improved slower than average`}
             <h4 className="font-semibold mb-2 text-gray-300">Consistency</h4>
             <div className="space-y-2">
               <div className="flex justify-between">
-                <EnhancedTooltip 
+                <EnhancedTooltip
                   text={`How much your rating varies between games.
 
 ${progressionStats.volatilityInfo.level} volatility (${progressionStats.volatility} points)
@@ -413,7 +617,7 @@ ${progressionStats.volatilityInfo.description} - consistent players are easier t
                 <span className="font-medium">{progressionStats.volatilityInfo.level}</span>
               </div>
               <div className="flex justify-between">
-                <EnhancedTooltip 
+                <EnhancedTooltip
                   text={`Recent performance trajectory (last 5 games).
 
 ${progressionStats.trendCategory.category}: ${progressionStats.recentSlope >= 0 ? '+' : ''}${progressionStats.recentSlope.toFixed(1)} pts/game
@@ -429,7 +633,7 @@ Recent trends show current form better than overall stats.`}
                 </span>
               </div>
               <div className="flex justify-between">
-                <EnhancedTooltip 
+                <EnhancedTooltip
                   text={`How predictable your performance is.
 
 Based on your volatility (${progressionStats.volatility} pts).
@@ -442,9 +646,9 @@ Low stability = unpredictable swings`}
                   <span className="text-sm text-gray-400 cursor-help">Stability</span>
                 </EnhancedTooltip>
                 <span className="font-medium">
-                  {progressionStats.volatility < 10 ? 'Very High' : 
-                   progressionStats.volatility < 20 ? 'High' : 
-                   progressionStats.volatility < 35 ? 'Medium' : 
+                  {progressionStats.volatility < 10 ? 'Very High' :
+                   progressionStats.volatility < 20 ? 'High' :
+                   progressionStats.volatility < 35 ? 'Medium' :
                    progressionStats.volatility < 60 ? 'Low' : 'Very Low'}
                 </span>
               </div>
@@ -459,17 +663,22 @@ Low stability = unpredictable swings`}
           <Info size={16} className="mr-2 text-blue-400 mt-0.5 flex-shrink-0" />
           <div className="text-sm text-gray-300">
             <p className="mb-2">
-              <strong>Your Rating (Blue Line):</strong> Shows how your skill has evolved over time through wins and losses.
+              <strong>Your Rating (Blue Line):</strong> Shows your skill rating at each match you played.
             </p>
             <p className="mb-2">
-              <strong>Group Average (Dashed Gray):</strong> The average rating of all active players at each point in time.
+              <strong>Group Median (Solid Red):</strong> The smoothed median (50th percentile) of all player ratings.
             </p>
             <p className="mb-2">
-              <strong>Match Number:</strong> Refers to the total number of matches played by your group, not your individual match count. This shows how the overall skill level has evolved as more players join and play games.
+              <strong>Group Mean (Dashed Red):</strong> The smoothed average rating of all players.
+            </p>
+            <p className="mb-2">
+              <strong>Shaded Bands:</strong> Show the distribution of player ratings. Darker = 25th-75th percentile (middle 50%). Lighter = 10th-90th percentile.
+            </p>
+            <p className="mb-2">
+              <strong>Starting Line (Dashed Grey at 1200):</strong> The default skill rating all players begin with.
             </p>
             <p>
-              Being consistently above the group line indicates strong performance relative to the overall player base. 
-              Rating volatility shows how consistent your performance is - lower volatility means more predictable results.
+              Being above the median means you're better than half the group. The higher in the shaded region, the better your relative performance.
             </p>
           </div>
         </div>

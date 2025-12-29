@@ -1,6 +1,6 @@
 // src/components/matches/PlayerStats.tsx
-import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, Search, TrendingUp, Users, Swords, Info, Trophy, Medal, Hexagon, Camera, X, HelpCircle, User } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { ChevronLeft, Search, TrendingUp, Users, Swords, Info, Trophy, Medal, Hexagon, Camera, X, HelpCircle, User, Filter, ChevronDown, ChevronUp, Calendar } from 'lucide-react';
 import { DBPlayer } from '../../services/DatabaseService';
 import dbService, { getDisplayRating } from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
@@ -290,63 +290,142 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [takingScreenshot, setTakingScreenshot] = useState<boolean>(false);
   const [showSkillExplainer, setShowSkillExplainer] = useState<boolean>(false);
-  
+  const [showFilterMenu, setShowFilterMenu] = useState<boolean>(false);
+  const [minGamesRelationship, setMinGamesRelationship] = useState<number>(() => {
+    const saved = localStorage.getItem('playerStats_minGames');
+    return saved ? parseInt(saved, 10) : 3;
+  });
+  const [recencyMonths, setRecencyMonths] = useState<number | null>(() => {
+    const saved = localStorage.getItem('playerStats_recencyMonths');
+    return saved ? parseInt(saved, 10) : null; // null = All Time
+  });
+  const [recalculateTrueSkill, setRecalculateTrueSkill] = useState<boolean>(() => {
+    return localStorage.getItem('playerStats_recalculateTrueSkill') === 'true';
+  });
+
   const contentRef = useRef<HTMLDivElement>(null);
-  
-  // Load player data on component mount
+
+  // Persist minGamesRelationship to localStorage
+  useEffect(() => {
+    localStorage.setItem('playerStats_minGames', minGamesRelationship.toString());
+  }, [minGamesRelationship]);
+
+  // Persist recencyMonths to localStorage
+  useEffect(() => {
+    if (recencyMonths === null) {
+      localStorage.removeItem('playerStats_recencyMonths');
+    } else {
+      localStorage.setItem('playerStats_recencyMonths', recencyMonths.toString());
+    }
+  }, [recencyMonths]);
+
+  // Persist recalculateTrueSkill to localStorage
+  useEffect(() => {
+    localStorage.setItem('playerStats_recalculateTrueSkill', recalculateTrueSkill.toString());
+  }, [recalculateTrueSkill]);
+
+  // Calculate date range based on recencyMonths
+  const dateRange = useMemo(() => {
+    if (recencyMonths === null) {
+      return { startDate: undefined, endDate: undefined };
+    }
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - recencyMonths);
+    return { startDate, endDate };
+  }, [recencyMonths]);
+
+  // Load player data on component mount and when filters change
   useEffect(() => {
     const loadPlayers = async () => {
       setLoading(true);
       try {
-        const allPlayers = await dbService.getAllPlayers();
-        
-        // Get fresh TrueSkill ratings for consistency with SkillOverTime
-        const currentRatings = await dbService.getCurrentTrueSkillRatings();
-        
-        const playersWithStats = await Promise.all(
-          allPlayers.map(async (player) => {
-            const stats = await dbService.getPlayerStats(player.id);
-            const matchesPlayed = stats.matchesPlayed;
-            
-            const kills = matchesPlayed.reduce((sum, match) => sum + (match.kills || 0), 0);
-            const deaths = matchesPlayed.reduce((sum, match) => sum + (match.deaths || 0), 0);
-            const assists = matchesPlayed.reduce((sum, match) => sum + (match.assists || 0), 0);
-            const gold = matchesPlayed.reduce((sum, match) => sum + (match.goldEarned || 0), 0);
-            const minionKills = matchesPlayed.reduce((sum, match) => sum + (match.minionKills || 0), 0);
-            
-            const kdRatio = deaths === 0 ? kills : kills / deaths;
-            const winRate = player.totalGames > 0 ? (player.wins / player.totalGames) * 100 : 0;
-            const hasCombatStats = kills > 0 || deaths > 0 || assists > 0 || gold > 0;
-            
-            // Use fresh TrueSkill rating calculation (consistent with SkillOverTime)
-            const displayRating = currentRatings[player.id] || getDisplayRating(player);
-            
-            return {
-              ...player,
-              favoriteHeroes: stats.favoriteHeroes,
-              favoriteRoles: stats.favoriteRoles,
-              winRate,
-              kills,
-              deaths,
-              assists,
-              kdRatio: parseFloat(kdRatio.toFixed(2)),
-              averageGold: player.totalGames > 0 ? Math.round(gold / player.totalGames) : 0,
-              averageMinionKills: player.totalGames > 0 ? Math.round(minionKills / player.totalGames) : 0,
-              hasCombatStats,
-              displayRating,
-              rank: 0
-            };
-          })
-        );
-        
+        let playersWithStats: PlayerWithStats[];
+
+        if (dateRange.startDate && dateRange.endDate) {
+          // Use filtered player stats when date range is active
+          const filteredResult = await dbService.getFilteredPlayerStats(
+            dateRange.startDate,
+            dateRange.endDate,
+            recalculateTrueSkill
+          );
+
+          playersWithStats = filteredResult.players.map(stats => ({
+            id: stats.id,
+            name: stats.name,
+            totalGames: stats.gamesPlayed,
+            wins: stats.wins,
+            losses: stats.losses,
+            mu: 0, // Not used in display
+            sigma: 0, // Not used in display
+            elo: 0, // Not used in display
+            lastPlayed: stats.lastPlayed || new Date(),
+            dateCreated: new Date(), // Not used in filtered display
+            favoriteHeroes: stats.favoriteHeroes,
+            favoriteRoles: stats.favoriteRoles,
+            winRate: stats.winRate,
+            kills: stats.kills,
+            deaths: stats.deaths,
+            assists: stats.assists,
+            kdRatio: stats.kdRatio,
+            averageGold: stats.averageGold,
+            averageMinionKills: stats.averageMinionKills,
+            hasCombatStats: stats.hasCombatStats,
+            displayRating: stats.displayRating,
+            rank: 0
+          }));
+        } else {
+          // Use original logic for all-time stats
+          const allPlayers = await dbService.getAllPlayers();
+
+          // Get fresh TrueSkill ratings for consistency with SkillOverTime
+          const currentRatings = await dbService.getCurrentTrueSkillRatings();
+
+          playersWithStats = await Promise.all(
+            allPlayers.map(async (player) => {
+              const stats = await dbService.getPlayerStats(player.id);
+              const matchesPlayed = stats.matchesPlayed;
+
+              const kills = matchesPlayed.reduce((sum, match) => sum + (match.kills || 0), 0);
+              const deaths = matchesPlayed.reduce((sum, match) => sum + (match.deaths || 0), 0);
+              const assists = matchesPlayed.reduce((sum, match) => sum + (match.assists || 0), 0);
+              const gold = matchesPlayed.reduce((sum, match) => sum + (match.goldEarned || 0), 0);
+              const minionKills = matchesPlayed.reduce((sum, match) => sum + (match.minionKills || 0), 0);
+
+              const kdRatio = deaths === 0 ? kills : kills / deaths;
+              const winRate = player.totalGames > 0 ? (player.wins / player.totalGames) * 100 : 0;
+              const hasCombatStats = kills > 0 || deaths > 0 || assists > 0 || gold > 0;
+
+              // Use fresh TrueSkill rating calculation (consistent with SkillOverTime)
+              const displayRating = currentRatings[player.id] || getDisplayRating(player);
+
+              return {
+                ...player,
+                favoriteHeroes: stats.favoriteHeroes,
+                favoriteRoles: stats.favoriteRoles,
+                winRate,
+                kills,
+                deaths,
+                assists,
+                kdRatio: parseFloat(kdRatio.toFixed(2)),
+                averageGold: player.totalGames > 0 ? Math.round(gold / player.totalGames) : 0,
+                averageMinionKills: player.totalGames > 0 ? Math.round(minionKills / player.totalGames) : 0,
+                hasCombatStats,
+                displayRating,
+                rank: 0
+              };
+            })
+          );
+        }
+
         const playersWithMatches = playersWithStats.filter(player => player.totalGames > 0);
-        
+
         const sortedByRating = [...playersWithMatches].sort((a, b) => b.displayRating - a.displayRating);
-        
+
         let currentRank = 1;
         let currentRating = sortedByRating.length > 0 ? sortedByRating[0].displayRating : 0;
         let tieCount = 0;
-        
+
         const playersWithRanks = sortedByRating.map((player, index) => {
           if (player.displayRating !== currentRating) {
             currentRank = index + 1;
@@ -355,13 +434,13 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
           } else {
             tieCount++;
           }
-          
+
           return {
             ...player,
             rank: currentRank
           };
         });
-        
+
         setPlayers(playersWithRanks);
       } catch (error) {
         console.error('Error loading player stats:', error);
@@ -369,9 +448,9 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
         setLoading(false);
       }
     };
-    
+
     loadPlayers();
-  }, []);
+  }, [dateRange.startDate, dateRange.endDate, recalculateTrueSkill]);
   
   const handleBack = () => {
     playSound('buttonClick');
@@ -661,13 +740,142 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
             <button
               onClick={() => handleSort('name')}
               className={`px-3 py-1 rounded text-sm ${
-                sortBy === 'name' 
-                  ? 'bg-blue-600 hover:bg-blue-500' 
+                sortBy === 'name'
+                  ? 'bg-blue-600 hover:bg-blue-500'
                   : 'bg-gray-600 hover:bg-gray-500'
               }`}
             >
               Name {sortBy === 'name' && (sortOrder === 'asc' ? '↑' : '↓')}
             </button>
+          </div>
+
+          {/* Filter Button */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                playSound('buttonClick');
+                setShowFilterMenu(!showFilterMenu);
+              }}
+              className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg flex items-center"
+            >
+              <Filter size={18} className="mr-2" />
+              <span>Filters</span>
+              {(minGamesRelationship !== 3 || recencyMonths !== null) && (
+                <span className="ml-2 bg-blue-600 text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {(minGamesRelationship !== 3 ? 1 : 0) + (recencyMonths !== null ? 1 : 0)}
+                </span>
+              )}
+              {showFilterMenu ? (
+                <ChevronUp size={16} className="ml-2" />
+              ) : (
+                <ChevronDown size={16} className="ml-2" />
+              )}
+            </button>
+
+            {/* Filter Menu */}
+            {showFilterMenu && (
+              <div className="absolute right-0 top-full mt-1 z-10 bg-gray-800 border border-gray-600 rounded-lg shadow-lg p-4 w-72">
+                <h4 className="font-medium mb-3">Filter Options</h4>
+
+                {/* Time Period Filter */}
+                <div className="mb-4">
+                  <label className="block text-sm text-gray-400 mb-2">Time Period</label>
+                  <div className="space-y-2">
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="playerTimePeriod"
+                        checked={recencyMonths === null}
+                        onChange={() => setRecencyMonths(null)}
+                        className="mr-2 accent-blue-500"
+                      />
+                      <span className="text-sm">All Time</span>
+                    </label>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="playerTimePeriod"
+                        checked={recencyMonths !== null}
+                        onChange={() => setRecencyMonths(recencyMonths || 6)}
+                        className="mr-2 accent-blue-500"
+                      />
+                      <span className="text-sm mr-2">Last</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="24"
+                        value={recencyMonths || 6}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value, 10);
+                          if (!isNaN(value) && value >= 1 && value <= 24) {
+                            setRecencyMonths(value);
+                          }
+                        }}
+                        disabled={recencyMonths === null}
+                        className="w-16 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                      />
+                      <span className="text-sm ml-2">months</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* TrueSkill Recalculation Checkbox - only visible when period is selected */}
+                {recencyMonths !== null && (
+                  <div className="mb-4 p-3 bg-gray-700/50 rounded-lg">
+                    <label className="flex items-start cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={recalculateTrueSkill}
+                        onChange={(e) => setRecalculateTrueSkill(e.target.checked)}
+                        className="mr-2 mt-0.5 accent-blue-500"
+                      />
+                      <div>
+                        <span className="text-sm">Recalculate skill for period only</span>
+                        <p className="text-xs text-gray-500 mt-1">
+                          When checked, skill ratings are calculated using only matches in the selected period.
+                          Otherwise, current cumulative ratings are shown.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                )}
+
+                {/* Min Games for Relationships */}
+                <div className="mb-4">
+                  <label className="block text-sm text-gray-400 mb-1">Min games for relationships</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={minGamesRelationship}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value, 10);
+                      if (!isNaN(value) && value >= 1 && value <= 20) {
+                        setMinGamesRelationship(value);
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    For BFF/Nemesis calculations in player details
+                  </p>
+                </div>
+
+                {/* Reset Filters Button */}
+                <button
+                  onClick={() => {
+                    playSound('buttonClick');
+                    setMinGamesRelationship(3);
+                    setRecencyMonths(null);
+                    setRecalculateTrueSkill(false);
+                    setShowFilterMenu(false);
+                  }}
+                  className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg"
+                >
+                  Reset Filters
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -678,7 +886,26 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
           <p className="text-sm">Showing players matching: "{searchTerm}"</p>
         </div>
       )}
-      
+
+      {/* Date Range Banner - shown when recency filter is active */}
+      {recencyMonths !== null && dateRange.startDate && dateRange.endDate && (
+        <div className="mb-4 p-3 bg-blue-900/30 border border-blue-700/50 rounded-lg flex items-center flex-wrap gap-2">
+          <Calendar size={18} className="text-blue-400 flex-shrink-0" />
+          <span className="text-sm text-blue-200">
+            Showing stats from{' '}
+            <span className="font-medium">{dateRange.startDate.toLocaleDateString()}</span>
+            {' '}to{' '}
+            <span className="font-medium">{dateRange.endDate.toLocaleDateString()}</span>
+            {' '}({recencyMonths} month{recencyMonths !== 1 ? 's' : ''})
+          </span>
+          {recalculateTrueSkill && (
+            <span className="text-xs bg-purple-600/50 text-purple-200 px-2 py-0.5 rounded">
+              Skill recalculated for period
+            </span>
+          )}
+        </div>
+      )}
+
       {loading ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>

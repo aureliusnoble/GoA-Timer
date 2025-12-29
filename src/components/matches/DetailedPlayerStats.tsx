@@ -1,6 +1,6 @@
 // src/components/matches/DetailedPlayerStats.tsx
-import React, { useState, useEffect } from 'react';
-import { ChevronLeft, User, TrendingUp, Loader } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { ChevronLeft, User, TrendingUp, Loader, Calendar } from 'lucide-react';
 import { DBPlayer } from '../../services/DatabaseService';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
@@ -40,14 +40,31 @@ interface PlayerDetails {
   };
 }
 
-const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({ 
-  playerId, 
-  onBack 
+const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
+  playerId,
+  onBack
 }) => {
   const { playSound } = useSound();
   const [playerDetails, setPlayerDetails] = useState<PlayerDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Read recencyMonths from localStorage (controlled by PlayerStats filter)
+  const recencyMonths = (() => {
+    const saved = localStorage.getItem('playerStats_recencyMonths');
+    return saved ? parseInt(saved, 10) : null; // null = All Time
+  })();
+
+  // Calculate date range based on recencyMonths
+  const dateRange = useMemo(() => {
+    if (recencyMonths === null) {
+      return { startDate: null, endDate: null };
+    }
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - recencyMonths);
+    return { startDate, endDate };
+  }, [recencyMonths]);
 
   // Load player data
   useEffect(() => {
@@ -78,11 +95,30 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
           .map(p => ({ ...p, rating: currentRatings[p.id] || 0 }))
           .filter(p => p.totalGames > 0)
           .sort((a, b) => b.rating - a.rating);
-        
+
         const rank = playersWithRatings.findIndex(p => p.id === playerId) + 1;
 
-        // Calculate enhanced combat statistics
-        const matches = playerStats.matchesPlayed;
+        // Get all matches to filter by date if needed
+        let allMatchesData = await dbService.getAllMatches();
+
+        // Filter matches by date range if recency filter is active
+        let validMatchIds: Set<string> | null = null;
+        if (dateRange.startDate && dateRange.endDate) {
+          validMatchIds = new Set(
+            allMatchesData
+              .filter(match => {
+                const matchDate = new Date(match.date);
+                return matchDate >= dateRange.startDate! && matchDate <= dateRange.endDate!;
+              })
+              .map(m => m.id)
+          );
+        }
+
+        // Calculate enhanced combat statistics (filtered by date if applicable)
+        let matches = playerStats.matchesPlayed;
+        if (validMatchIds) {
+          matches = matches.filter(mp => validMatchIds!.has(mp.matchId));
+        }
         const kills = matches.reduce((sum: number, match: any) => sum + (match.kills ?? 0), 0);
         const deaths = matches.reduce((sum: number, match: any) => sum + (match.deaths ?? 0), 0);
         const assists = matches.reduce((sum: number, match: any) => sum + (match.assists ?? 0), 0);
@@ -107,10 +143,52 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
         const averageLevel = gamesWithLevelData > 0 ? totalLevels / gamesWithLevelData : 0;
         const hasCombatStats = kills > 0 || deaths > 0 || assists > 0 || totalGold > 0;
 
+        // Recalculate favorite heroes and roles from filtered matches
+        const heroCountMap = new Map<number, { heroId: number; heroName: string; count: number }>();
+        const roleCountMap = new Map<string, number>();
+
+        for (const match of matches) {
+          if (match.heroId) {
+            const existing = heroCountMap.get(match.heroId);
+            if (existing) {
+              existing.count++;
+            } else {
+              heroCountMap.set(match.heroId, {
+                heroId: match.heroId,
+                heroName: match.heroName || `Hero ${match.heroId}`,
+                count: 1
+              });
+            }
+          }
+          if (match.heroRoles) {
+            for (const role of match.heroRoles) {
+              roleCountMap.set(role, (roleCountMap.get(role) || 0) + 1);
+            }
+          }
+        }
+
+        const filteredFavoriteHeroes = Array.from(heroCountMap.values())
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 5);
+        const filteredFavoriteRoles = Array.from(roleCountMap.entries())
+          .map(([role, count]) => ({ role, count }))
+          .sort((a, b) => b.count - a.count);
+        const filteredAllHeroesPlayed = Array.from(heroCountMap.values())
+          .sort((a, b) => b.count - a.count);
+
+        // Create filtered stats object
+        const filteredStats = {
+          ...playerStats,
+          favoriteHeroes: filteredFavoriteHeroes,
+          favoriteRoles: filteredFavoriteRoles,
+          allHeroesPlayed: filteredAllHeroesPlayed,
+          allRolesPlayed: filteredFavoriteRoles
+        };
+
         setPlayerDetails({
           player,
-          stats: playerStats,
-          matches: playerStats.matchesPlayed,
+          stats: filteredStats,
+          matches: matches, // Use filtered matches
           currentRating: currentRatings[playerId] || 0,
           rank,
           combatStats: {
@@ -140,7 +218,7 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
     if (playerId) {
       loadPlayerDetails();
     }
-  }, [playerId]);
+  }, [playerId, dateRange.startDate, dateRange.endDate]);
 
   const handleBack = () => {
     playSound('buttonClick');
@@ -245,7 +323,21 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
         </button>
         <h2 className="text-2xl font-bold">Detailed Player Statistics</h2>
       </div>
-      
+
+      {/* Date Range Banner - shown when recency filter is active */}
+      {recencyMonths !== null && dateRange.startDate && dateRange.endDate && (
+        <div className="mb-6 p-3 bg-blue-900/30 border border-blue-700/50 rounded-lg flex items-center">
+          <Calendar size={18} className="mr-2 text-blue-400 flex-shrink-0" />
+          <span className="text-sm text-blue-200">
+            Showing stats from{' '}
+            <span className="font-medium">{dateRange.startDate.toLocaleDateString()}</span>
+            {' '}to{' '}
+            <span className="font-medium">{dateRange.endDate.toLocaleDateString()}</span>
+            {' '}({recencyMonths} month{recencyMonths !== 1 ? 's' : ''})
+          </span>
+        </div>
+      )}
+
       {/* Player Header */}
       <div className="bg-gray-700 rounded-lg p-6 mb-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">

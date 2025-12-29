@@ -1,6 +1,6 @@
 // src/components/matches/HeroStats.tsx
-import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, Search, Info, Filter, ChevronDown, ChevronUp, Shield, Camera } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { ChevronLeft, Search, Info, Filter, ChevronDown, ChevronUp, Shield, Camera, Calendar } from 'lucide-react';
 import { Hero } from '../../types';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
@@ -59,7 +59,15 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
   const [filterRole, setFilterRole] = useState<string | 'all'>('all');
   const [showFilterMenu, setShowFilterMenu] = useState<boolean>(false);
   const [takingScreenshot, setTakingScreenshot] = useState<boolean>(false);
-  
+  const [minGamesRelationship, setMinGamesRelationship] = useState<number>(() => {
+    const saved = localStorage.getItem('heroStats_minGames');
+    return saved ? parseInt(saved, 10) : 1;
+  });
+  const [recencyMonths, setRecencyMonths] = useState<number | null>(() => {
+    const saved = localStorage.getItem('heroStats_recencyMonths');
+    return saved ? parseInt(saved, 10) : null; // null = All Time
+  });
+
   // Create a ref to the main content container for screenshots
   const contentRef = useRef<HTMLDivElement>(null);
   
@@ -73,13 +81,28 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
     height: number;
   } | undefined>(undefined);
 
-  // Load hero stats on component mount
+  // Calculate date range based on recencyMonths (must be defined before useEffect that uses it)
+  const dateRange = useMemo(() => {
+    if (recencyMonths === null) {
+      return { startDate: undefined, endDate: undefined };
+    }
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - recencyMonths);
+    return { startDate, endDate };
+  }, [recencyMonths]);
+
+  // Load hero stats on component mount and when filters change
   useEffect(() => {
     const loadHeroStats = async () => {
       setLoading(true);
       try {
-        // Get hero statistics from database
-        const stats = await dbService.getHeroStats();
+        // Get hero statistics from database with date filtering
+        const stats = await dbService.getHeroStats(
+          minGamesRelationship,
+          dateRange.startDate,
+          dateRange.endDate
+        );
         setHeroStats(stats);
       } catch (error) {
         console.error('Error loading hero stats:', error);
@@ -87,9 +110,23 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
         setLoading(false);
       }
     };
-    
+
     loadHeroStats();
-  }, []);
+  }, [minGamesRelationship, dateRange.startDate, dateRange.endDate]);
+
+  // Persist minGamesRelationship to localStorage
+  useEffect(() => {
+    localStorage.setItem('heroStats_minGames', minGamesRelationship.toString());
+  }, [minGamesRelationship]);
+
+  // Persist recencyMonths to localStorage
+  useEffect(() => {
+    if (recencyMonths === null) {
+      localStorage.removeItem('heroStats_recencyMonths');
+    } else {
+      localStorage.setItem('heroStats_recencyMonths', recencyMonths.toString());
+    }
+  }, [recencyMonths]);
 
   // Handle back navigation with sound
   const handleBack = () => {
@@ -207,6 +244,8 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
     setSearchTerm('');
     setFilterExpansion('all');
     setFilterRole('all');
+    setMinGamesRelationship(1);
+    setRecencyMonths(null);
     setShowFilterMenu(false);
   };
 
@@ -545,9 +584,9 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
             >
               <Filter size={18} className="mr-2" />
               <span>Filters</span>
-              {(filterExpansion !== 'all' || filterRole !== 'all') && (
+              {(filterExpansion !== 'all' || filterRole !== 'all' || minGamesRelationship !== 1 || recencyMonths !== null) && (
                 <span className="ml-2 bg-blue-600 text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  {(filterExpansion !== 'all' ? 1 : 0) + (filterRole !== 'all' ? 1 : 0)}
+                  {(filterExpansion !== 'all' ? 1 : 0) + (filterRole !== 'all' ? 1 : 0) + (minGamesRelationship !== 1 ? 1 : 0) + (recencyMonths !== null ? 1 : 0)}
                 </span>
               )}
               {showFilterMenu ? (
@@ -561,7 +600,49 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
             {showFilterMenu && (
               <div className="absolute right-0 top-full mt-1 z-10 bg-gray-800 border border-gray-600 rounded-lg shadow-lg p-4 w-72">
                 <h4 className="font-medium mb-3">Filter Options</h4>
-                
+
+                {/* Time Period Filter */}
+                <div className="mb-4">
+                  <label className="block text-sm text-gray-400 mb-2">Time Period</label>
+                  <div className="space-y-2">
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="timePeriod"
+                        checked={recencyMonths === null}
+                        onChange={() => setRecencyMonths(null)}
+                        className="mr-2 accent-blue-500"
+                      />
+                      <span className="text-sm">All Time</span>
+                    </label>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="timePeriod"
+                        checked={recencyMonths !== null}
+                        onChange={() => setRecencyMonths(recencyMonths || 6)}
+                        className="mr-2 accent-blue-500"
+                      />
+                      <span className="text-sm mr-2">Last</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="24"
+                        value={recencyMonths || 6}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value, 10);
+                          if (!isNaN(value) && value >= 1 && value <= 24) {
+                            setRecencyMonths(value);
+                          }
+                        }}
+                        disabled={recencyMonths === null}
+                        className="w-16 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                      />
+                      <span className="text-sm ml-2">months</span>
+                    </label>
+                  </div>
+                </div>
+
                 {/* Expansion Filter */}
                 <div className="mb-4">
                   <label className="block text-sm text-gray-400 mb-1">Expansion</label>
@@ -591,7 +672,28 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
                     ))}
                   </select>
                 </div>
-                
+
+                {/* Min Games for Relationships */}
+                <div className="mb-4">
+                  <label className="block text-sm text-gray-400 mb-1">Min games for relationships</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={minGamesRelationship}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value, 10);
+                      if (!isNaN(value) && value >= 1 && value <= 20) {
+                        setMinGamesRelationship(value);
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Only show teammate/opponent stats with at least this many shared games
+                  </p>
+                </div>
+
                 {/* Reset Filters Button */}
                 <button
                   onClick={resetFilters}
@@ -616,7 +718,21 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
           </ul>
         </div>
       )}
-      
+
+      {/* Date Range Banner - shown when recency filter is active */}
+      {recencyMonths !== null && dateRange.startDate && dateRange.endDate && (
+        <div className="mb-4 p-3 bg-blue-900/30 border border-blue-700/50 rounded-lg flex items-center">
+          <Calendar size={18} className="mr-2 text-blue-400 flex-shrink-0" />
+          <span className="text-sm text-blue-200">
+            Showing stats from{' '}
+            <span className="font-medium">{dateRange.startDate.toLocaleDateString()}</span>
+            {' '}to{' '}
+            <span className="font-medium">{dateRange.endDate.toLocaleDateString()}</span>
+            {' '}({recencyMonths} month{recencyMonths !== 1 ? 's' : ''})
+          </span>
+        </div>
+      )}
+
       {/* Loading State */}
       {loading ? (
         <div className="flex justify-center items-center h-64">

@@ -1,6 +1,6 @@
 // src/components/matches/DetailedPlayerStats/RelationshipStats.tsx
-import React, { useState, useEffect } from 'react';
-import { Users, Zap, Heart, Info } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Users, Zap, Heart, Info, Calendar } from 'lucide-react';
 import dbService, { DBMatchPlayer } from '../../../services/DatabaseService';
 
 interface RelationshipStatsProps {
@@ -13,7 +13,7 @@ interface RelationshipStat {
   playerName: string;
   gamesPlayed: number;
   winRate: number;
-  isSignificant: boolean; // >= 3 games for meaningful data
+  isSignificant: boolean; // >= minGames for meaningful data
 }
 
 interface RelationshipData {
@@ -25,19 +25,55 @@ const RelationshipStats: React.FC<RelationshipStatsProps> = ({ playerId }) => {
   const [loading, setLoading] = useState(true);
   const [relationshipData, setRelationshipData] = useState<RelationshipData | null>(null);
 
+  // Read minGames from localStorage (controlled by PlayerStats filter)
+  const minGames = (() => {
+    const saved = localStorage.getItem('playerStats_minGames');
+    return saved ? parseInt(saved, 10) : 3;
+  })();
+
+  // Read recencyMonths from localStorage (controlled by PlayerStats filter)
+  const recencyMonths = (() => {
+    const saved = localStorage.getItem('playerStats_recencyMonths');
+    return saved ? parseInt(saved, 10) : null; // null = All Time
+  })();
+
+  // Calculate date range based on recencyMonths
+  const dateRange = useMemo(() => {
+    if (recencyMonths === null) {
+      return { startDate: null, endDate: null };
+    }
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - recencyMonths);
+    return { startDate, endDate };
+  }, [recencyMonths]);
+
   // Calculate relationship statistics
   useEffect(() => {
     const calculateRelationships = async () => {
       try {
         setLoading(true);
-        
+
         // Get player's match history and all matches
-        const [playerStats, allMatches] = await Promise.all([
+        const [playerStats, allMatchesRaw] = await Promise.all([
           dbService.getPlayerStats(playerId),
           dbService.getAllMatches()
         ]);
 
-        const matches = playerStats.matchesPlayed;
+        // Filter matches by date range if recency filter is active
+        let allMatches = allMatchesRaw;
+        if (dateRange.startDate && dateRange.endDate) {
+          allMatches = allMatchesRaw.filter(match => {
+            const matchDate = new Date(match.date);
+            return matchDate >= dateRange.startDate! && matchDate <= dateRange.endDate!;
+          });
+        }
+
+        // Get match IDs within the date range
+        const validMatchIds = new Set(allMatches.map(m => m.id));
+
+        // Filter player's matches to only include those within the date range
+        const matches = playerStats.matchesPlayed.filter(mp => validMatchIds.has(mp.matchId));
         
         // Group matches by match ID to analyze team compositions
         const matchGroups = new Map<string, DBMatchPlayer[]>();
@@ -93,7 +129,7 @@ const RelationshipStats: React.FC<RelationshipStatsProps> = ({ playerId }) => {
             playerName: stats.name,
             gamesPlayed: stats.total,
             winRate: (stats.wins / stats.total) * 100,
-            isSignificant: stats.total >= 3
+            isSignificant: stats.total >= minGames
           }))
           .filter(stat => stat.isSignificant)
           .sort((a, b) => b.winRate - a.winRate);
@@ -104,7 +140,7 @@ const RelationshipStats: React.FC<RelationshipStatsProps> = ({ playerId }) => {
             playerName: stats.name,
             gamesPlayed: stats.total,
             winRate: (stats.wins / stats.total) * 100,
-            isSignificant: stats.total >= 3
+            isSignificant: stats.total >= minGames
           }))
           .filter(stat => stat.isSignificant)
           .sort((a, b) => a.winRate - b.winRate); // Lowest win rate = toughest opponent
@@ -137,7 +173,8 @@ const RelationshipStats: React.FC<RelationshipStatsProps> = ({ playerId }) => {
     };
 
     calculateRelationships();
-  }, [playerId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerId, dateRange.startDate, dateRange.endDate]); // minGames and recencyMonths are read from localStorage on mount
 
   if (loading) {
     return (
@@ -164,7 +201,7 @@ const RelationshipStats: React.FC<RelationshipStatsProps> = ({ playerId }) => {
           <Users size={48} className="mx-auto text-gray-500 mb-4" />
           <p className="text-gray-400 mb-2">Not Enough Data</p>
           <p className="text-sm text-gray-500">
-            Need at least 3 games with the same players to calculate meaningful relationships.
+            Need at least {minGames} game{minGames !== 1 ? 's' : ''} with the same players to calculate meaningful relationships.
           </p>
         </div>
       </div>
@@ -177,6 +214,16 @@ const RelationshipStats: React.FC<RelationshipStatsProps> = ({ playerId }) => {
         <Users size={20} className="mr-2 text-blue-400" />
         Player Relationships
       </h3>
+
+      {/* Date Range Indicator */}
+      {recencyMonths !== null && dateRange.startDate && dateRange.endDate && (
+        <div className="mb-4 p-2 bg-blue-900/30 border border-blue-700/50 rounded text-sm flex items-center">
+          <Calendar size={14} className="mr-2 text-blue-400" />
+          <span className="text-blue-200">
+            Showing relationships from last {recencyMonths} month{recencyMonths !== 1 ? 's' : ''}
+          </span>
+        </div>
+      )}
 
       {/* Featured Relationships */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -270,14 +317,14 @@ const RelationshipStats: React.FC<RelationshipStatsProps> = ({ playerId }) => {
           <Info size={16} className="mr-2 text-blue-400 mt-0.5 flex-shrink-0" />
           <div className="text-sm text-gray-300">
             <p className="mb-2">
-              <strong>Best Teammate (BFF):</strong> The player you have the highest win rate with (minimum 3 games).
+              <strong>Best Teammate (BFF):</strong> The player you have the highest win rate with (minimum {minGames} game{minGames !== 1 ? 's' : ''}).
             </p>
             <p className="mb-2">
-              <strong>Nemesis:</strong> The opponent you struggle against most (lowest win rate, minimum 3 games).
+              <strong>Nemesis:</strong> The opponent you struggle against most (lowest win rate, minimum {minGames} game{minGames !== 1 ? 's' : ''}).
             </p>
             <p>
-              These statistics help identify which players complement your playstyle best and which opponents 
-              present the greatest challenge. Relationships require at least 3 games for statistical significance.
+              These statistics help identify which players complement your playstyle best and which opponents
+              present the greatest challenge. Relationships require at least {minGames} game{minGames !== 1 ? 's' : ''} for statistical significance.
             </p>
           </div>
         </div>
