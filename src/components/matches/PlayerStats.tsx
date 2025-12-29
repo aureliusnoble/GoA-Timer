@@ -843,19 +843,25 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
                 {/* Min Games for Relationships */}
                 <div className="mb-4">
                   <label className="block text-sm text-gray-400 mb-1">Min games for relationships</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="20"
-                    value={minGamesRelationship}
-                    onChange={(e) => {
-                      const value = parseInt(e.target.value, 10);
-                      if (!isNaN(value) && value >= 1 && value <= 20) {
-                        setMinGamesRelationship(value);
-                      }
-                    }}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setMinGamesRelationship(prev => Math.max(1, prev - 1))}
+                      disabled={minGamesRelationship <= 1}
+                      className="w-10 h-10 flex items-center justify-center bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-xl font-bold"
+                    >
+                      −
+                    </button>
+                    <div className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-center font-medium">
+                      {minGamesRelationship}
+                    </div>
+                    <button
+                      onClick={() => setMinGamesRelationship(prev => Math.min(20, prev + 1))}
+                      disabled={minGamesRelationship >= 20}
+                      className="w-10 h-10 flex items-center justify-center bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-xl font-bold"
+                    >
+                      +
+                    </button>
+                  </div>
                   <p className="text-xs text-gray-500 mt-1">
                     For BFF/Nemesis calculations in player details
                   </p>
