@@ -192,73 +192,98 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     }
   };
   
-  // Enhanced balance teams by ELO with randomization for multiple valid solutions
+  // Helper: Find optimal team assignment that minimizes average difference
+  // Uses exhaustive search - O(C(n, n/2)) which is fast for typical game sizes (4-12 players)
+  const findOptimalTeams = (
+    players: DBPlayer[],
+    getValue: (p: DBPlayer) => number
+  ): { team1: DBPlayer[], team2: DBPlayer[] } => {
+    const n = players.length;
+    if (n < 2) return { team1: [...players], team2: [] };
+
+    // Sort players deterministically (for consistent tie-breaking)
+    const sorted = [...players].sort((a, b) => {
+      const diff = getValue(b) - getValue(a);
+      return diff !== 0 ? diff : a.id.localeCompare(b.id);
+    });
+
+    const team1Size = Math.ceil(n / 2);
+    const team2Size = n - team1Size;
+
+    // Generate all combinations of indices for team1
+    const generateCombinations = (k: number): number[][] => {
+      const result: number[][] = [];
+      const combine = (start: number, current: number[]) => {
+        if (current.length === k) {
+          result.push([...current]);
+          return;
+        }
+        for (let i = start; i <= n - (k - current.length); i++) {
+          current.push(i);
+          combine(i + 1, current);
+          current.pop();
+        }
+      };
+      combine(0, []);
+      return result;
+    };
+
+    const allCombinations = generateCombinations(team1Size);
+    let bestTeam1Indices: number[] = [];
+    let bestDiff = Infinity;
+
+    for (const team1Indices of allCombinations) {
+      // Calculate team sums
+      let team1Sum = 0;
+      let team2Sum = 0;
+      const team1Set = new Set(team1Indices);
+
+      for (let i = 0; i < n; i++) {
+        const value = getValue(sorted[i]);
+        if (team1Set.has(i)) {
+          team1Sum += value;
+        } else {
+          team2Sum += value;
+        }
+      }
+
+      // Calculate average difference
+      const team1Avg = team1Sum / team1Size;
+      const team2Avg = team2Sum / team2Size;
+      const diff = Math.abs(team1Avg - team2Avg);
+
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestTeam1Indices = team1Indices;
+      }
+      // Tie-breaker: first combination found (lexicographic order) wins
+    }
+
+    const team1Set = new Set(bestTeam1Indices);
+    const team1 = bestTeam1Indices.map(i => sorted[i]);
+    const team2 = sorted.filter((_, i) => !team1Set.has(i));
+
+    return { team1, team2 };
+  };
+
+  // Balance teams by skill rating - optimal assignment minimizing average skill difference
   const balanceTeams = async () => {
     if (selectedPlayers.length < 4) {
       return; // Not enough players
     }
-    
+
     setIsBalancing(true);
     playSound('phaseChange');
-    
+
     try {
-      
-      // Add randomization by shuffling players with similar ratings
-      const shuffledPlayers = [...selectedPlayers];
-      
-      // Group players by similar skill levels (within 100 rating points)
-      const ratingGroups: DBPlayer[][] = [];
-      const sortedByRating = [...shuffledPlayers].sort((a, b) => 
-        dbService.getDisplayRating(b) - dbService.getDisplayRating(a)
+      const { team1, team2 } = findOptimalTeams(
+        selectedPlayers,
+        (p) => dbService.getDisplayRating(p)
       );
-      
-      sortedByRating.forEach(player => {
-        const rating = dbService.getDisplayRating(player);
-        let added = false;
-        
-        for (const group of ratingGroups) {
-          const groupRating = dbService.getDisplayRating(group[0]);
-          if (Math.abs(rating - groupRating) <= 100) {
-            group.push(player);
-            added = true;
-            break;
-          }
-        }
-        
-        if (!added) {
-          ratingGroups.push([player]);
-        }
-      });
-      
-      // Shuffle within each rating group
-      ratingGroups.forEach(group => {
-        for (let i = group.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [group[i], group[j]] = [group[j], group[i]];
-        }
-      });
-      
-      // Flatten back to player list
-      const randomizedPlayers = ratingGroups.flat();
-      
-      // Use greedy algorithm with randomized order
-      const team1Players: DBPlayer[] = [];
-      const team2Players: DBPlayer[] = [];
-      
-      randomizedPlayers.forEach(player => {
-        const team1Skill = team1Players.reduce((sum, p) => sum + dbService.getDisplayRating(p), 0);
-        const team2Skill = team2Players.reduce((sum, p) => sum + dbService.getDisplayRating(p), 0);
-        
-        if (team1Skill <= team2Skill) {
-          team1Players.push(player);
-        } else {
-          team2Players.push(player);
-        }
-      });
-      
-      setTeam1(team1Players);
-      setTeam2(team2Players);
-      
+
+      setTeam1(team1);
+      setTeam2(team2);
+
       // Keep win probability collapsed by default
       setShowWinProbability(false);
     } catch (error) {
@@ -267,72 +292,25 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
       setIsBalancing(false);
     }
   };
-  
-  // Enhanced balance teams by experience with randomization
+
+  // Balance teams by experience - optimal assignment minimizing average games difference
   const balanceTeamsByExperience = async () => {
     if (selectedPlayers.length < 4) {
       return; // Not enough players
     }
-    
+
     setIsBalancing(true);
     playSound('phaseChange');
-    
+
     try {
-      // Add randomization by shuffling players with similar experience
-      const shuffledPlayers = [...selectedPlayers];
-      
-      // Group players by similar experience levels
-      const experienceGroups: DBPlayer[][] = [];
-      const sortedByGames = [...shuffledPlayers].sort((a, b) => b.totalGames - a.totalGames);
-      
-      sortedByGames.forEach(player => {
-        const games = player.totalGames;
-        let added = false;
-        
-        for (const group of experienceGroups) {
-          const groupGames = group[0].totalGames;
-          // Group players within 5 games of each other
-          if (Math.abs(games - groupGames) <= 5) {
-            group.push(player);
-            added = true;
-            break;
-          }
-        }
-        
-        if (!added) {
-          experienceGroups.push([player]);
-        }
-      });
-      
-      // Shuffle within each experience group
-      experienceGroups.forEach(group => {
-        for (let i = group.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [group[i], group[j]] = [group[j], group[i]];
-        }
-      });
-      
-      // Flatten back to player list
-      const randomizedPlayers = experienceGroups.flat();
-      
-      // Use greedy algorithm with randomized order
-      const team1Players: DBPlayer[] = [];
-      const team2Players: DBPlayer[] = [];
-      
-      randomizedPlayers.forEach(player => {
-        const team1Games = team1Players.reduce((sum, p) => sum + p.totalGames, 0);
-        const team2Games = team2Players.reduce((sum, p) => sum + p.totalGames, 0);
-        
-        if (team1Games <= team2Games) {
-          team1Players.push(player);
-        } else {
-          team2Players.push(player);
-        }
-      });
-      
-      setTeam1(team1Players);
-      setTeam2(team2Players);
-      
+      const { team1, team2 } = findOptimalTeams(
+        selectedPlayers,
+        (p) => p.totalGames
+      );
+
+      setTeam1(team1);
+      setTeam2(team2);
+
       // Keep win probability collapsed by default
       setShowWinProbability(false);
     } catch (error) {
@@ -450,8 +428,8 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
   
   // Tooltip text definitions for buttons
   const tooltips = {
-    ranking: "Balance teams based on player ELO ratings to create fair matches. Higher ELO players will be evenly distributed to make teams equally skilled. Click multiple times for different configurations.",
-    experience: "Balance teams based on player experience (total games played), ensuring both teams have a mix of experienced and newer players. Click multiple times for different configurations.",
+    ranking: "Find the optimal team assignment that minimizes the difference in average skill between teams. Equal team sizes guaranteed. Same players always produce the same teams.",
+    experience: "Find the optimal team assignment that minimizes the difference in average experience (games played) between teams. Equal team sizes guaranteed. Same players always produce the same teams.",
     random: "Create random teams without consideration for player skill or experience. Each click generates a completely new random configuration.",
     manual: "Enable manual team assignment mode to create teams by hand. You can move players between teams freely to create custom matchups.",
     reset: "Reset both teams and start over. Player selection will be maintained but no players will be assigned to teams."
