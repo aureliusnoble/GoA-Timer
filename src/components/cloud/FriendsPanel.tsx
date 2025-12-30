@@ -9,7 +9,8 @@ import {
   ChevronDown,
   ChevronUp,
   RefreshCw,
-  Download
+  Download,
+  AlertTriangle
 } from 'lucide-react';
 import { useSound } from '../../context/SoundContext';
 import { FriendService, Friend, FriendRequest } from '../../services/supabase/FriendService';
@@ -80,7 +81,7 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ onPendingCountChange }) => 
 
   const handleToggleFriendSync = (friendId: string) => {
     playSound('toggleSwitch');
-    const currentAutoSync = syncPreferences[friendId]?.autoSync ?? true;
+    const currentAutoSync = syncPreferences[friendId]?.autoSync ?? false;
     const newAutoSync = !currentAutoSync;
     CloudSyncService.setFriendSyncPreference(friendId, newAutoSync);
     setSyncPreferences({
@@ -90,7 +91,7 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ onPendingCountChange }) => 
   };
 
   const isFriendAutoSyncEnabled = (friendId: string): boolean => {
-    return syncPreferences[friendId]?.autoSync ?? true;
+    return syncPreferences[friendId]?.autoSync ?? false;
   };
 
   const handleSyncFromFriend = async (friendId: string) => {
@@ -171,6 +172,21 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ onPendingCountChange }) => 
           sentRequests={sentRequests}
           onAction={handleRequestAction}
         />
+      )}
+
+      {/* Auto-sync Warning */}
+      {friends.length > 0 && (
+        <div className="bg-yellow-900/20 border border-yellow-700/50 rounded-lg p-3">
+          <div className="flex items-start space-x-2">
+            <AlertTriangle size={16} className="text-yellow-500 mt-0.5 flex-shrink-0" />
+            <div className="text-xs text-yellow-200/80">
+              <p className="font-medium text-yellow-200 mb-1">About Auto-Sync</p>
+              <p>
+                Enabling auto-sync (<RefreshCw size={12} className="inline text-orange-400" />) for a friend means any matches they add or changes they make will automatically be applied to your account. Only enable this for friends you trust. You can manually download friend data instead for more control.
+              </p>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Search Friends */}

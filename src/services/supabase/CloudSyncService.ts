@@ -419,13 +419,13 @@ class CloudSyncServiceClass {
 
   isFriendAutoSyncEnabled(friendId: string): boolean {
     const prefs = this.getFriendSyncPreferences();
-    // Default to true for new friends
-    return prefs[friendId]?.autoSync ?? true;
+    // Default to false for new friends (user must opt-in)
+    return prefs[friendId]?.autoSync ?? false;
   }
 
   getAutoSyncFriendIds(allFriendIds: string[]): string[] {
     const prefs = this.getFriendSyncPreferences();
-    return allFriendIds.filter(id => prefs[id]?.autoSync ?? true);
+    return allFriendIds.filter(id => prefs[id]?.autoSync ?? false);
   }
 
   /**
