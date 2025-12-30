@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { LogOut, Settings, User, Shield, Eye, EyeOff, Loader2, Trash2 } from 'lucide-react';
+import { LogOut, Settings, User, Shield, Eye, EyeOff, Loader2, Trash2, Lock, Check } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSound } from '../../context/SoundContext';
 
 const ProfilePanel: React.FC = () => {
-  const { user, profile, logout, updateProfile, deleteCloudData, deleteAccount } = useAuth();
+  const { user, profile, logout, updateProfile, deleteCloudData, deleteAccount, changePassword } = useAuth();
   const { playSound } = useSound();
 
   const [showSettings, setShowSettings] = useState(false);
+  const [showSecurity, setShowSecurity] = useState(false);
   const [showDangerZone, setShowDangerZone] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -16,6 +17,16 @@ const ProfilePanel: React.FC = () => {
   const [confirmDeleteData, setConfirmDeleteData] = useState(false);
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Password change state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
 
   const handleLogout = async () => {
     playSound('buttonClick');
@@ -81,6 +92,49 @@ const ProfilePanel: React.FC = () => {
     setConfirmDeleteData(false);
     setConfirmDeleteAccount(false);
     setDeleteError(null);
+  };
+
+  const handleChangePassword = async () => {
+    setPasswordError(null);
+    setPasswordSuccess(false);
+
+    // Validate passwords match
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New passwords do not match');
+      return;
+    }
+
+    // Validate new password is different
+    if (currentPassword === newPassword) {
+      setPasswordError('New password must be different from current password');
+      return;
+    }
+
+    playSound('buttonClick');
+    setIsChangingPassword(true);
+
+    const result = await changePassword(currentPassword, newPassword);
+
+    setIsChangingPassword(false);
+
+    if (result.success) {
+      setPasswordSuccess(true);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      // Hide success message after 3 seconds
+      setTimeout(() => setPasswordSuccess(false), 3000);
+    } else {
+      setPasswordError(result.error || 'Failed to change password');
+    }
+  };
+
+  const resetPasswordForm = () => {
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordError(null);
+    setPasswordSuccess(false);
   };
 
   if (!user || !profile) {
@@ -178,6 +232,118 @@ const ProfilePanel: React.FC = () => {
               }`}
             >
               <div className="bg-white w-4 h-4 rounded-full shadow"></div>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Security Toggle */}
+      <button
+        onClick={() => {
+          playSound('buttonClick');
+          setShowSecurity(!showSecurity);
+          if (!showSecurity) resetPasswordForm();
+        }}
+        className="w-full flex items-center justify-between bg-gray-800 hover:bg-gray-750 rounded-lg p-3 transition-colors"
+      >
+        <div className="flex items-center">
+          <Lock size={18} className="text-gray-400 mr-3" />
+          <span className="text-white">Security</span>
+        </div>
+        <span className="text-gray-400">{showSecurity ? '▲' : '▼'}</span>
+      </button>
+
+      {/* Security Panel - Password Change */}
+      {showSecurity && (
+        <div className="bg-gray-800 rounded-lg p-4 space-y-4">
+          <h4 className="text-sm font-medium text-gray-400">Change Password</h4>
+
+          {passwordSuccess && (
+            <div className="bg-green-900/30 border border-green-700 text-green-300 text-sm p-3 rounded flex items-center">
+              <Check size={16} className="mr-2" />
+              Password changed successfully!
+            </div>
+          )}
+
+          {passwordError && (
+            <div className="bg-red-900/30 border border-red-700 text-red-300 text-sm p-3 rounded">
+              {passwordError}
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {/* Current Password */}
+            <div>
+              <label className="text-gray-400 text-xs block mb-1">Current Password</label>
+              <div className="relative">
+                <input
+                  type={showCurrentPassword ? 'text' : 'password'}
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  disabled={isChangingPassword}
+                  className="w-full bg-gray-700 text-white px-3 py-2 rounded pr-10 text-sm"
+                  placeholder="Enter current password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                >
+                  {showCurrentPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            {/* New Password */}
+            <div>
+              <label className="text-gray-400 text-xs block mb-1">New Password</label>
+              <div className="relative">
+                <input
+                  type={showNewPassword ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  disabled={isChangingPassword}
+                  className="w-full bg-gray-700 text-white px-3 py-2 rounded pr-10 text-sm"
+                  placeholder="Enter new password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                >
+                  {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <p className="text-gray-500 text-xs mt-1">Minimum 6 characters</p>
+            </div>
+
+            {/* Confirm New Password */}
+            <div>
+              <label className="text-gray-400 text-xs block mb-1">Confirm New Password</label>
+              <input
+                type={showNewPassword ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                disabled={isChangingPassword}
+                className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm"
+                placeholder="Confirm new password"
+              />
+            </div>
+
+            {/* Submit Button */}
+            <button
+              onClick={handleChangePassword}
+              disabled={isChangingPassword || !currentPassword || !newPassword || !confirmPassword}
+              className="w-full bg-orange-600 hover:bg-orange-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded transition-colors text-sm"
+            >
+              {isChangingPassword ? (
+                <>
+                  <Loader2 size={14} className="animate-spin inline mr-2" />
+                  Changing Password...
+                </>
+              ) : (
+                'Change Password'
+              )}
             </button>
           </div>
         </div>

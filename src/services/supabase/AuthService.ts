@@ -153,6 +153,53 @@ class AuthServiceClass {
     }
   }
 
+  async changePassword(
+    currentPassword: string,
+    newPassword: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (!isSupabaseConfigured() || !supabase) {
+      return { success: false, error: 'Cloud features are not configured' };
+    }
+
+    try {
+      // Get current user's email
+      const user = await this.getUser();
+      if (!user?.email) {
+        return { success: false, error: 'No user logged in' };
+      }
+
+      // Validate new password
+      const passwordError = this.validatePassword(newPassword);
+      if (passwordError) {
+        return { success: false, error: passwordError };
+      }
+
+      // Verify current password by attempting to sign in
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
+      });
+
+      if (verifyError) {
+        return { success: false, error: 'Current password is incorrect' };
+      }
+
+      // Update to new password
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (updateError) {
+        return { success: false, error: updateError.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('[AuthService] Change password error:', error);
+      return { success: false, error: 'An unexpected error occurred' };
+    }
+  }
+
   async getSession(): Promise<Session | null> {
     if (!isSupabaseConfigured() || !supabase) {
       return null;

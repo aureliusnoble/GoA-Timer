@@ -18,6 +18,7 @@ interface AuthContextType {
   updateProfile: (updates: Partial<Pick<UserProfile, 'displayName' | 'shareStatsWithFriends' | 'shareMatchHistoryWithFriends'>>) => Promise<{ success: boolean; error?: string }>;
   deleteCloudData: () => Promise<{ success: boolean; error?: string }>;
   deleteAccount: () => Promise<{ success: boolean; error?: string }>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -35,6 +36,7 @@ const AuthContext = createContext<AuthContextType>({
   updateProfile: async () => ({ success: false }),
   deleteCloudData: async () => ({ success: false }),
   deleteAccount: async () => ({ success: false }),
+  changePassword: async () => ({ success: false }),
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -151,6 +153,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return result;
   }, []);
 
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    setError(null);
+    const result = await AuthService.changePassword(currentPassword, newPassword);
+    if (!result.success && result.error) {
+      setError(result.error);
+    }
+    return result;
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -168,6 +179,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateProfile,
         deleteCloudData,
         deleteAccount,
+        changePassword,
       }}
     >
       {children}
