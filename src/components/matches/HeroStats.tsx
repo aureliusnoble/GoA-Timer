@@ -1,6 +1,6 @@
 // src/components/matches/HeroStats.tsx
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { ChevronLeft, Search, Info, Filter, ChevronDown, ChevronUp, Shield, Camera, Calendar } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { ChevronLeft, Search, Info, Filter, ChevronDown, ChevronUp, Shield, Camera, Calendar, Globe, Users, RefreshCw, Loader2, AlertCircle, TrendingUp } from 'lucide-react';
 import { Hero } from '../../types';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
@@ -8,6 +8,9 @@ import EnhancedTooltip from '../common/EnhancedTooltip';
 import HeroInfoDisplay from '../common/HeroInfoDisplay';
 import { heroes as allHeroes } from '../../data/heroes';
 import html2canvas from 'html2canvas'; // Import html2canvas library
+import { GlobalStatsService, GlobalHeroStats } from '../../services/supabase/GlobalStatsService';
+import { isSupabaseConfigured } from '../../services/supabase/SupabaseClient';
+import HeroWinRateOverTime from './HeroWinRateOverTime';
 
 // Hero statistics interface
 interface HeroStats {
@@ -68,6 +71,19 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
     return saved ? parseInt(saved, 10) : null; // null = All Time
   });
 
+  // Global stats mode state
+  const [statsMode, setStatsMode] = useState<'local' | 'global'>('local');
+  const [globalHeroStats, setGlobalHeroStats] = useState<GlobalHeroStats[]>([]);
+  const [globalStatsLoading, setGlobalStatsLoading] = useState(false);
+  const [globalStatsError, setGlobalStatsError] = useState<string | null>(null);
+  const [globalCacheAge, setGlobalCacheAge] = useState<number | null>(null);
+
+  // Win rate over time view state
+  const [showWinRateOverTime, setShowWinRateOverTime] = useState(false);
+
+  // Check if cloud features are available
+  const cloudAvailable = isSupabaseConfigured();
+
   // Create a ref to the main content container for screenshots
   const contentRef = useRef<HTMLDivElement>(null);
   
@@ -92,27 +108,81 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
     return { startDate, endDate };
   }, [recencyMonths]);
 
-  // Load hero stats on component mount and when filters change
-  useEffect(() => {
-    const loadHeroStats = async () => {
-      setLoading(true);
-      try {
-        // Get hero statistics from database with date filtering
-        const stats = await dbService.getHeroStats(
-          minGamesRelationship,
-          dateRange.startDate,
-          dateRange.endDate
-        );
-        setHeroStats(stats);
-      } catch (error) {
-        console.error('Error loading hero stats:', error);
-      } finally {
-        setLoading(false);
+  // Function to load global stats
+  const loadGlobalStats = useCallback(async (forceRefresh: boolean = false) => {
+    setGlobalStatsLoading(true);
+    setGlobalStatsError(null);
+    try {
+      const result = await GlobalStatsService.getGlobalHeroStats(
+        1, // minGamesHero
+        minGamesRelationship,
+        forceRefresh
+      );
+      if (result.success && result.data) {
+        setGlobalHeroStats(result.data);
+        setGlobalCacheAge(GlobalStatsService.getCacheAge());
+      } else {
+        setGlobalStatsError(result.error || 'Failed to load global statistics');
       }
-    };
+    } catch (error) {
+      console.error('Error loading global stats:', error);
+      setGlobalStatsError(error instanceof Error ? error.message : 'An unexpected error occurred');
+    } finally {
+      setGlobalStatsLoading(false);
+    }
+  }, [minGamesRelationship]);
 
-    loadHeroStats();
-  }, [minGamesRelationship, dateRange.startDate, dateRange.endDate]);
+  // Load local hero stats on component mount and when filters change
+  useEffect(() => {
+    if (statsMode === 'local') {
+      const loadHeroStats = async () => {
+        setLoading(true);
+        try {
+          // Get hero statistics from database with date filtering
+          const stats = await dbService.getHeroStats(
+            minGamesRelationship,
+            dateRange.startDate,
+            dateRange.endDate
+          );
+          setHeroStats(stats);
+        } catch (error) {
+          console.error('Error loading hero stats:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      loadHeroStats();
+    }
+  }, [statsMode, minGamesRelationship, dateRange.startDate, dateRange.endDate]);
+
+  // Load global stats when switching to global mode (initial load)
+  useEffect(() => {
+    if (statsMode === 'global' && globalHeroStats.length === 0 && !globalStatsLoading) {
+      loadGlobalStats();
+    }
+  }, [statsMode, globalHeroStats.length, globalStatsLoading, loadGlobalStats]);
+
+  // Reload global stats when minGamesRelationship changes while in global mode
+  // Use a ref to track the previous value and avoid reload on initial mount
+  const prevMinGamesRef = useRef(minGamesRelationship);
+  useEffect(() => {
+    if (statsMode === 'global' && prevMinGamesRef.current !== minGamesRelationship) {
+      // Clear cache since params changed, then reload
+      GlobalStatsService.clearCache();
+      loadGlobalStats(true);
+    }
+    prevMinGamesRef.current = minGamesRelationship;
+  }, [statsMode, minGamesRelationship, loadGlobalStats]);
+
+  // Update cache age periodically when in global mode
+  useEffect(() => {
+    if (statsMode === 'global') {
+      const interval = setInterval(() => {
+        setGlobalCacheAge(GlobalStatsService.getCacheAge());
+      }, 10000); // Update every 10 seconds
+      return () => clearInterval(interval);
+    }
+  }, [statsMode]);
 
   // Persist minGamesRelationship to localStorage
   useEffect(() => {
@@ -284,26 +354,31 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
     }
   };
 
+  // Get active hero stats based on current mode
+  const activeHeroStats = useMemo(() => {
+    return statsMode === 'local' ? heroStats : globalHeroStats;
+  }, [statsMode, heroStats, globalHeroStats]);
+
   // Extract all available roles from heroes
   const allRoles = React.useMemo(() => {
     const roleSet = new Set<string>();
-    heroStats.forEach(hero => {
+    activeHeroStats.forEach(hero => {
       hero.roles.forEach(role => roleSet.add(role));
     });
     return Array.from(roleSet).sort();
-  }, [heroStats]);
+  }, [activeHeroStats]);
 
   // Extract all available expansions from heroes
   const allExpansions = React.useMemo(() => {
     const expansionSet = new Set<string>();
-    heroStats.forEach(hero => {
+    activeHeroStats.forEach(hero => {
       expansionSet.add(hero.expansion);
     });
     return Array.from(expansionSet).sort();
-  }, [heroStats]);
+  }, [activeHeroStats]);
 
   // Filter and sort heroes
-  const filteredHeroes = heroStats
+  const filteredHeroes = activeHeroStats
     .filter(hero => {
       // Apply search filter
       if (searchTerm) {
@@ -492,6 +567,16 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
     };
   }, []);
 
+  // Render the Win Rate Over Time view if selected
+  if (showWinRateOverTime) {
+    return (
+      <HeroWinRateOverTime
+        onBack={() => setShowWinRateOverTime(false)}
+        initialStatsMode={statsMode}
+      />
+    );
+  }
+
   return (
     <div ref={contentRef} id="screenshotContent" className="bg-gray-800 rounded-lg p-6">
       <div className="flex justify-between items-center mb-6 no-screenshot">
@@ -503,20 +588,145 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
           <span>Back to Menu</span>
         </button>
         <h2 className="text-2xl font-bold">Hero Statistics</h2>
-        
-        {/* Screenshot Button - replaced Print button */}
-        <EnhancedTooltip text="Take a screenshot of all hero statistics" position="left">
-          <button
-            onClick={handleTakeScreenshot}
-            className="flex items-center px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg"
-            disabled={takingScreenshot}
-          >
-            <Camera size={18} className="mr-2" />
-            <span>{takingScreenshot ? 'Capturing...' : 'Share Stats'}</span>
-          </button>
-        </EnhancedTooltip>
+
+        <div className="flex items-center gap-2">
+          {/* Win Rate Over Time Button */}
+          <EnhancedTooltip text="View hero win rate progression over time" position="left">
+            <button
+              onClick={() => {
+                playSound('buttonClick');
+                setShowWinRateOverTime(true);
+              }}
+              className="flex items-center px-3 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg"
+            >
+              <TrendingUp size={18} className="mr-2" />
+              <span>Win Rate Over Time</span>
+            </button>
+          </EnhancedTooltip>
+
+          {/* Screenshot Button */}
+          <EnhancedTooltip text="Take a screenshot of all hero statistics" position="left">
+            <button
+              onClick={handleTakeScreenshot}
+              className="flex items-center px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg"
+              disabled={takingScreenshot}
+            >
+              <Camera size={18} className="mr-2" />
+              <span>{takingScreenshot ? 'Capturing...' : 'Share Stats'}</span>
+            </button>
+          </EnhancedTooltip>
+        </div>
       </div>
-      
+
+      {/* Stats Mode Toggle - Play Group vs Global */}
+      {cloudAvailable && (
+        <div className="mb-4 no-screenshot">
+          <div className="flex items-center justify-center gap-2">
+            <button
+              onClick={() => {
+                playSound('buttonClick');
+                setStatsMode('local');
+              }}
+              className={`flex items-center px-4 py-2 rounded-lg transition-colors ${
+                statsMode === 'local'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              <Users size={18} className="mr-2" />
+              Play Group
+            </button>
+            <button
+              onClick={() => {
+                playSound('buttonClick');
+                setStatsMode('global');
+              }}
+              className={`flex items-center px-4 py-2 rounded-lg transition-colors ${
+                statsMode === 'global'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              <Globe size={18} className="mr-2" />
+              Global
+            </button>
+          </div>
+          <p className="text-center text-xs text-gray-500 mt-2">
+            {statsMode === 'local'
+              ? 'Showing statistics from your match history'
+              : 'Showing aggregated statistics from all players'}
+          </p>
+        </div>
+      )}
+
+      {/* Global Stats Banner */}
+      {statsMode === 'global' && (
+        <div className="mb-4 p-3 bg-green-900/30 border border-green-700/50 rounded-lg no-screenshot">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <Globe size={18} className="mr-2 text-green-400 flex-shrink-0" />
+              <span className="text-sm text-green-200">
+                Viewing global statistics from all players
+                {globalCacheAge !== null && (
+                  <span className="ml-2 text-green-400/70">
+                    (cached {globalCacheAge < 60 ? `${globalCacheAge}s` : `${Math.floor(globalCacheAge / 60)}m`} ago)
+                  </span>
+                )}
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                playSound('buttonClick');
+                GlobalStatsService.clearCache();
+                loadGlobalStats(true);
+              }}
+              disabled={globalStatsLoading}
+              className="flex items-center px-2 py-1 text-sm bg-green-700 hover:bg-green-600 rounded transition-colors disabled:opacity-50"
+              title="Refresh global data"
+            >
+              {globalStatsLoading ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <RefreshCw size={14} />
+              )}
+              <span className="ml-1">Refresh</span>
+            </button>
+          </div>
+          <p className="text-xs text-green-200/60 mt-2">
+            Note: Time period filter is not available for global stats. Data is ephemeral and not saved locally.
+          </p>
+        </div>
+      )}
+
+      {/* Global Stats Error */}
+      {statsMode === 'global' && globalStatsError && (
+        <div className="mb-4 p-3 bg-red-900/30 border border-red-700/50 rounded-lg no-screenshot">
+          <div className="flex items-center">
+            <AlertCircle size={18} className="mr-2 text-red-400 flex-shrink-0" />
+            <span className="text-sm text-red-200">{globalStatsError}</span>
+          </div>
+          <button
+            onClick={() => {
+              playSound('buttonClick');
+              loadGlobalStats(true);
+            }}
+            className="mt-2 text-sm text-red-400 hover:text-red-300 underline"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
+      {/* Global Stats Loading */}
+      {statsMode === 'global' && globalStatsLoading && globalHeroStats.length === 0 && (
+        <div className="flex justify-center items-center h-32 no-screenshot">
+          <div className="flex flex-col items-center">
+            <Loader2 size={32} className="animate-spin text-green-400 mb-2" />
+            <span className="text-gray-400">Loading global statistics...</span>
+          </div>
+        </div>
+      )}
+
       {/* Search and Filter Bar */}
       <div className="bg-gray-700 rounded-lg p-4 mb-6 no-screenshot">
         <div className="flex flex-col md:flex-row gap-4 items-stretch">
@@ -602,25 +812,32 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
                 <h4 className="font-medium mb-3">Filter Options</h4>
 
                 {/* Time Period Filter */}
-                <div className="mb-4">
-                  <label className="block text-sm text-gray-400 mb-2">Time Period</label>
+                <div className={`mb-4 ${statsMode === 'global' ? 'opacity-50' : ''}`}>
+                  <label className="block text-sm text-gray-400 mb-2">
+                    Time Period
+                    {statsMode === 'global' && (
+                      <span className="ml-2 text-xs text-yellow-500">(not available for global stats)</span>
+                    )}
+                  </label>
                   <div className="space-y-2">
-                    <label className="flex items-center cursor-pointer">
+                    <label className={`flex items-center ${statsMode === 'global' ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
                       <input
                         type="radio"
                         name="timePeriod"
                         checked={recencyMonths === null}
                         onChange={() => setRecencyMonths(null)}
+                        disabled={statsMode === 'global'}
                         className="mr-2 accent-blue-500"
                       />
                       <span className="text-sm">All Time</span>
                     </label>
-                    <label className="flex items-center cursor-pointer">
+                    <label className={`flex items-center ${statsMode === 'global' ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
                       <input
                         type="radio"
                         name="timePeriod"
                         checked={recencyMonths !== null}
                         onChange={() => setRecencyMonths(recencyMonths || 6)}
+                        disabled={statsMode === 'global'}
                         className="mr-2 accent-blue-500"
                       />
                       <span className="text-sm mr-2">Last</span>
@@ -635,7 +852,7 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
                             setRecencyMonths(value);
                           }
                         }}
-                        disabled={recencyMonths === null}
+                        disabled={recencyMonths === null || statsMode === 'global'}
                         className="w-16 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                       />
                       <span className="text-sm ml-2">months</span>
@@ -725,8 +942,8 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
         </div>
       )}
 
-      {/* Date Range Banner - shown when recency filter is active */}
-      {recencyMonths !== null && dateRange.startDate && dateRange.endDate && (
+      {/* Date Range Banner - shown when recency filter is active (local mode only) */}
+      {statsMode === 'local' && recencyMonths !== null && dateRange.startDate && dateRange.endDate && (
         <div className="mb-4 p-3 bg-blue-900/30 border border-blue-700/50 rounded-lg flex items-center">
           <Calendar size={18} className="mr-2 text-blue-400 flex-shrink-0" />
           <span className="text-sm text-blue-200">
@@ -740,7 +957,7 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
       )}
 
       {/* Loading State */}
-      {loading ? (
+      {(statsMode === 'local' ? loading : (globalStatsLoading && globalHeroStats.length === 0)) ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
         </div>
@@ -901,10 +1118,18 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
           <Info size={16} className="mr-2 text-blue-400" />
           About Hero Statistics
         </h4>
-        <p className="mb-2">
-          These statistics show hero performance based on your match history. Win rates and synergies are calculated from 
-          your recorded matches, so they reflect your group's playstyle and may differ from general statistics.
-        </p>
+        {statsMode === 'local' ? (
+          <p className="mb-2">
+            These statistics show hero performance based on your match history. Win rates and synergies are calculated from
+            your recorded matches, so they reflect your play group's style and may differ from global statistics.
+          </p>
+        ) : (
+          <p className="mb-2">
+            These are aggregated statistics from all players who have uploaded their matches to the cloud.
+            Win rates and synergies reflect the global community's experience. This data is downloaded fresh each session
+            and is not stored locally.
+          </p>
+        )}
       </div>
     </div>
   );

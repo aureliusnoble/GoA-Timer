@@ -520,6 +520,203 @@ class DatabaseService {
   }
 
   /**
+   * Get hero win rate over time for charting
+   * Returns cumulative win rate at each date where matches occurred
+   * @param heroIds - Optional array of hero IDs to filter (if empty/undefined, return all)
+   * @param minGames - Minimum games before a hero appears (default: 3)
+   * @param startDate - Optional start date filter
+   * @param endDate - Optional end date filter
+   */
+  async getHeroWinRateOverTime(
+    heroIds?: number[],
+    minGames: number = 3,
+    startDate?: Date,
+    endDate?: Date
+  ): Promise<{
+    heroes: Array<{
+      heroId: number;
+      heroName: string;
+      icon: string;
+      totalGames: number;
+      currentWinRate: number;
+      dataPoints: Array<{
+        date: string;
+        gamesPlayedTotal: number;
+        winsTotal: number;
+        winRate: number;
+        gamesPlayedOnDate: number;
+      }>;
+    }>;
+    dateRange: { firstMatch: string; lastMatch: string } | null;
+  }> {
+    try {
+      const allMatchPlayersRaw = await this.getAllMatchPlayers();
+      let allMatches = await this.getAllMatches();
+
+      // Sort matches by date chronologically
+      allMatches.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      // Filter matches by date range if specified
+      if (startDate || endDate) {
+        allMatches = allMatches.filter(match => {
+          const matchDate = new Date(match.date);
+          if (startDate && matchDate < startDate) return false;
+          if (endDate && matchDate > endDate) return false;
+          return true;
+        });
+      }
+
+      if (allMatches.length === 0) {
+        return { heroes: [], dateRange: null };
+      }
+
+      // Create a set of valid match IDs for filtering
+      const validMatchIds = new Set(allMatches.map(m => m.id));
+      const allMatchPlayers = allMatchPlayersRaw.filter(mp => validMatchIds.has(mp.matchId));
+      const matchesMap = new Map(allMatches.map(m => [m.id, m]));
+
+      // Build hero tracking data structure
+      // Key: heroId, Value: { heroName, icon, matches: [{date, won}] }
+      const heroTracking = new Map<number, {
+        heroName: string;
+        icon: string;
+        matches: Array<{ date: string; won: boolean }>;
+      }>();
+
+      // Process each match player to build match history per hero
+      for (const matchPlayer of allMatchPlayers) {
+        const heroId = matchPlayer.heroId;
+        if (heroId === undefined || heroId === null) continue;
+
+        // Skip if filtering by heroIds and this hero is not in the list
+        if (heroIds && heroIds.length > 0 && !heroIds.includes(heroId)) continue;
+
+        const match = matchesMap.get(matchPlayer.matchId);
+        if (!match) continue;
+
+        if (!heroTracking.has(heroId)) {
+          heroTracking.set(heroId, {
+            heroName: matchPlayer.heroName,
+            icon: `heroes/${matchPlayer.heroName.toLowerCase().replace(/\s+/g, '')}.png`,
+            matches: []
+          });
+        }
+
+        const heroData = heroTracking.get(heroId)!;
+        const matchDate = new Date(match.date).toISOString().split('T')[0]; // YYYY-MM-DD
+        const won = matchPlayer.team === match.winningTeam;
+
+        heroData.matches.push({ date: matchDate, won });
+      }
+
+      // Now convert to time series data with cumulative stats
+      const heroResults: Array<{
+        heroId: number;
+        heroName: string;
+        icon: string;
+        totalGames: number;
+        currentWinRate: number;
+        dataPoints: Array<{
+          date: string;
+          gamesPlayedTotal: number;
+          winsTotal: number;
+          winRate: number;
+          gamesPlayedOnDate: number;
+        }>;
+      }> = [];
+
+      for (const [heroId, heroData] of heroTracking.entries()) {
+        // Sort matches by date
+        heroData.matches.sort((a, b) => a.date.localeCompare(b.date));
+
+        // Group by date and calculate cumulative stats
+        const dateGroups = new Map<string, { wins: number; games: number }>();
+        for (const match of heroData.matches) {
+          if (!dateGroups.has(match.date)) {
+            dateGroups.set(match.date, { wins: 0, games: 0 });
+          }
+          const group = dateGroups.get(match.date)!;
+          group.games++;
+          if (match.won) group.wins++;
+        }
+
+        // Build cumulative data points
+        const dataPoints: Array<{
+          date: string;
+          gamesPlayedTotal: number;
+          winsTotal: number;
+          winRate: number;
+          gamesPlayedOnDate: number;
+        }> = [];
+
+        let cumulativeGames = 0;
+        let cumulativeWins = 0;
+
+        // Sort dates and process chronologically
+        const sortedDates = Array.from(dateGroups.keys()).sort();
+        for (const date of sortedDates) {
+          const dayStats = dateGroups.get(date)!;
+          cumulativeGames += dayStats.games;
+          cumulativeWins += dayStats.wins;
+
+          dataPoints.push({
+            date,
+            gamesPlayedTotal: cumulativeGames,
+            winsTotal: cumulativeWins,
+            winRate: cumulativeGames > 0 ? (cumulativeWins / cumulativeGames) * 100 : 0,
+            gamesPlayedOnDate: dayStats.games
+          });
+        }
+
+        // Filter data points to only show from minGames onwards
+        const filteredDataPoints = dataPoints.filter(dp => dp.gamesPlayedTotal >= minGames);
+
+        // Only include heroes that have data points meeting the threshold
+        if (filteredDataPoints.length > 0) {
+          heroResults.push({
+            heroId,
+            heroName: heroData.heroName,
+            icon: heroData.icon,
+            totalGames: cumulativeGames,
+            currentWinRate: cumulativeGames > 0 ? (cumulativeWins / cumulativeGames) * 100 : 0,
+            dataPoints: filteredDataPoints
+          });
+        }
+      }
+
+      // Sort heroes by total games descending
+      heroResults.sort((a, b) => b.totalGames - a.totalGames);
+
+      // Try to enrich with icon data from heroes.ts
+      try {
+        const { heroes } = await import('../data/heroes');
+        for (const heroResult of heroResults) {
+          const heroData = heroes.find(h => h.name === heroResult.heroName);
+          if (heroData) {
+            heroResult.icon = heroData.icon;
+          }
+        }
+      } catch (error) {
+        console.error('Error enriching hero icons:', error);
+      }
+
+      // Calculate overall date range
+      const allDates = heroResults.flatMap(h => h.dataPoints.map(dp => dp.date));
+      const dateRange = allDates.length > 0
+        ? {
+            firstMatch: allDates.reduce((min, d) => d < min ? d : min),
+            lastMatch: allDates.reduce((max, d) => d > max ? d : max)
+          }
+        : null;
+
+      return { heroes: heroResults, dateRange };
+    } catch (error) {
+      console.error('Error getting hero win rate over time:', error);
+      return { heroes: [], dateRange: null };
+    }
+  }
+
+  /**
    * Get all player statistics filtered by date range
    * @param startDate - Optional start date for filtering matches (inclusive)
    * @param endDate - Optional end date for filtering matches (inclusive)
