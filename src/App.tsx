@@ -7,13 +7,16 @@ import CoinToss from './components/CoinToss';
 import DraftModeSelection from './components/DraftModeSelection';
 import CollapsibleFeedback from './components/common/CollapsibleFeedback';
 import SoundToggle from './components/common/SoundToggle';
+import FeatureAnnouncement from './components/common/FeatureAnnouncement';
 import AudioInitializer from './components/common/AudioInitializer';
 import VictoryScreen from './components/VictoryScreen';
 import ResumeGamePrompt from './components/common/ResumeGamePrompt';
 import { gameStorageService } from './services/GameStorageService';
 import migrationService from './services/MigrationService';
 import { SoundProvider, useSound } from './context/SoundContext';
-import { ConnectionProvider } from './context/ConnectionContext'; // Import ConnectionProvider
+import { ConnectionProvider } from './context/ConnectionContext';
+import { AuthProvider } from './context/AuthContext';
+import CloudSidebar from './components/cloud/CloudSidebar';
 import { PlayerRoundStats } from './components/EndOfRoundAssistant';
 import { 
   Hero, 
@@ -417,8 +420,22 @@ function AppContent() {
   // Players and heroes state
   const [localPlayers, setLocalPlayers] = useState<Player[]>([]);
   
-  // Expansion selection state
-  const [selectedExpansions, setSelectedExpansions] = useState<string[]>(getAllExpansions());
+  // Expansion selection state - load from localStorage or default to all expansions
+  const [selectedExpansions, setSelectedExpansions] = useState<string[]>(() => {
+    const saved = localStorage.getItem('goa-selected-expansions');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // Validate that it's an array of strings
+        if (Array.isArray(parsed) && parsed.every(item => typeof item === 'string')) {
+          return parsed;
+        }
+      } catch {
+        // Invalid JSON, use default
+      }
+    }
+    return getAllExpansions();
+  });
   
   // Max complexity state
   const [maxComplexity, setMaxComplexity] = useState<number>(4); // Default to 4 (maximum)
@@ -552,6 +569,11 @@ function AppContent() {
       initializeApp();
     }
   }, [gameStarted, isDraftingMode]);
+
+  // Save selected expansions to localStorage when they change
+  useEffect(() => {
+    localStorage.setItem('goa-selected-expansions', JSON.stringify(selectedExpansions));
+  }, [selectedExpansions]);
 
   // Attempt to unlock audio on first user interaction
   useEffect(() => {
@@ -1934,16 +1956,42 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
       
       {/* Sound toggle component */}
       <SoundToggle />
+
+      {/* Cloud Sync Sidebar */}
+      <CloudSidebar />
+
+      {/* Feature Announcements */}
+      <FeatureAnnouncement
+        id="cloud-sync-v1"
+        title="New: Cloud Sync!"
+        description={
+          <>
+            <p className="mb-2">
+              You can now sync your match data across devices and with friends!
+            </p>
+            <ul className="list-disc list-inside space-y-1 text-gray-400">
+              <li>Create an account to back up your data</li>
+              <li>Sync matches across your own devices</li>
+              <li>Share match data with friends</li>
+            </ul>
+            <p className="mt-3 text-orange-400">
+              Look for the <strong>orange arrow</strong> in the top-right corner to get started.
+            </p>
+          </>
+        }
+      />
     </div>
   );
 }
 
-// Main App component wrapped with SoundProvider
+// Main App component wrapped with providers
 function App() {
   return (
     <SoundProvider>
-      <ConnectionProvider> {/* Add ConnectionProvider here */}
-        <AppContent />
+      <ConnectionProvider>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
       </ConnectionProvider>
     </SoundProvider>
   );

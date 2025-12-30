@@ -3,3 +3,8 @@ dist
 claude/
 CLAUDE.md
 Issues.md
+
+# Environment files
+.env
+.env.local
+.env.*.local

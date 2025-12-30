@@ -11,6 +11,7 @@
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.89.0",
     "html2canvas": "^1.4.1",
     "lucide-react": "^0.503.0",
     "normal-distribution": "^1.1.1",

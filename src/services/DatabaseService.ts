@@ -2,6 +2,7 @@
 import { Team, GameLength } from '../types';
 import { rating, rate, ordinal } from 'openskill';
 import NormalDistribution from 'normal-distribution';
+import { CloudSyncService } from './supabase/CloudSyncService';
 
 // Database configuration
 const DB_NAME = 'GuardsOfAtlantisStats';
@@ -917,7 +918,8 @@ class DatabaseService {
   }
 
   /**
-   * Delete a match and its associated player records
+   * Delete a match and its associated player records.
+   * Also triggers cloud deletion to sync tombstone across devices.
    */
   async deleteMatch(matchId: string): Promise<void> {
     if (!this.db) await this.initialize();
@@ -930,11 +932,16 @@ class DatabaseService {
       }
 
       const matchPlayers = await this.getMatchPlayers(matchId);
-      
+
       await this.deleteMatchAndPlayers(matchId, matchPlayers);
-      
+
       await this.recalculatePlayerStats();
-      
+
+      // Trigger cloud deletion (non-blocking) to create tombstone
+      CloudSyncService.deleteMatchFromCloud(matchId).catch(error => {
+        console.error('[DatabaseService] Cloud deletion failed:', error);
+      });
+
     } catch (error) {
       console.error('Error deleting match:', error);
       throw error;
@@ -970,6 +977,29 @@ class DatabaseService {
   }
 
   /**
+   * Delete a match and its player records without triggering cloud deletion.
+   * Used when applying tombstones from cloud sync.
+   */
+  async deleteMatchAndPlayersOnly(matchId: string): Promise<boolean> {
+    if (!this.db) await this.initialize();
+    if (!this.db) throw new Error('Database not initialized');
+
+    try {
+      const match = await this.getMatch(matchId);
+      if (!match) {
+        return false; // Match doesn't exist locally
+      }
+
+      const matchPlayers = await this.getMatchPlayers(matchId);
+      await this.deleteMatchAndPlayers(matchId, matchPlayers);
+      return true;
+    } catch (error) {
+      console.error('Error deleting match locally:', error);
+      return false;
+    }
+  }
+
+  /**
    * Initialize TrueSkill ratings for all players
    */
   private initializeTrueSkillRatings(players: DBPlayer[]): void {
@@ -991,7 +1021,7 @@ class DatabaseService {
   /**
    * Recalculate all player statistics based on current match history using TrueSkill
    */
-  private async recalculatePlayerStats(): Promise<void> {
+  public async recalculatePlayerStats(): Promise<void> {
     try {
       console.log("Starting player statistics recalculation with TrueSkill...");
       
@@ -1402,7 +1432,10 @@ class DatabaseService {
     });
     
     await Promise.all(playerUpdatePromises);
-    
+
+    // Trigger auto-upload to cloud if enabled
+    CloudSyncService.triggerAutoUpload();
+
     return match.id;
   }
 
