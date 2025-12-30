@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.89.0",
+    "@types/d3-force": "^3.0.10",
+    "d3-force": "^3.0.0",
     "html2canvas": "^1.4.1",
     "lucide-react": "^0.503.0",
     "normal-distribution": "^1.1.1",
@@ -19,6 +21,7 @@
     "peerjs": "^1.5.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-force-graph-2d": "^1.29.0",
     "recharts": "^2.15.3",
     "victory": "^37.3.6"
   },

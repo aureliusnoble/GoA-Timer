@@ -347,6 +347,105 @@ class GlobalStatsServiceClass {
       };
     }
   }
+
+  /**
+   * Get hero relationship network data for graph visualization
+   * Returns relationship data between selected heroes for network graph
+   */
+  async getHeroRelationshipNetwork(
+    heroIds: number[],
+    minGames: number = 1
+  ): Promise<{
+    success: boolean;
+    data?: Array<{
+      heroId: number;
+      relatedHeroId: number;
+      teammateWins: number;
+      teammateLosses: number;
+      opponentWins: number;
+      opponentLosses: number;
+    }>;
+    error?: string;
+  }> {
+    if (!isSupabaseConfigured() || !supabase) {
+      return {
+        success: false,
+        error: 'Cloud features are not configured. Please set up Supabase environment variables.',
+      };
+    }
+
+    try {
+      console.log('[GlobalStatsService] Fetching hero relationship network...');
+
+      // Query the existing global_hero_relationships view
+      // This view has: hero_id, related_hero_id, related_hero_name, relationship_type, games_played, wins, win_rate
+      const { data, error } = await supabase
+        .from('global_hero_relationships')
+        .select('hero_id, related_hero_id, relationship_type, games_played, wins')
+        .in('hero_id', heroIds)
+        .in('related_hero_id', heroIds)
+        .gte('games_played', minGames);
+
+      if (error) {
+        console.error('[GlobalStatsService] Query error:', error);
+        return {
+          success: false,
+          error: `Failed to fetch relationship data: ${error.message}`,
+        };
+      }
+
+      if (!data || data.length === 0) {
+        return { success: true, data: [] };
+      }
+
+      // Transform the data: combine teammate and opponent records
+      // The view has separate rows for 'teammate' and 'opponent' relationship types
+      const relationshipMap = new Map<string, {
+        heroId: number;
+        relatedHeroId: number;
+        teammateWins: number;
+        teammateLosses: number;
+        opponentWins: number;
+        opponentLosses: number;
+      }>();
+
+      for (const row of data) {
+        const key = `${row.hero_id}-${row.related_hero_id}`;
+
+        if (!relationshipMap.has(key)) {
+          relationshipMap.set(key, {
+            heroId: row.hero_id,
+            relatedHeroId: row.related_hero_id,
+            teammateWins: 0,
+            teammateLosses: 0,
+            opponentWins: 0,
+            opponentLosses: 0
+          });
+        }
+
+        const rel = relationshipMap.get(key)!;
+
+        if (row.relationship_type === 'teammate') {
+          rel.teammateWins = row.wins;
+          rel.teammateLosses = row.games_played - row.wins;
+        } else if (row.relationship_type === 'opponent') {
+          rel.opponentWins = row.wins;
+          rel.opponentLosses = row.games_played - row.wins;
+        }
+      }
+
+      const relationships = Array.from(relationshipMap.values());
+      console.log(`[GlobalStatsService] Fetched ${relationships.length} hero relationships`);
+
+      return { success: true, data: relationships };
+    } catch (err) {
+      console.error('[GlobalStatsService] Unexpected error:', err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'An unexpected error occurred',
+      };
+    }
+  }
 }
 
 // Export singleton instance

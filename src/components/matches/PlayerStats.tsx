@@ -1,10 +1,11 @@
 // src/components/matches/PlayerStats.tsx
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { ChevronLeft, Search, TrendingUp, Users, Swords, Info, Trophy, Medal, Hexagon, Camera, X, HelpCircle, User, Filter, ChevronDown, ChevronUp, Calendar } from 'lucide-react';
+import { ChevronLeft, Search, TrendingUp, Users, Swords, Info, Trophy, Medal, Hexagon, Camera, X, HelpCircle, User, Filter, ChevronDown, ChevronUp, Calendar, Network } from 'lucide-react';
 import { DBPlayer } from '../../services/DatabaseService';
 import dbService, { getDisplayRating } from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
 import EnhancedTooltip from '../common/EnhancedTooltip';
+import PlayerRelationshipGraph from './PlayerRelationshipGraph';
 import html2canvas from 'html2canvas';
 
 
@@ -302,6 +303,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
   const [recalculateTrueSkill, setRecalculateTrueSkill] = useState<boolean>(() => {
     return localStorage.getItem('playerStats_recalculateTrueSkill') === 'true';
   });
+  const [showRelationshipGraph, setShowRelationshipGraph] = useState<boolean>(false);
 
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -642,7 +644,12 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
       document.head.removeChild(style);
     };
   }, []);
-  
+
+  // Show relationship graph if toggled
+  if (showRelationshipGraph) {
+    return <PlayerRelationshipGraph onBack={() => setShowRelationshipGraph(false)} />;
+  }
+
   return (
     <div ref={contentRef} id="screenshotContent" className="bg-gray-800 rounded-lg p-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 no-screenshot">
@@ -669,7 +676,20 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
               <span className="whitespace-nowrap">View Over Time</span>
             </button>
           </EnhancedTooltip>
-          
+
+          <EnhancedTooltip text="View player relationship network graph" position="left">
+            <button
+              onClick={() => {
+                playSound('buttonClick');
+                setShowRelationshipGraph(true);
+              }}
+              className="flex items-center justify-center px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg w-full sm:w-auto"
+            >
+              <Network size={18} className="mr-2" />
+              <span className="whitespace-nowrap">Relationships</span>
+            </button>
+          </EnhancedTooltip>
+
           <EnhancedTooltip text="Take a screenshot of all player statistics" position="left">
             <button
               onClick={handleTakeScreenshot}

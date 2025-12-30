@@ -1,6 +1,6 @@
 // src/components/matches/HeroStats.tsx
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { ChevronLeft, Search, Info, Filter, ChevronDown, ChevronUp, Shield, Camera, Calendar, Globe, Users, RefreshCw, Loader2, AlertCircle, TrendingUp } from 'lucide-react';
+import { ChevronLeft, Search, Info, Filter, ChevronDown, ChevronUp, Shield, Camera, Calendar, Globe, Users, RefreshCw, Loader2, AlertCircle, TrendingUp, Network } from 'lucide-react';
 import { Hero } from '../../types';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
@@ -11,6 +11,7 @@ import html2canvas from 'html2canvas'; // Import html2canvas library
 import { GlobalStatsService, GlobalHeroStats } from '../../services/supabase/GlobalStatsService';
 import { isSupabaseConfigured } from '../../services/supabase/SupabaseClient';
 import HeroWinRateOverTime from './HeroWinRateOverTime';
+import HeroRelationshipGraph from './HeroRelationshipGraph';
 
 // Hero statistics interface
 interface HeroStats {
@@ -80,6 +81,9 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
 
   // Win rate over time view state
   const [showWinRateOverTime, setShowWinRateOverTime] = useState(false);
+
+  // Relationship graph view state
+  const [showRelationshipGraph, setShowRelationshipGraph] = useState(false);
 
   // Check if cloud features are available
   const cloudAvailable = isSupabaseConfigured();
@@ -577,6 +581,16 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
     );
   }
 
+  // Render the Relationship Graph view if selected
+  if (showRelationshipGraph) {
+    return (
+      <HeroRelationshipGraph
+        onBack={() => setShowRelationshipGraph(false)}
+        initialStatsMode={statsMode}
+      />
+    );
+  }
+
   return (
     <div ref={contentRef} id="screenshotContent" className="bg-gray-800 rounded-lg p-6">
       <div className="flex justify-between items-center mb-6 no-screenshot">
@@ -601,6 +615,20 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
             >
               <TrendingUp size={18} className="mr-2" />
               <span>Win Rate Over Time</span>
+            </button>
+          </EnhancedTooltip>
+
+          {/* Relationship Graph Button */}
+          <EnhancedTooltip text="View hero relationships as a network graph" position="left">
+            <button
+              onClick={() => {
+                playSound('buttonClick');
+                setShowRelationshipGraph(true);
+              }}
+              className="flex items-center px-3 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg"
+            >
+              <Network size={18} className="mr-2" />
+              <span>Relationship Graph</span>
             </button>
           </EnhancedTooltip>
 

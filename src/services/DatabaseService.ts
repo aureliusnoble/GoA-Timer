@@ -2740,6 +2740,251 @@ class DatabaseService {
       return { canEdit: false, reason: 'Error checking match editability' };
     }
   }
+
+  /**
+   * Get hero relationship network data for graph visualization
+   * Returns all four relationship types between selected heroes:
+   * - teammateWins: times on same team and won
+   * - teammateLosses: times on same team and lost
+   * - opponentWins: times beat this hero as opponent
+   * - opponentLosses: times lost to this hero as opponent
+   */
+  async getHeroRelationshipNetwork(
+    heroIds: number[],
+    minGames: number = 1,
+    startDate?: Date,
+    endDate?: Date
+  ): Promise<{
+    heroId: number;
+    relatedHeroId: number;
+    teammateWins: number;
+    teammateLosses: number;
+    opponentWins: number;
+    opponentLosses: number;
+  }[]> {
+    try {
+      const allMatchPlayersRaw = await this.getAllMatchPlayers();
+      let allMatches = await this.getAllMatches();
+
+      // Filter matches by date range if specified
+      if (startDate || endDate) {
+        allMatches = allMatches.filter(match => {
+          const matchDate = new Date(match.date);
+          if (startDate && matchDate < startDate) return false;
+          if (endDate && matchDate > endDate) return false;
+          return true;
+        });
+      }
+
+      if (allMatches.length === 0) {
+        return [];
+      }
+
+      // Create a set of valid match IDs for filtering
+      const validMatchIds = new Set(allMatches.map(m => m.id));
+      const allMatchPlayers = allMatchPlayersRaw.filter(mp => validMatchIds.has(mp.matchId));
+
+      // Create a set of selected hero IDs for filtering
+      const selectedHeroIds = new Set(heroIds);
+
+      // Track relationships: key is "heroId-relatedHeroId"
+      const relationshipMap = new Map<string, {
+        heroId: number;
+        relatedHeroId: number;
+        teammateWins: number;
+        teammateLosses: number;
+        opponentWins: number;
+        opponentLosses: number;
+      }>();
+
+      // Process each match
+      for (const match of allMatches) {
+        const matchHeroes = allMatchPlayers.filter(mp => mp.matchId === match.id);
+
+        // For each hero in the match
+        for (const hero1 of matchHeroes) {
+          if (hero1.heroId === undefined || hero1.heroId === null) continue;
+          if (!selectedHeroIds.has(hero1.heroId)) continue;
+
+          const hero1Won = hero1.team === match.winningTeam;
+
+          // Compare with every other hero in the match
+          for (const hero2 of matchHeroes) {
+            if (hero2.heroId === undefined || hero2.heroId === null) continue;
+            if (hero1.heroId === hero2.heroId) continue;
+            if (!selectedHeroIds.has(hero2.heroId)) continue;
+
+            const key = `${hero1.heroId}-${hero2.heroId}`;
+
+            if (!relationshipMap.has(key)) {
+              relationshipMap.set(key, {
+                heroId: hero1.heroId,
+                relatedHeroId: hero2.heroId,
+                teammateWins: 0,
+                teammateLosses: 0,
+                opponentWins: 0,
+                opponentLosses: 0
+              });
+            }
+
+            const rel = relationshipMap.get(key)!;
+            const sameTeam = hero1.team === hero2.team;
+
+            if (sameTeam) {
+              // Teammates
+              if (hero1Won) {
+                rel.teammateWins++;
+              } else {
+                rel.teammateLosses++;
+              }
+            } else {
+              // Opponents
+              if (hero1Won) {
+                rel.opponentWins++;  // hero1 beat hero2
+              } else {
+                rel.opponentLosses++; // hero1 lost to hero2
+              }
+            }
+          }
+        }
+      }
+
+      // Filter by minGames and convert to array
+      const relationships = Array.from(relationshipMap.values()).filter(rel => {
+        const totalGames = rel.teammateWins + rel.teammateLosses + rel.opponentWins + rel.opponentLosses;
+        return totalGames >= minGames;
+      });
+
+      return relationships;
+    } catch (error) {
+      console.error('Error getting hero relationship network:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get player relationship network data for graph visualization
+   * Returns relationship data between selected players for network graph
+   */
+  async getPlayerRelationshipNetwork(
+    playerIds: string[],
+    minGames: number = 1,
+    startDate?: Date,
+    endDate?: Date
+  ): Promise<{
+    playerId: string;
+    relatedPlayerId: string;
+    relatedPlayerName: string;
+    teammateWins: number;
+    teammateLosses: number;
+    opponentWins: number;
+    opponentLosses: number;
+  }[]> {
+    try {
+      const allMatchPlayersRaw = await this.getAllMatchPlayers();
+      let allMatches = await this.getAllMatches();
+      const allPlayers = await this.getAllPlayers();
+
+      // Create a map for player name lookup
+      const playerNameMap = new Map(allPlayers.map(p => [p.id, p.name]));
+
+      // Filter matches by date range if specified
+      if (startDate || endDate) {
+        allMatches = allMatches.filter(match => {
+          const matchDate = new Date(match.date);
+          if (startDate && matchDate < startDate) return false;
+          if (endDate && matchDate > endDate) return false;
+          return true;
+        });
+      }
+
+      if (allMatches.length === 0) {
+        return [];
+      }
+
+      // Create a set of valid match IDs for filtering
+      const validMatchIds = new Set(allMatches.map(m => m.id));
+      const allMatchPlayers = allMatchPlayersRaw.filter(mp => validMatchIds.has(mp.matchId));
+
+      // Create a set of selected player IDs for filtering
+      const selectedPlayerIds = new Set(playerIds);
+
+      // Track relationships: key is "playerId-relatedPlayerId"
+      const relationshipMap = new Map<string, {
+        playerId: string;
+        relatedPlayerId: string;
+        relatedPlayerName: string;
+        teammateWins: number;
+        teammateLosses: number;
+        opponentWins: number;
+        opponentLosses: number;
+      }>();
+
+      // Process each match
+      for (const match of allMatches) {
+        const matchPlayerRecords = allMatchPlayers.filter(mp => mp.matchId === match.id);
+
+        // For each player in the match
+        for (const player1 of matchPlayerRecords) {
+          if (!player1.playerId) continue;
+          if (!selectedPlayerIds.has(player1.playerId)) continue;
+
+          const player1Won = player1.team === match.winningTeam;
+
+          // Compare with every other player in the match
+          for (const player2 of matchPlayerRecords) {
+            if (!player2.playerId) continue;
+            if (player1.playerId === player2.playerId) continue;
+            if (!selectedPlayerIds.has(player2.playerId)) continue;
+
+            const key = `${player1.playerId}-${player2.playerId}`;
+
+            if (!relationshipMap.has(key)) {
+              relationshipMap.set(key, {
+                playerId: player1.playerId,
+                relatedPlayerId: player2.playerId,
+                relatedPlayerName: playerNameMap.get(player2.playerId) || player2.playerId,
+                teammateWins: 0,
+                teammateLosses: 0,
+                opponentWins: 0,
+                opponentLosses: 0
+              });
+            }
+
+            const rel = relationshipMap.get(key)!;
+            const sameTeam = player1.team === player2.team;
+
+            if (sameTeam) {
+              // Teammates
+              if (player1Won) {
+                rel.teammateWins++;
+              } else {
+                rel.teammateLosses++;
+              }
+            } else {
+              // Opponents
+              if (player1Won) {
+                rel.opponentWins++;  // player1 beat player2
+              } else {
+                rel.opponentLosses++; // player1 lost to player2
+              }
+            }
+          }
+        }
+      }
+
+      // Filter by minGames and convert to array
+      const relationships = Array.from(relationshipMap.values()).filter(rel => {
+        const totalGames = rel.teammateWins + rel.teammateLosses + rel.opponentWins + rel.opponentLosses;
+        return totalGames >= minGames;
+      });
+
+      return relationships;
+    } catch (error) {
+      console.error('Error getting player relationship network:', error);
+      return [];
+    }
+  }
 }
 
 // Export a singleton instance
