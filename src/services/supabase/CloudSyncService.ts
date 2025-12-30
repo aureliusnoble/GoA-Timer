@@ -849,8 +849,9 @@ class CloudSyncServiceClass {
   }
 
   private cloudMatchToLocal(cloudMatch: Record<string, unknown>): DBMatch {
-    const winningTeam = (cloudMatch.winning_team as string).charAt(0).toUpperCase() + (cloudMatch.winning_team as string).slice(1);
-    const gameLength = (cloudMatch.game_length as string).charAt(0).toUpperCase() + (cloudMatch.game_length as string).slice(1);
+    // Keep values lowercase to match Team and GameLength enum values
+    const winningTeam = (cloudMatch.winning_team as string).toLowerCase();
+    const gameLength = (cloudMatch.game_length as string).toLowerCase();
 
     return {
       id: cloudMatch.id as string,
@@ -865,7 +866,8 @@ class CloudSyncServiceClass {
   }
 
   private cloudMatchPlayerToLocal(cloudMp: Record<string, unknown>): DBMatchPlayer {
-    const team = (cloudMp.team as string).charAt(0).toUpperCase() + (cloudMp.team as string).slice(1);
+    // Keep team lowercase to match Team enum values
+    const team = (cloudMp.team as string).toLowerCase();
 
     return {
       id: cloudMp.id as string,

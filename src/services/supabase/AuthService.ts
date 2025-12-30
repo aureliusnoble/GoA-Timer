@@ -57,10 +57,14 @@ class AuthServiceClass {
         return { success: false, error: usernameError };
       }
 
+      // Get the redirect URL - use current origin + base path for GitHub Pages
+      const redirectUrl = window.location.origin + (import.meta.env.BASE_URL || '/');
+
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
+          emailRedirectTo: redirectUrl,
           data: {
             username: data.username,
             display_name: data.displayName || data.username,
