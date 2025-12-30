@@ -21,6 +21,7 @@ interface GraphNode {
   totalGames: number;
   winRate: number;
   displayRating: number;
+  skillPercentile: number; // 0-1, position in skill distribution
   x?: number;
   y?: number;
   vx?: number;
@@ -46,6 +47,7 @@ interface GraphData {
 interface PlayerWithStats extends DBPlayer {
   winRate: number;
   displayRating: number;
+  skillPercentile: number;
 }
 
 // Edge colors
@@ -63,12 +65,58 @@ const edgeLabels: Record<EdgeType, string> = {
   opponent_lost: 'Lost to'
 };
 
-// Node color based on win rate
-const getNodeColor = (winRate: number): string => {
-  if (winRate >= 60) return '#22C55E'; // Green - high performer
-  if (winRate >= 50) return '#3B82F6'; // Blue - above average
-  if (winRate >= 40) return '#F59E0B'; // Yellow - average
-  return '#EF4444'; // Red - below average
+// Interpolate between two hex colors
+const interpolateColor = (color1: string, color2: string, factor: number): string => {
+  const r1 = parseInt(color1.slice(1, 3), 16);
+  const g1 = parseInt(color1.slice(3, 5), 16);
+  const b1 = parseInt(color1.slice(5, 7), 16);
+  const r2 = parseInt(color2.slice(1, 3), 16);
+  const g2 = parseInt(color2.slice(3, 5), 16);
+  const b2 = parseInt(color2.slice(5, 7), 16);
+
+  const r = Math.round(r1 + (r2 - r1) * factor);
+  const g = Math.round(g1 + (g2 - g1) * factor);
+  const b = Math.round(b1 + (b2 - b1) * factor);
+
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+};
+
+// Node color based on skill percentile (0 = lowest, 1 = highest)
+// Gradient: Red -> Orange -> Yellow -> Green
+const getNodeColor = (percentile: number): string => {
+  const clampedPercentile = Math.max(0, Math.min(1, percentile));
+
+  // Color stops: red (0%) -> orange (33%) -> yellow (66%) -> green (100%)
+  const colors = [
+    { stop: 0, color: '#EF4444' },    // Red
+    { stop: 0.33, color: '#F97316' }, // Orange
+    { stop: 0.66, color: '#EAB308' }, // Yellow
+    { stop: 1, color: '#22C55E' }     // Green
+  ];
+
+  // Find the two colors to interpolate between
+  for (let i = 0; i < colors.length - 1; i++) {
+    if (clampedPercentile <= colors[i + 1].stop) {
+      const range = colors[i + 1].stop - colors[i].stop;
+      const factor = (clampedPercentile - colors[i].stop) / range;
+      return interpolateColor(colors[i].color, colors[i + 1].color, factor);
+    }
+  }
+
+  return colors[colors.length - 1].color;
+};
+
+// Calculate skill percentile for a player based on their position in the distribution
+const calculateSkillPercentile = (displayRating: number, allRatings: number[]): number => {
+  if (allRatings.length <= 1) return 0.5;
+
+  const sorted = [...allRatings].sort((a, b) => a - b);
+  const minRating = sorted[0];
+  const maxRating = sorted[sorted.length - 1];
+
+  if (maxRating === minRating) return 0.5;
+
+  return (displayRating - minRating) / (maxRating - minRating);
 };
 
 const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBack }) => {
@@ -177,13 +225,21 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBac
         });
 
         // Filter to only players with relationship data and calculate stats
-        const filteredPlayers: PlayerWithStats[] = playersWithGames
+        const filteredPlayersBase = playersWithGames
           .filter(p => playerIdsWithData.has(p.id))
           .map(p => ({
             ...p,
             winRate: p.totalGames > 0 ? (p.wins / p.totalGames) * 100 : 0,
-            displayRating: dbService.getDisplayRating(p)
+            displayRating: dbService.getDisplayRating(p),
+            skillPercentile: 0 // Will be calculated below
           }));
+
+        // Calculate skill percentiles based on displayRating distribution
+        const allRatings = filteredPlayersBase.map(p => p.displayRating);
+        const filteredPlayers: PlayerWithStats[] = filteredPlayersBase.map(p => ({
+          ...p,
+          skillPercentile: calculateSkillPercentile(p.displayRating, allRatings)
+        }));
 
         // Sort by name
         filteredPlayers.sort((a, b) => a.name.localeCompare(b.name));
@@ -370,6 +426,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBac
         totalGames: player?.totalGames || 0,
         winRate: player?.winRate || 0,
         displayRating: player?.displayRating || 0,
+        skillPercentile: player?.skillPercentile || 0.5,
         x,
         y
       };
@@ -571,10 +628,10 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBac
       ctx.fill();
     }
 
-    // Draw circle with win rate color
+    // Draw circle with skill percentile color (gradient from red to green)
     ctx.beginPath();
     ctx.arc(node.x || 0, node.y || 0, size / 2, 0, 2 * Math.PI);
-    ctx.fillStyle = getNodeColor(node.winRate);
+    ctx.fillStyle = getNodeColor(node.skillPercentile);
     ctx.fill();
 
     // Draw border
@@ -745,11 +802,11 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBac
                       ? 'bg-blue-600 hover:bg-blue-500 ring-2 ring-blue-400'
                       : 'bg-gray-600 hover:bg-gray-500'
                   }`}
-                  title={`${player.name} - ${player.winRate.toFixed(0)}% WR`}
+                  title={`${player.name} - Skill: ${player.displayRating}`}
                 >
                   <div
                     className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg"
-                    style={{ backgroundColor: getNodeColor(player.winRate) }}
+                    style={{ backgroundColor: getNodeColor(player.skillPercentile) }}
                   >
                     {player.name.charAt(0).toUpperCase()}
                   </div>
@@ -875,7 +932,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBac
                 <span className="text-red-400 font-medium ml-2">Red</span> = lost to opponent.
               </p>
               <p className="text-gray-400">
-                <strong>Node color</strong> = player win rate (green = high, red = low). <strong>Edge thickness</strong> = win/loss rate.
+                <strong>Node color</strong> = TrueSkill ranking (green = highest, yellow/orange = middle, red = lowest). <strong>Edge thickness</strong> = win/loss rate.
               </p>
             </div>
           </div>
