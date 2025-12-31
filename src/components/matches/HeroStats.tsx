@@ -593,7 +593,7 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
 
   return (
     <div ref={contentRef} id="screenshotContent" className="bg-gray-800 rounded-lg p-6">
-      <div className="flex justify-between items-center mb-6 no-screenshot">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 no-screenshot">
         <button
           onClick={handleBack}
           className="flex items-center text-gray-300 hover:text-white"
@@ -601,9 +601,10 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
           <ChevronLeft size={20} className="mr-1" />
           <span>Back to Menu</span>
         </button>
-        <h2 className="text-2xl font-bold">Hero Statistics</h2>
+        <h2 className="text-2xl font-bold text-center sm:text-left">Hero Statistics</h2>
 
-        <div className="flex items-center gap-2">
+        {/* Mobile-optimized button group */}
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           {/* Win Rate Over Time Button */}
           <EnhancedTooltip text="View hero win rate progression over time" position="left">
             <button
@@ -611,10 +612,10 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
                 playSound('buttonClick');
                 setShowWinRateOverTime(true);
               }}
-              className="flex items-center px-3 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg"
+              className="flex items-center justify-center px-3 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg w-full sm:w-auto"
             >
               <TrendingUp size={18} className="mr-2" />
-              <span>Win Rate Over Time</span>
+              <span className="whitespace-nowrap">View Over Time</span>
             </button>
           </EnhancedTooltip>
 
@@ -625,10 +626,10 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
                 playSound('buttonClick');
                 setShowRelationshipGraph(true);
               }}
-              className="flex items-center px-3 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg"
+              className="flex items-center justify-center px-3 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg w-full sm:w-auto"
             >
               <Network size={18} className="mr-2" />
-              <span>Relationship Graph</span>
+              <span className="whitespace-nowrap">Relationships</span>
             </button>
           </EnhancedTooltip>
 
@@ -636,11 +637,11 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
           <EnhancedTooltip text="Take a screenshot of all hero statistics" position="left">
             <button
               onClick={handleTakeScreenshot}
-              className="flex items-center px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg"
+              className="flex items-center justify-center px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg w-full sm:w-auto"
               disabled={takingScreenshot}
             >
               <Camera size={18} className="mr-2" />
-              <span>{takingScreenshot ? 'Capturing...' : 'Share Stats'}</span>
+              <span className="whitespace-nowrap">{takingScreenshot ? 'Capturing...' : 'Share Stats'}</span>
             </button>
           </EnhancedTooltip>
         </div>
