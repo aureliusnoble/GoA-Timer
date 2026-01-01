@@ -695,7 +695,7 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
             <div className="flex items-center">
               <Globe size={18} className="mr-2 text-green-400 flex-shrink-0" />
               <span className="text-sm text-green-200">
-                Viewing global statistics from all players
+                Viewing global statistics from all players who have uploaded data via Cloud Sync
                 {globalCacheAge !== null && (
                   <span className="ml-2 text-green-400/70">
                     (cached {globalCacheAge < 60 ? `${globalCacheAge}s` : `${Math.floor(globalCacheAge / 60)}m`} ago)
@@ -722,7 +722,7 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
             </button>
           </div>
           <p className="text-xs text-green-200/60 mt-2">
-            Note: Time period filter is not available for global stats. Data is ephemeral and not saved locally.
+            Global stats update hourly. Time period filter is not available. Data is not saved locally.
           </p>
         </div>
       )}
