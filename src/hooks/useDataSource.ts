@@ -69,7 +69,7 @@ function cloudMatchPlayerToLocal(cmp: CloudMatchPlayer): DBMatchPlayer {
  * otherwise returns data from local IndexedDB
  */
 export function useDataSource() {
-  const { isViewMode, sharedData } = useViewMode();
+  const { isViewMode, sharedData, isLoading: isViewModeLoading } = useViewMode();
 
   // Convert shared data to local format (memoized)
   const localPlayers = useMemo(() => {
@@ -159,6 +159,7 @@ export function useDataSource() {
 
   return {
     isViewMode,
+    isViewModeLoading,
     getAllPlayers,
     getPlayer,
     getAllMatches,

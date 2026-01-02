@@ -104,7 +104,7 @@ const SharePanel: React.FC = () => {
           <h3 className="text-lg font-semibold text-white">Public Sharing</h3>
         </div>
         <p className="text-sm text-gray-400">
-          Create a shareable link that lets anyone view your player stats, match history, and hero statistics.
+          Create a shareable link that lets anyone with the link view your player stats, match history, and hero statistics.
         </p>
       </div>
 

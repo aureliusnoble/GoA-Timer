@@ -20,7 +20,7 @@ interface MatchWithDetails extends DBMatch {
 
 const MatchHistory: React.FC<MatchHistoryProps> = ({ onBack }) => {
   const { playSound } = useSound();
-  const { isViewMode, getAllMatches, getMatchPlayers, getPlayer } = useDataSource();
+  const { isViewMode, isViewModeLoading, getAllMatches, getMatchPlayers, getPlayer } = useDataSource();
   const [matches, setMatches] = useState<MatchWithDetails[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -80,10 +80,12 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ onBack }) => {
     }
   };
 
-  // Load match data on component mount
+  // Load match data on component mount (wait for view mode to be determined)
   useEffect(() => {
+    // Don't load data while view mode is still being determined
+    if (isViewModeLoading) return;
     loadMatches();
-  }, [getAllMatches, getMatchPlayers, getPlayer]);
+  }, [isViewModeLoading, getAllMatches, getMatchPlayers, getPlayer]);
   
   // Handle back navigation with sound
   const handleBack = () => {
