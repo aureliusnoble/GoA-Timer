@@ -12,6 +12,7 @@ import { useDataSource } from '../../hooks/useDataSource';
 interface HeroRelationshipGraphProps {
   onBack: () => void;
   initialStatsMode?: 'local' | 'global';
+  inheritedMinGames?: number;
   inheritedDateRange?: { startDate?: Date; endDate?: Date };
 }
 
@@ -63,7 +64,7 @@ const edgeLabels: Record<EdgeType, string> = {
   opponent_lost: 'Lost to'
 };
 
-const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, initialStatsMode = 'local', inheritedDateRange }) => {
+const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, initialStatsMode = 'local', inheritedMinGames = 1, inheritedDateRange }) => {
   const { playSound } = useSound();
   const { isViewModeLoading, getHeroRelationshipNetwork } = useDataSource();
   const [loading, setLoading] = useState(false);
@@ -79,6 +80,9 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
   const [globalError, setGlobalError] = useState<string | null>(null);
   const cloudAvailable = isSupabaseConfigured();
 
+  // Min games for relationships from inherited filter
+  const minGames = inheritedMinGames;
+
   // Date range from inherited filters only
   const dateRange = useMemo(() => {
     if (inheritedDateRange?.startDate && inheritedDateRange?.endDate) {
@@ -90,8 +94,8 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
     return { startDate: undefined, endDate: undefined };
   }, [inheritedDateRange]);
 
-  // Check if using inherited date filter
-  const usingInheritedDateFilter = !!(inheritedDateRange?.startDate && inheritedDateRange?.endDate);
+  // Check if using inherited filters
+  const usingInheritedFilters = !!(inheritedMinGames > 1 || (inheritedDateRange?.startDate && inheritedDateRange?.endDate));
 
   // Heroes with recorded relationships (filtered list)
   const [availableHeroes, setAvailableHeroes] = useState<typeof allHeroes>([]);
@@ -188,7 +192,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
           // Get all relationships from local data with date filtering (view mode aware)
           const relationships = await getHeroRelationshipNetwork(
             allHeroIds,
-            1, // Show all relationships
+            minGames,
             dateRange.startDate,
             dateRange.endDate
           );
@@ -200,7 +204,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
           // Get from global data (no date filtering available for global stats)
           const result = await GlobalStatsService.getHeroRelationshipNetwork(
             allHeroIds,
-            1 // Show all relationships
+            minGames
           );
           if (result.success && result.data) {
             result.data.forEach(rel => {
@@ -223,7 +227,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
     };
 
     loadAvailableHeroes();
-  }, [statsMode, dateRange.startDate, dateRange.endDate, isViewModeLoading, getHeroRelationshipNetwork]);
+  }, [statsMode, minGames, dateRange.startDate, dateRange.endDate, isViewModeLoading, getHeroRelationshipNetwork]);
 
   // Preload hero images
   useEffect(() => {
@@ -357,7 +361,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
         try {
           const relationships = await getHeroRelationshipNetwork(
             heroIds,
-            1, // Show all relationships
+            minGames,
             dateRange.startDate,
             dateRange.endDate
           );
@@ -375,7 +379,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
         try {
           const result = await GlobalStatsService.getHeroRelationshipNetwork(
             heroIds,
-            1 // Show all relationships
+            minGames
           );
           if (result.success && result.data) {
             const data = buildGraphData(heroIds, result.data);
@@ -393,7 +397,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
     };
 
     loadData();
-  }, [selectedHeroes, statsMode, dateRange.startDate, dateRange.endDate, isViewModeLoading, getHeroRelationshipNetwork]);
+  }, [selectedHeroes, statsMode, minGames, dateRange.startDate, dateRange.endDate, isViewModeLoading, getHeroRelationshipNetwork]);
 
   // Build graph data from relationships - preserves existing node positions
   const buildGraphData = useCallback((
@@ -813,11 +817,16 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
       )}
 
       {/* Inherited Filters Banner */}
-      {usingInheritedDateFilter && (
+      {usingInheritedFilters && (
         <div className="mb-4 p-3 bg-purple-900/30 border border-purple-700/50 rounded-lg flex items-center flex-wrap gap-2 no-screenshot">
           <Filter size={18} className="mr-2 text-purple-400" />
           <span className="text-sm text-purple-200">
-            Using date filter from Hero Stats: {inheritedDateRange?.startDate?.toLocaleDateString()} - {inheritedDateRange?.endDate?.toLocaleDateString()}
+            Using filters from Hero Stats:
+            {inheritedMinGames > 1 && ` Min ${inheritedMinGames} games per relationship`}
+            {inheritedMinGames > 1 && inheritedDateRange?.startDate && ' | '}
+            {inheritedDateRange?.startDate && inheritedDateRange?.endDate &&
+              `${inheritedDateRange.startDate.toLocaleDateString()} - ${inheritedDateRange.endDate.toLocaleDateString()}`
+            }
           </span>
         </div>
       )}

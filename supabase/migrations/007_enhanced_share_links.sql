@@ -89,6 +89,7 @@ BEGIN
       'owner_id', v_link.owner_id,
       'display_name', COALESCE(p.display_name, p.username),
       'is_anonymized', true,
+      'expires_at', v_link.expires_at,
       'players', COALESCE(
         (SELECT json_agg(
           json_build_object(
@@ -176,6 +177,7 @@ BEGIN
       'owner_id', v_link.owner_id,
       'display_name', COALESCE(p.display_name, p.username),
       'is_anonymized', false,
+      'expires_at', v_link.expires_at,
       'players', COALESCE(
         (SELECT json_agg(row_to_json(cp))
          FROM cloud_players cp

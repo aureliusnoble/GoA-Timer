@@ -91,6 +91,7 @@ export interface SharedData {
   matches: CloudMatch[];
   matchPlayers: CloudMatchPlayer[];
   isAnonymized: boolean;
+  expiresAt: Date | null;
   playerNameMapping?: Record<string, string>; // Maps local_id to anonymized name
 }
 
@@ -348,6 +349,7 @@ class ShareServiceClass {
           matches: data.matches || [],
           matchPlayers: data.match_players || [],
           isAnonymized: data.is_anonymized || false,
+          expiresAt: data.expires_at ? new Date(data.expires_at) : null,
           playerNameMapping: data.player_name_mapping || undefined,
         },
       };
