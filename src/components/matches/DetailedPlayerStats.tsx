@@ -2,8 +2,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ChevronLeft, User, TrendingUp, Loader, Calendar } from 'lucide-react';
 import { DBPlayer } from '../../services/DatabaseService';
-import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
+import { useDataSource } from '../../hooks/useDataSource';
+import { useStatsFilter } from '../../context/StatsFilterContext';
 import DetailedStats from './DetailedPlayerStats/DetailedStats';
 import SkillProgression from './DetailedPlayerStats/SkillProgression';
 import RelationshipStats from './DetailedPlayerStats/RelationshipStats';
@@ -49,8 +50,21 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Read recencyMonths from localStorage (controlled by PlayerStats filter)
-  const recencyMonths = (() => {
+  // Use view-mode-aware data source
+  const {
+    isViewModeLoading,
+    getPlayer,
+    getAllPlayers,
+    getAllMatches,
+    getCurrentTrueSkillRatings,
+    getPlayerStats
+  } = useDataSource();
+
+  // Get filter values from context (with localStorage fallback for direct navigation)
+  const { playerStatsFilters } = useStatsFilter();
+
+  // Read recencyMonths from context or localStorage
+  const recencyMonths = playerStatsFilters?.recencyMonths ?? (() => {
     const saved = localStorage.getItem('playerStats_recencyMonths');
     return saved ? parseInt(saved, 10) : null; // null = All Time
   })();
@@ -69,21 +83,24 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
   // Load player data
   useEffect(() => {
     const loadPlayerDetails = async () => {
+      // Wait for view mode data to load
+      if (isViewModeLoading) return;
+
       try {
         setLoading(true);
         setError(null);
-        
-        // Parallel data fetching for performance
+
+        // Parallel data fetching for performance using view-mode-aware methods
         const [
           player,
           playerStats,
           currentRatings,
           allPlayers
         ] = await Promise.all([
-          dbService.getPlayer(playerId),
-          dbService.getPlayerStats(playerId),
-          dbService.getCurrentTrueSkillRatings(),
-          dbService.getAllPlayers()
+          getPlayer(playerId),
+          getPlayerStats(playerId),
+          getCurrentTrueSkillRatings(),
+          getAllPlayers()
         ]);
 
         if (!player) {
@@ -99,7 +116,7 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
         const rank = playersWithRatings.findIndex(p => p.id === playerId) + 1;
 
         // Get all matches to filter by date if needed
-        let allMatchesData = await dbService.getAllMatches();
+        let allMatchesData = await getAllMatches();
 
         // Filter matches by date range if recency filter is active
         let validMatchIds: Set<string> | null = null;
@@ -215,17 +232,17 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
       }
     };
 
-    if (playerId) {
+    if (playerId && !isViewModeLoading) {
       loadPlayerDetails();
     }
-  }, [playerId, dateRange.startDate, dateRange.endDate]);
+  }, [playerId, dateRange.startDate, dateRange.endDate, isViewModeLoading, getPlayer, getPlayerStats, getCurrentTrueSkillRatings, getAllPlayers, getAllMatches]);
 
   const handleBack = () => {
     playSound('buttonClick');
     onBack();
   };
 
-  if (loading) {
+  if (loading || isViewModeLoading) {
     return (
       <div className="bg-gray-800 rounded-lg p-6">
         <div className="flex items-center mb-6">
@@ -238,7 +255,7 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
           </button>
           <h2 className="text-2xl font-bold">Player Details</h2>
         </div>
-        
+
         <div className="flex justify-center items-center h-64">
           <div className="flex items-center">
             <Loader size={24} className="animate-spin text-blue-500 mr-3" />

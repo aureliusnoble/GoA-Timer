@@ -1,6 +1,6 @@
 // src/components/matches/SkillOverTime.tsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { ChevronLeft, TrendingUp, Users, Info, Filter, ChevronDown, ChevronUp, Calendar } from 'lucide-react';
+import { ChevronLeft, TrendingUp, Users, Info, Filter, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   VictoryChart, VictoryLine, VictoryScatter, VictoryAxis
 } from 'victory';
@@ -37,7 +37,7 @@ interface PlayerChartData {
 
 const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
   const { playSound } = useSound();
-  const { isViewModeLoading, getAllPlayers, getHistoricalRatings, getCurrentTrueSkillRatings } = useDataSource();
+  const { isViewModeLoading, getAllPlayers, getHistoricalRatings, getHistoricalRatingsForPeriod, getCurrentTrueSkillRatings } = useDataSource();
   const { playerStatsFilters } = useStatsFilter();
   const [loading, setLoading] = useState(true);
   const [playerHistory, setPlayerHistory] = useState<PlayerRatingHistory[]>([]);
@@ -48,36 +48,28 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
   const [isMobile, setIsMobile] = useState(false);
   const [hoveredPlayer, setHoveredPlayer] = useState<string | null>(null);
 
-  // Track if using inherited filters from PlayerStats
-  const [usingInheritedFilters, setUsingInheritedFilters] = useState<boolean>(false);
+  // Min games filter for this graph specifically (not from relationship filter)
+  const [minGames, setMinGames] = useState<number>(() => {
+    const saved = localStorage.getItem('skillOverTime_minGames');
+    return saved ? parseInt(saved, 10) : 3;
+  });
 
-  // Date range filter state - initialize from inherited filters or localStorage
-  const [dateRange, setDateRange] = useState<{ start: string | null; end: string | null }>(() => {
-    // Check for inherited filters from PlayerStats context
+  // Derived date range from inherited filters only (no local date picker)
+  const dateRange = useMemo(() => {
     if (playerStatsFilters?.dateRange?.startDate && playerStatsFilters?.dateRange?.endDate) {
       return {
         start: playerStatsFilters.dateRange.startDate.toISOString().split('T')[0],
         end: playerStatsFilters.dateRange.endDate.toISOString().split('T')[0]
       };
     }
-    // Fall back to localStorage
-    return {
-      start: localStorage.getItem('skillOverTime_startDate'),
-      end: localStorage.getItem('skillOverTime_endDate')
-    };
-  });
+    return { start: null, end: null };
+  }, [playerStatsFilters?.dateRange]);
 
-  // Set inherited filter flag on mount
-  useEffect(() => {
-    if (playerStatsFilters?.dateRange?.startDate && playerStatsFilters?.dateRange?.endDate) {
-      setUsingInheritedFilters(true);
-      // Apply inherited filters
-      setDateRange({
-        start: playerStatsFilters.dateRange.startDate.toISOString().split('T')[0],
-        end: playerStatsFilters.dateRange.endDate.toISOString().split('T')[0]
-      });
-    }
-  }, []); // Only run on mount
+  // Check if using inherited filters
+  const usingInheritedFilters = !!(playerStatsFilters?.dateRange?.startDate && playerStatsFilters?.dateRange?.endDate);
+
+  // Get recalculateTrueSkill from context
+  const recalculateTrueSkill = playerStatsFilters?.recalculateTrueSkill ?? false;
 
   // Detect mobile viewport
   useEffect(() => {
@@ -98,7 +90,22 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
     const loadRatingHistory = async () => {
       setLoading(true);
       try {
-        const history = await getHistoricalRatings();
+        // Use recalculated TrueSkill if enabled in PlayerStats context
+        const startDate = dateRange.start ? new Date(dateRange.start) : undefined;
+        const endDate = dateRange.end ? new Date(dateRange.end + 'T23:59:59') : undefined;
+
+        let history;
+        if (recalculateTrueSkill && (startDate || endDate)) {
+          // Use recalculated ratings for the filtered period
+          history = await getHistoricalRatingsForPeriod(startDate, endDate, true);
+        } else if (startDate || endDate) {
+          // Just filter by date without recalculating
+          history = await getHistoricalRatingsForPeriod(startDate, endDate, false);
+        } else {
+          // No date filter - use regular historical ratings
+          history = await getHistoricalRatings();
+        }
+
         const currentRatings = await getCurrentTrueSkillRatings();
         const players = await getAllPlayers();
         const nameMap = new Map(players.map(p => [p.id, p.name]));
@@ -174,7 +181,7 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
     };
 
     loadRatingHistory();
-  }, [isViewModeLoading, getHistoricalRatings, getCurrentTrueSkillRatings, getAllPlayers]);
+  }, [isViewModeLoading, getHistoricalRatings, getHistoricalRatingsForPeriod, getCurrentTrueSkillRatings, getAllPlayers, dateRange.start, dateRange.end, recalculateTrueSkill]);
 
   // Filter chart data by date range
   const filteredChartData = useMemo(() => {
@@ -251,7 +258,7 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
 
   const selectAllPlayers = () => {
     playSound('buttonClick');
-    setSelectedPlayers(new Set(playerHistory.map(p => p.playerId)));
+    setSelectedPlayers(new Set(eligiblePlayers.map(p => p.playerId)));
   };
 
   const clearSelection = () => {
@@ -259,23 +266,22 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
     setSelectedPlayers(new Set());
   };
 
-  const handleDateRangeChange = useCallback((field: 'start' | 'end', value: string) => {
+  // Min games handlers
+  const incrementMinGames = useCallback(() => {
     playSound('buttonClick');
-    const newValue = value || null;
-    setDateRange(prev => ({ ...prev, [field]: newValue }));
-    if (newValue) {
-      localStorage.setItem(`skillOverTime_${field}Date`, newValue);
-    } else {
-      localStorage.removeItem(`skillOverTime_${field}Date`);
-    }
-  }, [playSound]);
+    const newValue = minGames + 1;
+    setMinGames(newValue);
+    localStorage.setItem('skillOverTime_minGames', newValue.toString());
+  }, [playSound, minGames]);
 
-  const clearDateRange = useCallback(() => {
+  const decrementMinGames = useCallback(() => {
     playSound('buttonClick');
-    setDateRange({ start: null, end: null });
-    localStorage.removeItem('skillOverTime_startDate');
-    localStorage.removeItem('skillOverTime_endDate');
-  }, [playSound]);
+    if (minGames > 1) {
+      const newValue = minGames - 1;
+      setMinGames(newValue);
+      localStorage.setItem('skillOverTime_minGames', newValue.toString());
+    }
+  }, [playSound, minGames]);
 
   const generateColors = (count: number): string[] => {
     const colors = [
@@ -294,16 +300,6 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
   const toggleFilters = () => {
     playSound('buttonClick');
     setShowFilters(!showFilters);
-  };
-
-  // Clear inherited filters and reset to defaults
-  const clearInheritedFilters = () => {
-    playSound('buttonClick');
-    setUsingInheritedFilters(false);
-    setDateRange({ start: null, end: null });
-    // Clear localStorage as well
-    localStorage.removeItem('skillOverTime_startDate');
-    localStorage.removeItem('skillOverTime_endDate');
   };
 
   // Calculate domain for Y axis
@@ -334,6 +330,11 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
     return [Math.min(...matchNumbers), Math.max(...matchNumbers)];
   }, [filteredChartData]);
 
+  // Filter players by minimum games
+  const eligiblePlayers = useMemo(() => {
+    return playerHistory.filter(p => p.actualMatchCount >= minGames);
+  }, [playerHistory, minGames]);
+
   return (
     <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
       {/* Header */}
@@ -350,20 +351,14 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
       </div>
 
       {/* Inherited Filters Banner */}
-      {usingInheritedFilters && playerStatsFilters?.recencyMonths && (
-        <div className="mb-4 p-3 bg-purple-900/30 border border-purple-700/50 rounded-lg flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center">
-            <Filter size={18} className="mr-2 text-purple-400" />
-            <span className="text-sm text-purple-200">
-              Using filters from Player Stats: Last {playerStatsFilters.recencyMonths} months
-            </span>
-          </div>
-          <button
-            onClick={clearInheritedFilters}
-            className="text-sm text-purple-400 hover:text-purple-300 underline"
-          >
-            Reset to Defaults
-          </button>
+      {usingInheritedFilters && (
+        <div className="mb-4 p-3 bg-purple-900/30 border border-purple-700/50 rounded-lg flex items-center flex-wrap gap-2">
+          <Filter size={18} className="mr-2 text-purple-400" />
+          <span className="text-sm text-purple-200">
+            Using filters from Player Stats
+            {playerStatsFilters?.recencyMonths && `: Last ${playerStatsFilters.recencyMonths} months`}
+            {recalculateTrueSkill && ' (TrueSkill recalculated)'}
+          </span>
         </div>
       )}
 
@@ -387,41 +382,30 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
             </button>
           </div>
 
-          {/* Date Range Filter */}
+          {/* Min Games Filter */}
           <div className={`mb-4 no-screenshot ${!showFilters && isMobile ? 'hidden' : ''}`}>
             <div className="bg-gray-700 rounded-lg p-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-center">
-                  <Calendar size={18} className="mr-2 text-blue-400" />
-                  <span className="font-semibold">Date Range</span>
+                  <Filter size={18} className="mr-2 text-blue-400" />
+                  <span className="font-semibold">Minimum Games to Show Player</span>
                 </div>
-                <div className="flex flex-wrap gap-3 items-center">
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-gray-400">From:</label>
-                    <input
-                      type="date"
-                      value={dateRange.start || ''}
-                      onChange={(e) => handleDateRangeChange('start', e.target.value)}
-                      className="bg-gray-600 rounded px-2 py-1 text-sm border border-gray-500 focus:border-blue-500 focus:outline-none"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-gray-400">To:</label>
-                    <input
-                      type="date"
-                      value={dateRange.end || ''}
-                      onChange={(e) => handleDateRangeChange('end', e.target.value)}
-                      className="bg-gray-600 rounded px-2 py-1 text-sm border border-gray-500 focus:border-blue-500 focus:outline-none"
-                    />
-                  </div>
-                  {(dateRange.start || dateRange.end) && (
-                    <button
-                      onClick={clearDateRange}
-                      className="text-sm text-blue-400 hover:text-blue-300 underline"
-                    >
-                      Clear
-                    </button>
-                  )}
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={decrementMinGames}
+                    disabled={minGames <= 1}
+                    className="w-8 h-8 rounded-lg bg-gray-600 hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-lg font-bold"
+                  >
+                    −
+                  </button>
+                  <span className="text-lg font-semibold w-8 text-center">{minGames}</span>
+                  <button
+                    onClick={incrementMinGames}
+                    className="w-8 h-8 rounded-lg bg-gray-600 hover:bg-gray-500 flex items-center justify-center text-lg font-bold"
+                  >
+                    +
+                  </button>
+                  <span className="text-sm text-gray-400 ml-2">games</span>
                 </div>
               </div>
             </div>
@@ -452,7 +436,7 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
-                {playerHistory.map(player => (
+                {eligiblePlayers.map(player => (
                   <button
                     key={player.playerId}
                     onClick={() => togglePlayer(player.playerId)}
@@ -472,6 +456,11 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
                   </button>
                 ))}
               </div>
+              {eligiblePlayers.length === 0 && (
+                <div className="text-center py-4 text-gray-400">
+                  No players with {minGames}+ games. Try lowering the minimum.
+                </div>
+              )}
             </div>
           </div>
 

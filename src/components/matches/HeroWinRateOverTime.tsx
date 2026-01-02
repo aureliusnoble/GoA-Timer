@@ -1,6 +1,6 @@
 // src/components/matches/HeroWinRateOverTime.tsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { ChevronLeft, TrendingUp, Info, Filter, ChevronDown, ChevronUp, Calendar, Globe, Users, Loader2 } from 'lucide-react';
+import { ChevronLeft, TrendingUp, Info, Filter, ChevronDown, ChevronUp, Globe, Users, Loader2 } from 'lucide-react';
 import { VictoryChart, VictoryLine, VictoryScatter, VictoryAxis } from 'victory';
 import dbService from '../../services/DatabaseService';
 import { GlobalStatsService } from '../../services/supabase/GlobalStatsService';
@@ -55,11 +55,6 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
   const [globalError, setGlobalError] = useState<string | null>(null);
   const cloudAvailable = isSupabaseConfigured();
 
-  // Inherited filter state
-  const [usingInheritedFilters, setUsingInheritedFilters] = useState<boolean>(
-    !!(inheritedMinGames || inheritedDateRange)
-  );
-
   // Min games filter - initialize from inherited or localStorage
   const [minGames, setMinGames] = useState<number>(() => {
     if (inheritedMinGames !== undefined) return inheritedMinGames;
@@ -67,19 +62,19 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
     return saved ? parseInt(saved, 10) : 3;
   });
 
-  // Date range filter - initialize from inherited or localStorage
-  const [dateRange, setDateRange] = useState<{ start: string | null; end: string | null }>(() => {
+  // Date range from inherited filters only (no local date picker)
+  const dateRange = useMemo(() => {
     if (inheritedDateRange?.startDate && inheritedDateRange?.endDate) {
       return {
         start: inheritedDateRange.startDate.toISOString().split('T')[0],
         end: inheritedDateRange.endDate.toISOString().split('T')[0]
       };
     }
-    return {
-      start: localStorage.getItem('heroWinRateOverTime_startDate'),
-      end: localStorage.getItem('heroWinRateOverTime_endDate')
-    };
-  });
+    return { start: null, end: null };
+  }, [inheritedDateRange]);
+
+  // Check if using inherited date filter
+  const usingInheritedDateFilter = !!(inheritedDateRange?.startDate && inheritedDateRange?.endDate);
 
   // Detect mobile viewport
   useEffect(() => {
@@ -176,24 +171,6 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
     onBack();
   }, [playSound, onBack]);
 
-  const handleDateRangeChange = useCallback((field: 'start' | 'end', value: string) => {
-    playSound('buttonClick');
-    const newValue = value || null;
-    setDateRange(prev => ({ ...prev, [field]: newValue }));
-    if (newValue) {
-      localStorage.setItem(`heroWinRateOverTime_${field}Date`, newValue);
-    } else {
-      localStorage.removeItem(`heroWinRateOverTime_${field}Date`);
-    }
-  }, [playSound]);
-
-  const clearDateRange = useCallback(() => {
-    playSound('buttonClick');
-    setDateRange({ start: null, end: null });
-    localStorage.removeItem('heroWinRateOverTime_startDate');
-    localStorage.removeItem('heroWinRateOverTime_endDate');
-  }, [playSound]);
-
   const generateColors = (count: number): string[] => {
     const colors = [
       '#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6',
@@ -236,16 +213,6 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
     playSound('buttonClick');
     setShowFilters(!showFilters);
   };
-
-  const clearInheritedFilters = useCallback(() => {
-    playSound('buttonClick');
-    setUsingInheritedFilters(false);
-    // Reset to default values
-    setMinGames(3);
-    setDateRange({ start: null, end: null });
-    localStorage.removeItem('heroWinRateOverTime_startDate');
-    localStorage.removeItem('heroWinRateOverTime_endDate');
-  }, [playSound]);
 
   // Get chart data for a hero - converts data points to x/y format
   const getHeroChartData = useCallback((heroId: number) => {
@@ -392,24 +359,12 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
       )}
 
       {/* Inherited Filters Banner */}
-      {usingInheritedFilters && (inheritedMinGames || inheritedDateRange) && (
-        <div className="mb-4 p-3 bg-purple-900/30 border border-purple-700/50 rounded-lg flex items-center justify-between flex-wrap gap-2 no-screenshot">
-          <div className="flex items-center">
-            <Filter size={18} className="mr-2 text-purple-400" />
-            <span className="text-sm text-purple-200">
-              Using filters from Hero Stats
-              {inheritedMinGames && `: Min ${inheritedMinGames} games`}
-              {inheritedDateRange?.startDate && inheritedDateRange?.endDate &&
-                `, ${inheritedDateRange.startDate.toLocaleDateString()} - ${inheritedDateRange.endDate.toLocaleDateString()}`
-              }
-            </span>
-          </div>
-          <button
-            onClick={clearInheritedFilters}
-            className="text-sm text-purple-400 hover:text-purple-300 underline"
-          >
-            Reset to Defaults
-          </button>
+      {usingInheritedDateFilter && (
+        <div className="mb-4 p-3 bg-purple-900/30 border border-purple-700/50 rounded-lg flex items-center flex-wrap gap-2 no-screenshot">
+          <Filter size={18} className="mr-2 text-purple-400" />
+          <span className="text-sm text-purple-200">
+            Using date filter from Hero Stats: {inheritedDateRange?.startDate?.toLocaleDateString()} - {inheritedDateRange?.endDate?.toLocaleDateString()}
+          </span>
         </div>
       )}
 
@@ -438,42 +393,6 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
 
           {/* Filters Section */}
           <div className={`${isMobile && !showFilters ? 'hidden' : ''} mb-6 space-y-4 no-screenshot`}>
-            {/* Date Range Filter */}
-            <div className="bg-gray-700 rounded-lg p-4">
-              <div className="flex items-center mb-3">
-                <Calendar size={18} className="mr-2 text-blue-400" />
-                <span className="font-medium">Date Range</span>
-              </div>
-              <div className="flex flex-wrap gap-3 items-center">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-400">From:</span>
-                  <input
-                    type="date"
-                    value={dateRange.start || ''}
-                    onChange={(e) => handleDateRangeChange('start', e.target.value)}
-                    className="px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-sm"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-400">To:</span>
-                  <input
-                    type="date"
-                    value={dateRange.end || ''}
-                    onChange={(e) => handleDateRangeChange('end', e.target.value)}
-                    className="px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-sm"
-                  />
-                </div>
-                {(dateRange.start || dateRange.end) && (
-                  <button
-                    onClick={clearDateRange}
-                    className="px-3 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg text-sm"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-            </div>
-
             {/* Min Games Filter */}
             <div className="bg-gray-700 rounded-lg p-4">
               <div className="flex items-center justify-between">

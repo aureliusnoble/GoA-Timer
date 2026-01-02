@@ -683,6 +683,219 @@ export function useDataSource() {
     return getDisplayRating(player);
   }, []);
 
+  // Get a specific match by ID (view mode aware)
+  const getMatch = useCallback(async (matchId: string): Promise<DBMatch | undefined> => {
+    if (isViewMode && localMatches) {
+      return localMatches.find(m => m.id === matchId);
+    }
+    const allMatches = await dbService.getAllMatches();
+    return allMatches.find(m => m.id === matchId);
+  }, [isViewMode, localMatches]);
+
+  // Get player stats for a specific player (view mode aware)
+  // Returns the same structure as dbService.getPlayerStats
+  const getPlayerStats = useCallback(async (playerId: string): Promise<{
+    matchesPlayed: Array<{
+      matchId: string;
+      heroId: number;
+      heroName: string;
+      heroRoles?: string[];
+      team: Team;
+      won: boolean;
+      date: Date;
+      kills?: number;
+      deaths?: number;
+      assists?: number;
+      goldEarned?: number;
+      minionKills?: number;
+      level?: number;
+    }>;
+  }> => {
+    const allMatches = await getAllMatches();
+    const allMatchPlayers = await getAllMatchPlayers();
+
+    // Find all match records for this player
+    const playerMatchRecords = allMatchPlayers.filter(mp => mp.playerId === playerId);
+
+    // Build matches played array
+    const matchesPlayed = playerMatchRecords.map(mp => {
+      const match = allMatches.find(m => m.id === mp.matchId);
+      if (!match) return null;
+
+      return {
+        matchId: mp.matchId,
+        heroId: mp.heroId,
+        heroName: mp.heroName,
+        heroRoles: mp.heroRoles,
+        team: mp.team,
+        won: mp.team === match.winningTeam,
+        date: match.date,
+        kills: mp.kills,
+        deaths: mp.deaths,
+        assists: mp.assists,
+        goldEarned: mp.goldEarned,
+        minionKills: mp.minionKills,
+        level: mp.level
+      };
+    }).filter((item): item is NonNullable<typeof item> => item !== null);
+
+    return { matchesPlayed };
+  }, [getAllMatches, getAllMatchPlayers]);
+
+  // Get historical ratings for a specific period with optional TrueSkill recalculation
+  const getHistoricalRatingsForPeriod = useCallback(async (
+    startDate?: Date,
+    endDate?: Date,
+    recalculateTrueSkill: boolean = false
+  ): Promise<RatingSnapshot[]> => {
+    const allMatches = await getAllMatches();
+    const allPlayers = await getAllPlayers();
+
+    // Filter matches by date range if specified
+    let filteredMatches = allMatches;
+    if (startDate || endDate) {
+      filteredMatches = allMatches.filter(match => {
+        const matchDate = new Date(match.date);
+        if (startDate && matchDate < startDate) return false;
+        if (endDate && matchDate > endDate) return false;
+        return true;
+      });
+    }
+
+    if (filteredMatches.length === 0) {
+      return [];
+    }
+
+    // Sort matches by date
+    const sortedMatches = [...filteredMatches].sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      return dateA - dateB;
+    });
+
+    // Initialize player ratings
+    const playerRatings: { [playerId: string]: ReturnType<typeof rating> } = {};
+
+    if (recalculateTrueSkill) {
+      // Start fresh - all players begin with default rating
+      for (const player of allPlayers) {
+        playerRatings[player.id] = rating();
+      }
+    } else {
+      // Use stored ratings as starting point
+      for (const player of allPlayers) {
+        // Create a rating object from stored values
+        if (player.mu !== undefined && player.sigma !== undefined) {
+          playerRatings[player.id] = rating({ mu: player.mu, sigma: player.sigma });
+        } else {
+          playerRatings[player.id] = rating();
+        }
+      }
+
+      // If we're just filtering (not recalculating), get the full history and filter by date
+      const fullHistory = await calculateHistoricalRatings(allMatches, allPlayers, getMatchPlayers);
+
+      if (!startDate && !endDate) {
+        return fullHistory;
+      }
+
+      // Filter snapshots by date
+      return fullHistory.filter(snapshot => {
+        const snapshotDate = new Date(snapshot.date);
+        if (startDate && snapshotDate < startDate) return false;
+        if (endDate && snapshotDate > endDate) return false;
+        return true;
+      });
+    }
+
+    // If recalculating, replay matches and build history
+    const ratingHistory: RatingSnapshot[] = [];
+
+    // Add initial snapshot (game 0)
+    const initialSnapshot: { [playerId: string]: number } = {};
+    for (const playerId in playerRatings) {
+      const playerRating = playerRatings[playerId];
+      const ordinalValue = ordinal(playerRating);
+      const displayRating = Math.round((ordinalValue + 25) * 40 + 200);
+      initialSnapshot[playerId] = displayRating;
+    }
+
+    ratingHistory.push({
+      date: sortedMatches[0].date.toString(),
+      matchNumber: 0,
+      ratings: initialSnapshot,
+      participants: []
+    });
+
+    // Process each match chronologically
+    for (let matchIndex = 0; matchIndex < sortedMatches.length; matchIndex++) {
+      const match = sortedMatches[matchIndex];
+      const matchPlayers = await getMatchPlayers(match.id);
+
+      // Separate into teams
+      const titanPlayers: string[] = [];
+      const titanRatings: ReturnType<typeof rating>[] = [];
+      const atlanteanPlayers: string[] = [];
+      const atlanteanRatings: ReturnType<typeof rating>[] = [];
+
+      for (const mp of matchPlayers) {
+        // Initialize rating if player wasn't in initial list
+        if (!playerRatings[mp.playerId]) {
+          playerRatings[mp.playerId] = rating();
+        }
+
+        if (mp.team === 'titans') {
+          titanPlayers.push(mp.playerId);
+          titanRatings.push(playerRatings[mp.playerId]);
+        } else {
+          atlanteanPlayers.push(mp.playerId);
+          atlanteanRatings.push(playerRatings[mp.playerId]);
+        }
+      }
+
+      // Skip if either team is empty
+      if (titanRatings.length === 0 || atlanteanRatings.length === 0) {
+        continue;
+      }
+
+      // Determine ranks based on winning team
+      const ranks = match.winningTeam === 'titans' ? [1, 2] : [2, 1];
+
+      // Update ratings using OpenSkill
+      const result = rate([titanRatings, atlanteanRatings], {
+        rank: ranks,
+        beta: TRUESKILL_BETA,
+        tau: TRUESKILL_TAU
+      });
+
+      // Update player ratings
+      for (let i = 0; i < titanPlayers.length; i++) {
+        playerRatings[titanPlayers[i]] = result[0][i];
+      }
+      for (let i = 0; i < atlanteanPlayers.length; i++) {
+        playerRatings[atlanteanPlayers[i]] = result[1][i];
+      }
+
+      // Create snapshot
+      const snapshot: { [playerId: string]: number } = {};
+      for (const playerId in playerRatings) {
+        const playerRating = playerRatings[playerId];
+        const ordinalValue = ordinal(playerRating);
+        const displayRating = Math.round((ordinalValue + 25) * 40 + 200);
+        snapshot[playerId] = displayRating;
+      }
+
+      ratingHistory.push({
+        date: match.date.toString(),
+        matchNumber: matchIndex + 1,
+        ratings: snapshot,
+        participants: [...titanPlayers, ...atlanteanPlayers]
+      });
+    }
+
+    return ratingHistory;
+  }, [getAllMatches, getAllPlayers, getMatchPlayers]);
+
   // Interface for filtered player stats
   interface FilteredPlayerStats {
     id: string;
@@ -946,12 +1159,15 @@ export function useDataSource() {
     getAllPlayers,
     getPlayer,
     getAllMatches,
+    getMatch,
     getMatchPlayers,
     getAllMatchPlayers,
     getPlayerMatches,
+    getPlayerStats,
     getHeroStats,
     getPlayerRelationshipNetwork,
     getHistoricalRatings,
+    getHistoricalRatingsForPeriod,
     getCurrentTrueSkillRatings,
     getPlayerDisplayRating,
     getFilteredPlayerStats,

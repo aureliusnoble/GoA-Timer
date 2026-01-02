@@ -1,7 +1,8 @@
 // src/components/matches/DetailedPlayerStats/MatchHistory.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, Users, Shield, Swords, Star, Hexagon, ChevronLeft, ChevronRight } from 'lucide-react';
-import dbService, { DBMatch, DBMatchPlayer } from '../../../services/DatabaseService';
+import { DBMatch, DBMatchPlayer } from '../../../services/DatabaseService';
+import { useDataSource } from '../../../hooks/useDataSource';
 import { getRoleTooltip } from '../../../shared/utils/roleDescriptions';
 import EnhancedTooltip from '../../common/EnhancedTooltip';
 
@@ -23,6 +24,9 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ playerId }) => {
   const [matchHistory, setMatchHistory] = useState<MatchRecord[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
+
+  // Use view-mode-aware data source
+  const { isViewModeLoading, getPlayerStats, getAllMatches, getMatch, getMatchPlayers } = useDataSource();
 
   const matchesPerPage = 10;
 
@@ -46,18 +50,21 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ playerId }) => {
   // Load match history data
   useEffect(() => {
     const loadMatchHistory = async () => {
+      // Wait for view mode data to load
+      if (isViewModeLoading) return;
+
       try {
         setLoading(true);
         setError(null);
 
-        // Get player's match history
-        const playerStats = await dbService.getPlayerStats(playerId);
+        // Get player's match history using view-mode-aware methods
+        const playerStats = await getPlayerStats(playerId);
         let playerMatches = playerStats.matchesPlayed;
 
         // Filter by date range if recency filter is active
         if (dateRange.startDate && dateRange.endDate) {
           // Need to get match dates to filter
-          const allMatches = await dbService.getAllMatches();
+          const allMatches = await getAllMatches();
           const validMatchIds = new Set(
             allMatches
               .filter(match => {
@@ -71,13 +78,13 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ playerId }) => {
 
         // Build detailed match records
         const matchRecords: MatchRecord[] = [];
-        
+
         for (const playerMatch of playerMatches) {
           try {
-            // Get full match data and all participants
+            // Get full match data and all participants using view-mode-aware methods
             const [fullMatch, allPlayers] = await Promise.all([
-              dbService.getMatch(playerMatch.matchId),
-              dbService.getMatchPlayers(playerMatch.matchId)
+              getMatch(playerMatch.matchId),
+              getMatchPlayers(playerMatch.matchId)
             ]);
             
             if (fullMatch && allPlayers.length > 0) {
@@ -118,8 +125,10 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ playerId }) => {
       }
     };
 
-    loadMatchHistory();
-  }, [playerId, dateRange.startDate, dateRange.endDate]);
+    if (!isViewModeLoading) {
+      loadMatchHistory();
+    }
+  }, [playerId, dateRange.startDate, dateRange.endDate, isViewModeLoading, getPlayerStats, getAllMatches, getMatch, getMatchPlayers]);
 
   // Get role icon with tooltip
   const getRoleIcon = (role: string | undefined) => {
@@ -172,7 +181,7 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ playerId }) => {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));
   };
 
-  if (loading) {
+  if (loading || isViewModeLoading) {
     return (
       <div className="bg-gray-700 rounded-lg p-6 mb-6">
         <div className="animate-pulse">

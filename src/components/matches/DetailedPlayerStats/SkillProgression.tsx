@@ -4,7 +4,7 @@ import {
   VictoryChart, VictoryLine, VictoryScatter, VictoryAxis, VictoryArea
 } from 'victory';
 import { TrendingUp, Info, ArrowUp, ArrowDown } from 'lucide-react';
-import dbService from '../../../services/DatabaseService';
+import { useDataSource } from '../../../hooks/useDataSource';
 import EnhancedTooltip from '../../common/EnhancedTooltip';
 
 interface SkillProgressionProps {
@@ -107,6 +107,9 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({ playerId, playerNam
   const [allCurrentRatings, setAllCurrentRatings] = useState<number[]>([]);
   const [isMobile, setIsMobile] = useState(false);
 
+  // Use view-mode-aware data source
+  const { isViewModeLoading, getHistoricalRatings, getCurrentTrueSkillRatings } = useDataSource();
+
   // Detect mobile viewport
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -118,11 +121,14 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({ playerId, playerNam
   // Load historical data
   useEffect(() => {
     const loadChartData = async () => {
+      // Wait for view mode data to load
+      if (isViewModeLoading) return;
+
       try {
         setLoading(true);
         const [historicalRatings, currentRatings] = await Promise.all([
-          dbService.getHistoricalRatings(),
-          dbService.getCurrentTrueSkillRatings()
+          getHistoricalRatings(),
+          getCurrentTrueSkillRatings()
         ]);
 
         setAllCurrentRatings(Object.values(currentRatings));
@@ -199,8 +205,10 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({ playerId, playerNam
       }
     };
 
-    loadChartData();
-  }, [playerId]);
+    if (!isViewModeLoading) {
+      loadChartData();
+    }
+  }, [playerId, isViewModeLoading, getHistoricalRatings, getCurrentTrueSkillRatings]);
 
   // Calculate progression statistics
   const progressionStats = useMemo(() => {
@@ -280,7 +288,7 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({ playerId, playerNam
     return [Math.min(...matchNumbers) - 0.5, Math.max(...matchNumbers) + 0.5];
   }, [chartData]);
 
-  if (loading) {
+  if (loading || isViewModeLoading) {
     return (
       <div className="bg-gray-700 rounded-lg p-6 mb-6">
         <div className="animate-pulse">

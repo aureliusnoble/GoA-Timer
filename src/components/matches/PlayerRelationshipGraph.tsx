@@ -11,6 +11,7 @@ interface PlayerRelationshipGraphProps {
   onBack: () => void;
   inheritedMinGames?: number;
   inheritedDateRange?: { startDate?: Date; endDate?: Date };
+  recalculateTrueSkill?: boolean;
 }
 
 // Edge types
@@ -124,10 +125,11 @@ const calculateSkillPercentile = (displayRating: number, allRatings: number[]): 
 const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
   onBack,
   inheritedMinGames,
-  inheritedDateRange
+  inheritedDateRange,
+  recalculateTrueSkill = false
 }) => {
   const { playSound } = useSound();
-  const { isViewModeLoading, getAllPlayers, getPlayerRelationshipNetwork, getPlayerDisplayRating } = useDataSource();
+  const { isViewModeLoading, getAllPlayers, getPlayerRelationshipNetwork, getPlayerDisplayRating, getFilteredPlayerStats } = useDataSource();
   const [loading, setLoading] = useState(false);
   const [selectedPlayers, setSelectedPlayers] = useState<Set<string>>(new Set());
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
@@ -249,13 +251,29 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
           playerIdsWithData.add(rel.relatedPlayerId);
         });
 
+        // Get ratings - either recalculated or current
+        let playerRatings: Record<string, number> = {};
+        if (recalculateTrueSkill && startDate) {
+          // Use recalculated TrueSkill ratings for the filtered period
+          const filteredStats = await getFilteredPlayerStats(startDate, endDate, true);
+          playerRatings = filteredStats.players.reduce((acc, p) => {
+            acc[p.id] = p.displayRating;
+            return acc;
+          }, {} as Record<string, number>);
+        } else {
+          // Use current ratings
+          playersWithGames.forEach(p => {
+            playerRatings[p.id] = getPlayerDisplayRating(p);
+          });
+        }
+
         // Filter to only players with relationship data and calculate stats
         const filteredPlayersBase = playersWithGames
           .filter(p => playerIdsWithData.has(p.id))
           .map(p => ({
             ...p,
             winRate: p.totalGames > 0 ? (p.wins / p.totalGames) * 100 : 0,
-            displayRating: getPlayerDisplayRating(p),
+            displayRating: playerRatings[p.id] ?? getPlayerDisplayRating(p),
             skillPercentile: 0 // Will be calculated below
           }));
 
@@ -279,7 +297,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
     };
 
     loadAvailablePlayers();
-  }, [isViewModeLoading, getAllPlayers, getPlayerRelationshipNetwork, getPlayerDisplayRating, minGames, dateRange]);
+  }, [isViewModeLoading, getAllPlayers, getPlayerRelationshipNetwork, getPlayerDisplayRating, getFilteredPlayerStats, minGames, dateRange, recalculateTrueSkill]);
 
   // Configure forces after graph ref is available
   useEffect(() => {
@@ -733,6 +751,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
             <span className="text-sm text-purple-200">
               Using filters from Player Stats: Min {minGames} games
               {dateRange.start && dateRange.end && ` | ${dateRange.start} to ${dateRange.end}`}
+              {recalculateTrueSkill && ' | TrueSkill recalculated'}
             </span>
           </div>
           <button

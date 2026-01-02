@@ -1,7 +1,8 @@
 // src/components/matches/DetailedPlayerStats/RelationshipStats.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { Users, Zap, Heart, Info, Calendar } from 'lucide-react';
-import dbService, { DBMatchPlayer } from '../../../services/DatabaseService';
+import { DBMatchPlayer } from '../../../services/DatabaseService';
+import { useDataSource } from '../../../hooks/useDataSource';
 
 interface RelationshipStatsProps {
   playerId: string;
@@ -24,6 +25,9 @@ interface RelationshipData {
 const RelationshipStats: React.FC<RelationshipStatsProps> = ({ playerId }) => {
   const [loading, setLoading] = useState(true);
   const [relationshipData, setRelationshipData] = useState<RelationshipData | null>(null);
+
+  // Use view-mode-aware data source
+  const { isViewModeLoading, getPlayerStats, getAllMatches, getMatchPlayers } = useDataSource();
 
   // Read minGames from localStorage (controlled by PlayerStats filter)
   const minGames = (() => {
@@ -51,13 +55,16 @@ const RelationshipStats: React.FC<RelationshipStatsProps> = ({ playerId }) => {
   // Calculate relationship statistics
   useEffect(() => {
     const calculateRelationships = async () => {
+      // Wait for view mode data to load
+      if (isViewModeLoading) return;
+
       try {
         setLoading(true);
 
-        // Get player's match history and all matches
+        // Get player's match history and all matches using view-mode-aware methods
         const [playerStats, allMatchesRaw] = await Promise.all([
-          dbService.getPlayerStats(playerId),
-          dbService.getAllMatches()
+          getPlayerStats(playerId),
+          getAllMatches()
         ]);
 
         // Filter matches by date range if recency filter is active
@@ -81,7 +88,7 @@ const RelationshipStats: React.FC<RelationshipStatsProps> = ({ playerId }) => {
         // Get all players for each match this player participated in
         for (const match of matches) {
           if (!matchGroups.has(match.matchId)) {
-            const allMatchPlayers = await dbService.getMatchPlayers(match.matchId);
+            const allMatchPlayers = await getMatchPlayers(match.matchId);
             matchGroups.set(match.matchId, allMatchPlayers);
           }
         }
@@ -172,11 +179,12 @@ const RelationshipStats: React.FC<RelationshipStatsProps> = ({ playerId }) => {
       }
     };
 
-    calculateRelationships();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playerId, dateRange.startDate, dateRange.endDate]); // minGames and recencyMonths are read from localStorage on mount
+    if (!isViewModeLoading) {
+      calculateRelationships();
+    }
+  }, [playerId, dateRange.startDate, dateRange.endDate, isViewModeLoading, getPlayerStats, getAllMatches, getMatchPlayers, minGames]);
 
-  if (loading) {
+  if (loading || isViewModeLoading) {
     return (
       <div className="bg-gray-700 rounded-lg p-6 mb-6">
         <div className="animate-pulse">

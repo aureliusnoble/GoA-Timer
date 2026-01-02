@@ -13,6 +13,7 @@ interface HeroRelationshipGraphProps {
   onBack: () => void;
   initialStatsMode?: 'local' | 'global';
   inheritedMinGames?: number;
+  inheritedDateRange?: { startDate?: Date; endDate?: Date };
 }
 
 // Edge types
@@ -63,7 +64,7 @@ const edgeLabels: Record<EdgeType, string> = {
   opponent_lost: 'Lost to'
 };
 
-const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, initialStatsMode = 'local', inheritedMinGames }) => {
+const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, initialStatsMode = 'local', inheritedMinGames, inheritedDateRange }) => {
   const { playSound } = useSound();
   const [loading, setLoading] = useState(false);
   const [selectedHeroes, setSelectedHeroes] = useState<Set<number>>(new Set());
@@ -78,9 +79,26 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
   const [globalError, setGlobalError] = useState<string | null>(null);
   const cloudAvailable = isSupabaseConfigured();
 
-  // Inherited filter state
-  const [usingInheritedFilters, setUsingInheritedFilters] = useState<boolean>(!!inheritedMinGames);
-  const [minGames, setMinGames] = useState<number>(inheritedMinGames ?? 1);
+  // Min games filter with local state and ± UI
+  const [minGames, setMinGames] = useState<number>(() => {
+    if (inheritedMinGames !== undefined) return inheritedMinGames;
+    const saved = localStorage.getItem('heroRelationshipGraph_minGames');
+    return saved ? parseInt(saved, 10) : 1;
+  });
+
+  // Date range from inherited filters only
+  const dateRange = useMemo(() => {
+    if (inheritedDateRange?.startDate && inheritedDateRange?.endDate) {
+      return {
+        startDate: inheritedDateRange.startDate,
+        endDate: inheritedDateRange.endDate
+      };
+    }
+    return { startDate: undefined, endDate: undefined };
+  }, [inheritedDateRange]);
+
+  // Check if using inherited date filter
+  const usingInheritedDateFilter = !!(inheritedDateRange?.startDate && inheritedDateRange?.endDate);
 
   // Heroes with recorded relationships (filtered list)
   const [availableHeroes, setAvailableHeroes] = useState<typeof allHeroes>([]);
@@ -171,15 +189,23 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
         let heroIdsWithData = new Set<number>();
 
         if (statsMode === 'local') {
-          // Get all relationships from local data
-          const relationships = await dbService.getHeroRelationshipNetwork(allHeroIds, minGames);
+          // Get all relationships from local data with date filtering
+          const relationships = await dbService.getHeroRelationshipNetwork(
+            allHeroIds,
+            minGames,
+            dateRange.startDate,
+            dateRange.endDate
+          );
           relationships.forEach(rel => {
             heroIdsWithData.add(rel.heroId);
             heroIdsWithData.add(rel.relatedHeroId);
           });
         } else {
-          // Get from global data
-          const result = await GlobalStatsService.getHeroRelationshipNetwork(allHeroIds, minGames);
+          // Get from global data (no date filtering available for global stats)
+          const result = await GlobalStatsService.getHeroRelationshipNetwork(
+            allHeroIds,
+            minGames
+          );
           if (result.success && result.data) {
             result.data.forEach(rel => {
               heroIdsWithData.add(rel.heroId);
@@ -201,7 +227,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
     };
 
     loadAvailableHeroes();
-  }, [statsMode, minGames]);
+  }, [statsMode, minGames, dateRange.startDate, dateRange.endDate]);
 
   // Preload hero images
   useEffect(() => {
@@ -330,7 +356,12 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
       if (statsMode === 'local') {
         setLoading(true);
         try {
-          const relationships = await dbService.getHeroRelationshipNetwork(heroIds, minGames);
+          const relationships = await dbService.getHeroRelationshipNetwork(
+            heroIds,
+            minGames,
+            dateRange.startDate,
+            dateRange.endDate
+          );
           const data = buildGraphData(heroIds, relationships);
           setGraphData(data);
         } catch (error) {
@@ -339,11 +370,14 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
           setLoading(false);
         }
       } else {
-        // Global mode
+        // Global mode (no date filtering available for global stats)
         setGlobalLoading(true);
         setGlobalError(null);
         try {
-          const result = await GlobalStatsService.getHeroRelationshipNetwork(heroIds, minGames);
+          const result = await GlobalStatsService.getHeroRelationshipNetwork(
+            heroIds,
+            minGames
+          );
           if (result.success && result.data) {
             const data = buildGraphData(heroIds, result.data);
             setGraphData(data);
@@ -360,7 +394,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
     };
 
     loadData();
-  }, [selectedHeroes, statsMode, minGames]);
+  }, [selectedHeroes, statsMode, minGames, dateRange.startDate, dateRange.endDate]);
 
   // Build graph data from relationships - preserves existing node positions
   const buildGraphData = useCallback((
@@ -570,10 +604,20 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
     setShowFilters(!showFilters);
   };
 
-  const clearInheritedFilters = useCallback(() => {
+  // Persist minGames to localStorage
+  useEffect(() => {
+    localStorage.setItem('heroRelationshipGraph_minGames', minGames.toString());
+  }, [minGames]);
+
+  // Min games handlers
+  const incrementMinGames = useCallback(() => {
     playSound('buttonClick');
-    setUsingInheritedFilters(false);
-    setMinGames(1); // Reset to default
+    setMinGames(prev => Math.min(50, prev + 1));
+  }, [playSound]);
+
+  const decrementMinGames = useCallback(() => {
+    playSound('buttonClick');
+    setMinGames(prev => Math.max(1, prev - 1));
   }, [playSound]);
 
   // Custom node rendering with hero images
@@ -786,20 +830,12 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
       )}
 
       {/* Inherited Filters Banner */}
-      {usingInheritedFilters && inheritedMinGames && (
-        <div className="mb-4 p-3 bg-purple-900/30 border border-purple-700/50 rounded-lg flex items-center justify-between flex-wrap gap-2 no-screenshot">
-          <div className="flex items-center">
-            <Filter size={18} className="mr-2 text-purple-400" />
-            <span className="text-sm text-purple-200">
-              Using filters from Hero Stats: Min {inheritedMinGames} games
-            </span>
-          </div>
-          <button
-            onClick={clearInheritedFilters}
-            className="text-sm text-purple-400 hover:text-purple-300 underline"
-          >
-            Reset to Defaults
-          </button>
+      {usingInheritedDateFilter && (
+        <div className="mb-4 p-3 bg-purple-900/30 border border-purple-700/50 rounded-lg flex items-center flex-wrap gap-2 no-screenshot">
+          <Filter size={18} className="mr-2 text-purple-400" />
+          <span className="text-sm text-purple-200">
+            Using date filter from Hero Stats: {inheritedDateRange?.startDate?.toLocaleDateString()} - {inheritedDateRange?.endDate?.toLocaleDateString()}
+          </span>
         </div>
       )}
 
@@ -818,7 +854,37 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
       </div>
 
       {/* Filters Section */}
-      <div className={`${isMobile && !showFilters ? 'hidden' : ''} mb-4 no-screenshot`}>
+      <div className={`${isMobile && !showFilters ? 'hidden' : ''} mb-4 space-y-4 no-screenshot`}>
+        {/* Min Games Filter */}
+        <div className="bg-gray-700 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="font-medium">Minimum Games</span>
+              <p className="text-xs text-gray-400 mt-1">Hero pairs must have at least this many games together</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={decrementMinGames}
+                disabled={minGames <= 1}
+                className="w-10 h-10 flex items-center justify-center bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-xl font-bold"
+              >
+                −
+              </button>
+              <div className="w-12 h-10 flex items-center justify-center bg-gray-800 border border-gray-600 rounded-lg font-medium">
+                {minGames}
+              </div>
+              <button
+                onClick={incrementMinGames}
+                disabled={minGames >= 50}
+                className="w-10 h-10 flex items-center justify-center bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-xl font-bold"
+              >
+                +
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Hero Selection */}
         <div className="bg-gray-700 rounded-lg p-4">
           {/* Hero Selection Header */}
           <div className="flex items-center justify-between mb-3">
