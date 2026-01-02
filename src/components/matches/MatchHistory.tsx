@@ -7,6 +7,7 @@ import { Team, GameLength } from '../../types';
 import { useSound } from '../../context/SoundContext';
 import EnhancedTooltip from '../common/EnhancedTooltip';
 import EditMatchModal from './EditMatchModal';
+import { useDataSource } from '../../hooks/useDataSource';
 
 interface MatchHistoryProps {
   onBack: () => void;
@@ -19,6 +20,7 @@ interface MatchWithDetails extends DBMatch {
 
 const MatchHistory: React.FC<MatchHistoryProps> = ({ onBack }) => {
   const { playSound } = useSound();
+  const { isViewMode, getAllMatches, getMatchPlayers, getPlayer } = useDataSource();
   const [matches, setMatches] = useState<MatchWithDetails[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -27,17 +29,17 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ onBack }) => {
   const [dateSort, setDateSort] = useState<'asc' | 'desc'>('desc');
   const [showFilterMenu, setShowFilterMenu] = useState<boolean>(false);
   const [deletingMatch, setDeletingMatch] = useState<string | null>(null);
-  
+
   // Edit match modal state
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [showEditModal, setShowEditModal] = useState<boolean>(false);
-  
+
   // Load match data function
   const loadMatches = async () => {
     setLoading(true);
     try {
-      // Get all matches from the database
-      const allMatches = await dbService.getAllMatches();
+      // Get all matches from the database (uses shared data in view mode)
+      const allMatches = await getAllMatches();
       
       // Sort by date (newest first by default)
       allMatches.sort((a, b) => {
@@ -49,19 +51,19 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ onBack }) => {
       // Get players for each match
       const matchesWithPlayers = await Promise.all(
         allMatches.map(async (match) => {
-          const matchPlayers = await dbService.getMatchPlayers(match.id);
-          
+          const matchPlayers = await getMatchPlayers(match.id);
+
           // Get player names
           const playersWithNames = await Promise.all(
             matchPlayers.map(async (matchPlayer) => {
-              const player = await dbService.getPlayer(matchPlayer.playerId);
+              const player = await getPlayer(matchPlayer.playerId);
               return {
                 ...matchPlayer,
                 playerName: player?.name || 'Unknown Player'
               };
             })
           );
-          
+
           return {
             ...match,
             players: playersWithNames,
@@ -69,7 +71,7 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ onBack }) => {
           };
         })
       );
-      
+
       setMatches(matchesWithPlayers);
     } catch (error) {
       console.error('Error loading match history:', error);
@@ -77,11 +79,11 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ onBack }) => {
       setLoading(false);
     }
   };
-  
+
   // Load match data on component mount
   useEffect(() => {
     loadMatches();
-  }, []);
+  }, [getAllMatches, getMatchPlayers, getPlayer]);
   
   // Handle back navigation with sound
   const handleBack = () => {
@@ -520,38 +522,40 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ onBack }) => {
                         </div>
                       </div>
                       
-                      {/* Edit and Delete Buttons */}
-                      <div className="mt-4 flex justify-end space-x-2">
-                        <EnhancedTooltip text="Edit this match data">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEditMatch(match.id);
-                            }}
-                            className="px-3 py-1 bg-blue-700 hover:bg-blue-600 rounded-lg flex items-center"
-                          >
-                            <Edit size={16} className="mr-2" />
-                            <span>Edit Match</span>
-                          </button>
-                        </EnhancedTooltip>
-                        
-                        <EnhancedTooltip text="Delete this match and its data">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteMatch(match.id);
-                            }}
-                            className={`px-3 py-1 rounded-lg flex items-center ${
-                              deletingMatch === match.id 
-                                ? 'bg-red-500 hover:bg-red-400'
-                                : 'bg-red-700 hover:bg-red-600'
-                            }`}
-                          >
-                            <Trash2 size={16} className="mr-2" />
-                            <span>{deletingMatch === match.id ? 'Confirm Delete' : 'Delete Match'}</span>
-                          </button>
-                        </EnhancedTooltip>
-                      </div>
+                      {/* Edit and Delete Buttons - hidden in view mode */}
+                      {!isViewMode && (
+                        <div className="mt-4 flex justify-end space-x-2">
+                          <EnhancedTooltip text="Edit this match data">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditMatch(match.id);
+                              }}
+                              className="px-3 py-1 bg-blue-700 hover:bg-blue-600 rounded-lg flex items-center"
+                            >
+                              <Edit size={16} className="mr-2" />
+                              <span>Edit Match</span>
+                            </button>
+                          </EnhancedTooltip>
+
+                          <EnhancedTooltip text="Delete this match and its data">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteMatch(match.id);
+                              }}
+                              className={`px-3 py-1 rounded-lg flex items-center ${
+                                deletingMatch === match.id
+                                  ? 'bg-red-500 hover:bg-red-400'
+                                  : 'bg-red-700 hover:bg-red-600'
+                              }`}
+                            >
+                              <Trash2 size={16} className="mr-2" />
+                              <span>{deletingMatch === match.id ? 'Confirm Delete' : 'Delete Match'}</span>
+                            </button>
+                          </EnhancedTooltip>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

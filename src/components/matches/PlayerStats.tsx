@@ -7,6 +7,7 @@ import { useSound } from '../../context/SoundContext';
 import EnhancedTooltip from '../common/EnhancedTooltip';
 import PlayerRelationshipGraph from './PlayerRelationshipGraph';
 import html2canvas from 'html2canvas';
+import { useDataSource } from '../../hooks/useDataSource';
 
 
 interface PlayerStatsProps {
@@ -284,6 +285,7 @@ const RankDisplay: React.FC<{ rank: number; skill: number }> = ({ rank, skill })
 
 const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, onViewPlayerDetails }) => {
   const { playSound } = useSound();
+  const { isViewMode, getAllPlayers, getAllMatchPlayers } = useDataSource();
   const [players, setPlayers] = useState<PlayerWithStats[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
@@ -307,6 +309,9 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
 
   const contentRef = useRef<HTMLDivElement>(null);
 
+  // In view mode, disable time-based filtering (use all-time stats)
+  const effectiveRecencyMonths = isViewMode ? null : recencyMonths;
+
   // Persist minGamesRelationship to localStorage
   useEffect(() => {
     localStorage.setItem('playerStats_minGames', minGamesRelationship.toString());
@@ -326,16 +331,16 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
     localStorage.setItem('playerStats_recalculateTrueSkill', recalculateTrueSkill.toString());
   }, [recalculateTrueSkill]);
 
-  // Calculate date range based on recencyMonths
+  // Calculate date range based on effectiveRecencyMonths (disabled in view mode)
   const dateRange = useMemo(() => {
-    if (recencyMonths === null) {
+    if (effectiveRecencyMonths === null) {
       return { startDate: undefined, endDate: undefined };
     }
     const endDate = new Date();
     const startDate = new Date();
-    startDate.setMonth(startDate.getMonth() - recencyMonths);
+    startDate.setMonth(startDate.getMonth() - effectiveRecencyMonths);
     return { startDate, endDate };
-  }, [recencyMonths]);
+  }, [effectiveRecencyMonths]);
 
   // Load player data on component mount and when filters change
   useEffect(() => {
@@ -378,21 +383,52 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
           }));
         } else {
           // Use original logic for all-time stats
-          const allPlayers = await dbService.getAllPlayers();
+          // In view mode, use shared data via hook; otherwise use dbService
+          const allPlayers = await getAllPlayers();
+          const allMatchPlayers = await getAllMatchPlayers();
 
           // Get fresh TrueSkill ratings for consistency with SkillOverTime
-          const currentRatings = await dbService.getCurrentTrueSkillRatings();
+          // (not available in view mode, so use stored values)
+          const currentRatings = isViewMode ? {} : await dbService.getCurrentTrueSkillRatings();
 
           playersWithStats = await Promise.all(
             allPlayers.map(async (player) => {
-              const stats = await dbService.getPlayerStats(player.id);
-              const matchesPlayed = stats.matchesPlayed;
+              // In view mode, calculate stats from shared match players data
+              const playerMatches = allMatchPlayers.filter(mp => mp.playerId === player.id || mp.playerId === player.name);
 
-              const kills = matchesPlayed.reduce((sum, match) => sum + (match.kills || 0), 0);
-              const deaths = matchesPlayed.reduce((sum, match) => sum + (match.deaths || 0), 0);
-              const assists = matchesPlayed.reduce((sum, match) => sum + (match.assists || 0), 0);
-              const gold = matchesPlayed.reduce((sum, match) => sum + (match.goldEarned || 0), 0);
-              const minionKills = matchesPlayed.reduce((sum, match) => sum + (match.minionKills || 0), 0);
+              // Calculate hero and role stats from match players
+              const heroCount: Record<number, { heroId: number; heroName: string; count: number }> = {};
+              const roleCount: Record<string, number> = {};
+
+              let kills = 0, deaths = 0, assists = 0, gold = 0, minionKills = 0;
+
+              playerMatches.forEach(mp => {
+                kills += mp.kills || 0;
+                deaths += mp.deaths || 0;
+                assists += mp.assists || 0;
+                gold += mp.goldEarned || 0;
+                minionKills += mp.minionKills || 0;
+
+                // Track hero usage
+                if (!heroCount[mp.heroId]) {
+                  heroCount[mp.heroId] = { heroId: mp.heroId, heroName: mp.heroName, count: 0 };
+                }
+                heroCount[mp.heroId].count++;
+
+                // Track role usage
+                (mp.heroRoles || []).forEach(role => {
+                  roleCount[role] = (roleCount[role] || 0) + 1;
+                });
+              });
+
+              const favoriteHeroes = Object.values(heroCount)
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 3);
+
+              const favoriteRoles = Object.entries(roleCount)
+                .map(([role, count]) => ({ role, count }))
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 3);
 
               const kdRatio = deaths === 0 ? kills : kills / deaths;
               const winRate = player.totalGames > 0 ? (player.wins / player.totalGames) * 100 : 0;
@@ -403,8 +439,8 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
 
               return {
                 ...player,
-                favoriteHeroes: stats.favoriteHeroes,
-                favoriteRoles: stats.favoriteRoles,
+                favoriteHeroes,
+                favoriteRoles,
                 winRate,
                 kills,
                 deaths,
@@ -452,7 +488,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
     };
 
     loadPlayers();
-  }, [dateRange.startDate, dateRange.endDate, recalculateTrueSkill]);
+  }, [dateRange.startDate, dateRange.endDate, recalculateTrueSkill, isViewMode, getAllPlayers, getAllMatchPlayers]);
   
   const handleBack = () => {
     playSound('buttonClick');
@@ -769,7 +805,8 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
             </button>
           </div>
 
-          {/* Filter Button */}
+          {/* Filter Button - hidden in view mode */}
+          {!isViewMode && (
           <div className="relative">
             <button
               onClick={() => {
@@ -903,6 +940,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
       

@@ -6,7 +6,8 @@ import {
   Users,
   RefreshCw,
   X,
-  Cloud
+  Cloud,
+  Share2
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSound } from '../../context/SoundContext';
@@ -14,8 +15,9 @@ import LoginPanel from './LoginPanel';
 import ProfilePanel from './ProfilePanel';
 import FriendsPanel from './FriendsPanel';
 import SyncStatusPanel from './SyncStatusPanel';
+import SharePanel from './SharePanel';
 
-type PanelType = 'login' | 'profile' | 'friends' | 'sync';
+type PanelType = 'login' | 'profile' | 'friends' | 'sync' | 'share';
 
 const CloudSidebar: React.FC = () => {
   const { user, isConfigured, isLoading } = useAuth();
@@ -141,6 +143,17 @@ const CloudSidebar: React.FC = () => {
             >
               <RefreshCw size={18} />
             </button>
+            <button
+              onClick={() => handlePanelChange('share')}
+              className={`flex-1 p-3 flex items-center justify-center transition-colors ${
+                activePanel === 'share'
+                  ? 'bg-gray-800 text-orange-400 border-b-2 border-orange-400'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-800'
+              }`}
+              title="Share"
+            >
+              <Share2 size={18} />
+            </button>
           </div>
         )}
 
@@ -159,6 +172,7 @@ const CloudSidebar: React.FC = () => {
                 <FriendsPanel onPendingCountChange={setPendingRequestCount} />
               )}
               {activePanel === 'sync' && <SyncStatusPanel />}
+              {activePanel === 'share' && <SharePanel />}
             </>
           )}
         </div>

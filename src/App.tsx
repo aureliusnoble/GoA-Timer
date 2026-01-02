@@ -16,7 +16,9 @@ import migrationService from './services/MigrationService';
 import { SoundProvider, useSound } from './context/SoundContext';
 import { ConnectionProvider } from './context/ConnectionContext';
 import { AuthProvider } from './context/AuthContext';
+import { ViewModeProvider, useViewMode } from './context/ViewModeContext';
 import CloudSidebar from './components/cloud/CloudSidebar';
+import ViewModeBanner from './components/common/ViewModeBanner';
 import { PlayerRoundStats } from './components/EndOfRoundAssistant';
 import { 
   Hero, 
@@ -406,6 +408,9 @@ function AppContent() {
   // Access sound functions
   const { playSound, unlockAudio, isAudioReady } = useSound();
 
+  // Access view mode state
+  const { isViewMode, isLoading: isViewModeLoading, error: viewModeError } = useViewMode();
+
   // Game setup state
   const [gameStarted, setGameStarted] = useState<boolean>(false);
   const [strategyTime, setStrategyTime] = useState<number>(90); // 90 seconds default
@@ -469,7 +474,15 @@ function AppContent() {
   const [showMatchStatistics, setShowMatchStatistics] = useState<boolean>(false);
   const [currentMatchView, setCurrentMatchView] = useState<MatchesView>('menu');
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
-  
+
+  // Auto-navigate to match statistics in view mode
+  useEffect(() => {
+    if (isViewMode && !showMatchStatistics) {
+      setShowMatchStatistics(true);
+      setCurrentMatchView('menu');
+    }
+  }, [isViewMode, showMatchStatistics]);
+
   // NEW: Save/resume game state
   const [showResumePrompt, setShowResumePrompt] = useState<boolean>(false);
   const [savedGameData, setSavedGameData] = useState<any>(null);
@@ -1723,8 +1736,11 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
     <div className="App min-h-screen bg-gradient-to-b from-blue-400 to-orange-300 text-white p-6">
       {/* Add AudioInitializer at the top level */}
       <AudioInitializer />
-      
-      <header className="App-header mb-8">
+
+      {/* View Mode Banner - shown when viewing shared data */}
+      <ViewModeBanner />
+
+      <header className={`App-header mb-8 ${isViewMode || isViewModeLoading || viewModeError ? 'mt-12' : ''}`}>
         <h1 className="text-3xl font-bold mb-2">Guards of Atlantis II Timer</h1>
       </header>
 
@@ -1957,8 +1973,8 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
       {/* Sound toggle component */}
       <SoundToggle />
 
-      {/* Cloud Sync Sidebar */}
-      <CloudSidebar />
+      {/* Cloud Sync Sidebar - hidden in view mode */}
+      {!isViewMode && <CloudSidebar />}
 
       {/* Feature Announcements */}
       <FeatureAnnouncement
@@ -1990,7 +2006,9 @@ function App() {
     <SoundProvider>
       <ConnectionProvider>
         <AuthProvider>
-          <AppContent />
+          <ViewModeProvider>
+            <AppContent />
+          </ViewModeProvider>
         </AuthProvider>
       </ConnectionProvider>
     </SoundProvider>
