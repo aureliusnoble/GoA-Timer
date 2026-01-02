@@ -3,11 +3,11 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { ChevronLeft, Filter, ChevronDown, ChevronUp, Globe, Users, Loader2, Network, Info } from 'lucide-react';
 import ForceGraph2D, { ForceGraphMethods } from 'react-force-graph-2d';
 import * as d3 from 'd3-force';
-import dbService from '../../services/DatabaseService';
 import { GlobalStatsService } from '../../services/supabase/GlobalStatsService';
 import { isSupabaseConfigured } from '../../services/supabase/SupabaseClient';
 import { useSound } from '../../context/SoundContext';
 import { heroes as allHeroes } from '../../data/heroes';
+import { useDataSource } from '../../hooks/useDataSource';
 
 interface HeroRelationshipGraphProps {
   onBack: () => void;
@@ -65,6 +65,7 @@ const edgeLabels: Record<EdgeType, string> = {
 
 const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, initialStatsMode = 'local', inheritedDateRange }) => {
   const { playSound } = useSound();
+  const { isViewModeLoading, getHeroRelationshipNetwork } = useDataSource();
   const [loading, setLoading] = useState(false);
   const [selectedHeroes, setSelectedHeroes] = useState<Set<number>>(new Set());
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
@@ -174,6 +175,9 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
 
   // Load available heroes (those with at least one recorded relationship)
   useEffect(() => {
+    // Wait for view mode data to load
+    if (isViewModeLoading) return;
+
     const loadAvailableHeroes = async () => {
       setLoadingHeroes(true);
       try {
@@ -181,8 +185,8 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
         let heroIdsWithData = new Set<number>();
 
         if (statsMode === 'local') {
-          // Get all relationships from local data with date filtering
-          const relationships = await dbService.getHeroRelationshipNetwork(
+          // Get all relationships from local data with date filtering (view mode aware)
+          const relationships = await getHeroRelationshipNetwork(
             allHeroIds,
             1, // Show all relationships
             dateRange.startDate,
@@ -219,7 +223,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
     };
 
     loadAvailableHeroes();
-  }, [statsMode, dateRange.startDate, dateRange.endDate]);
+  }, [statsMode, dateRange.startDate, dateRange.endDate, isViewModeLoading, getHeroRelationshipNetwork]);
 
   // Preload hero images
   useEffect(() => {
@@ -332,6 +336,9 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
 
   // Load graph data when selection changes
   useEffect(() => {
+    // Wait for view mode data to load
+    if (isViewModeLoading) return;
+
     const loadData = async () => {
       if (selectedHeroes.size < 2) {
         setGraphData({ nodes: [], links: [] });
@@ -348,7 +355,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
       if (statsMode === 'local') {
         setLoading(true);
         try {
-          const relationships = await dbService.getHeroRelationshipNetwork(
+          const relationships = await getHeroRelationshipNetwork(
             heroIds,
             1, // Show all relationships
             dateRange.startDate,
@@ -386,7 +393,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
     };
 
     loadData();
-  }, [selectedHeroes, statsMode, dateRange.startDate, dateRange.endDate]);
+  }, [selectedHeroes, statsMode, dateRange.startDate, dateRange.endDate, isViewModeLoading, getHeroRelationshipNetwork]);
 
   // Build graph data from relationships - preserves existing node positions
   const buildGraphData = useCallback((
@@ -730,7 +737,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
     }
   }, [graphData.nodes, dimensions.width, dimensions.height]);
 
-  const isLoading = loading || globalLoading;
+  const isLoading = loading || globalLoading || isViewModeLoading;
 
   return (
     <div className="bg-gray-800 rounded-lg p-4 sm:p-6">

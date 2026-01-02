@@ -1470,5 +1470,6 @@ export function useDataSource() {
     getPlayerDisplayRating,
     getFilteredPlayerStats,
     getHeroWinRateOverTime,
+    getHeroRelationshipNetwork,
   };
 }
