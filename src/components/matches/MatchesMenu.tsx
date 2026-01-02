@@ -1,12 +1,15 @@
 // src/components/matches/MatchesMenu.tsx - Updated to include Hero Info
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Users, History, Shield, Download, Upload, Trash2, Info, AlertTriangle, Shuffle, FileText, Share2, Wifi, File, Book, UserCheck } from 'lucide-react';
+import { ChevronLeft, Users, History, Shield, Download, Upload, Trash2, Info, AlertTriangle, Shuffle, FileText, File, Book, UserCheck } from 'lucide-react';
+// LEGACY: Share2, Wifi - used by P2P feature
 import EnhancedTooltip from '../common/EnhancedTooltip';
-import { ConnectionModal } from '../common/ConnectionModal';
+// LEGACY: P2P Connection Modal - kept for potential future use
+// import { ConnectionModal } from '../common/ConnectionModal';
 import { EditPlayerDataModal } from './EditPlayerDataModal';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
-import { useConnection } from '../../context/ConnectionContext';
+// LEGACY: P2P Connection Context - kept for potential future use
+// import { useConnection } from '../../context/ConnectionContext';
 export type MatchesView = 'menu' | 'player-stats' | 'detailed-player-stats' | 'hero-stats' | 'match-history' | 'match-maker' | 'record-match' | 'hero-info' | 'skill-over-time';
 interface MatchesMenuProps {
   onBack: () => void;
@@ -15,14 +18,15 @@ interface MatchesMenuProps {
 
 const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
   const { playSound } = useSound();
-  const { connectionState } = useConnection();
+  // LEGACY: P2P Connection State
+  // const { connectionState } = useConnection();
   const [hasData, setHasData] = useState<boolean>(false);
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
   
-  // State for P2P connection modal
-  const [showConnectionModal, setShowConnectionModal] = useState<boolean>(false);
+  // LEGACY: State for P2P connection modal
+  // const [showConnectionModal, setShowConnectionModal] = useState<boolean>(false);
   
   // State for import options
   const [showImportOptions, setShowImportOptions] = useState<boolean>(false);
@@ -68,22 +72,18 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
     onBack();
   };
   
-  // Handle opening P2P connection modal
-  const handleOpenConnectionModal = () => {
-    playSound('buttonClick');
-    setShowConnectionModal(true);
-  };
-  
-  // Handle closing P2P connection modal
-  const handleCloseConnectionModal = () => {
-    setShowConnectionModal(false);
-  };
-  
-  // Handle P2P data received - refresh the hasData state
-  const handleDataReceived = () => {
-    console.log("Data received, refreshing match data status");
-    checkForMatchData();
-  };
+  // LEGACY: P2P connection modal handlers - kept for potential future use
+  // const handleOpenConnectionModal = () => {
+  //   playSound('buttonClick');
+  //   setShowConnectionModal(true);
+  // };
+  // const handleCloseConnectionModal = () => {
+  //   setShowConnectionModal(false);
+  // };
+  // const handleDataReceived = () => {
+  //   console.log("Data received, refreshing match data status");
+  //   checkForMatchData();
+  // };
 
   // Handle opening Edit Player Data modal
   const handleOpenEditPlayerModal = () => {
@@ -378,7 +378,7 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
           </EnhancedTooltip>
         </div>
         
-        {/* P2P Sync Call-to-Action */}
+        {/* LEGACY: P2P Sync Call-to-Action - Hidden in favor of cloud sharing
         <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4 mb-6">
           <div className="flex items-start">
             <div className="mr-3 p-2 bg-blue-800 rounded-full flex-shrink-0">
@@ -408,7 +408,8 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
             </div>
           </div>
         </div>
-        
+        */}
+
         {/* Manual Data Sharing Call-to-Action */}
         <div className="bg-green-900/30 border border-green-700 rounded-lg p-4 mb-6">
           <div className="flex items-start">
@@ -589,7 +590,7 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
                 Match data is stored locally on this device using your browser's storage. It is recommended you back up your data locally with Export Data (in case your browser's storage gets cleared).
               </p>
               <p>
-                Use direct data sharing, or manually import and export data to transfer
+                Use the Cloud Sync feature to share your stats publicly, or manually import and export data to transfer
                 match records between devices or merge records from different devices (e.g. with friends).
               </p>
             </div>
@@ -597,12 +598,13 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
         </div>
       </div>
       
-      {/* P2P Connection Modal */}
-      <ConnectionModal 
+      {/* LEGACY: P2P Connection Modal - Hidden in favor of cloud sharing
+      <ConnectionModal
         isOpen={showConnectionModal}
         onClose={handleCloseConnectionModal}
         onDataReceived={handleDataReceived}
       />
+      */}
       
       {/* Edit Player Data Modal */}
       <EditPlayerDataModal
