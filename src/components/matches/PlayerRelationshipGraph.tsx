@@ -9,6 +9,8 @@ import { useDataSource } from '../../hooks/useDataSource';
 
 interface PlayerRelationshipGraphProps {
   onBack: () => void;
+  inheritedMinGames?: number;
+  inheritedDateRange?: { startDate?: Date; endDate?: Date };
 }
 
 // Edge types
@@ -119,7 +121,11 @@ const calculateSkillPercentile = (displayRating: number, allRatings: number[]): 
   return (displayRating - minRating) / (maxRating - minRating);
 };
 
-const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBack }) => {
+const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
+  onBack,
+  inheritedMinGames,
+  inheritedDateRange
+}) => {
   const { playSound } = useSound();
   const { isViewModeLoading, getAllPlayers, getPlayerRelationshipNetwork, getPlayerDisplayRating } = useDataSource();
   const [loading, setLoading] = useState(false);
@@ -132,6 +138,21 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBac
   // Players with recorded relationships (filtered list)
   const [availablePlayers, setAvailablePlayers] = useState<PlayerWithStats[]>([]);
   const [loadingPlayers, setLoadingPlayers] = useState(true);
+
+  // Inherited filter state
+  const [usingInheritedFilters, setUsingInheritedFilters] = useState<boolean>(
+    !!(inheritedMinGames || inheritedDateRange)
+  );
+  const [minGames, setMinGames] = useState<number>(inheritedMinGames ?? 1);
+  const [dateRange, setDateRange] = useState<{ start: string | null; end: string | null }>(() => {
+    if (inheritedDateRange?.startDate && inheritedDateRange?.endDate) {
+      return {
+        start: inheritedDateRange.startDate.toISOString().split('T')[0],
+        end: inheritedDateRange.endDate.toISOString().split('T')[0]
+      };
+    }
+    return { start: null, end: null };
+  });
 
   // Edge type visibility
   const [visibleEdgeTypes, setVisibleEdgeTypes] = useState<Record<EdgeType, boolean>>({
@@ -219,7 +240,9 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBac
         const allPlayerIds = playersWithGames.map(p => p.id);
 
         // Get relationships to filter to only players with data
-        const relationships = await getPlayerRelationshipNetwork(allPlayerIds, 1);
+        const startDate = dateRange.start ? new Date(dateRange.start) : undefined;
+        const endDate = dateRange.end ? new Date(dateRange.end + 'T23:59:59') : undefined;
+        const relationships = await getPlayerRelationshipNetwork(allPlayerIds, minGames, startDate, endDate);
         const playerIdsWithData = new Set<string>();
         relationships.forEach(rel => {
           playerIdsWithData.add(rel.playerId);
@@ -256,7 +279,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBac
     };
 
     loadAvailablePlayers();
-  }, [isViewModeLoading, getAllPlayers, getPlayerRelationshipNetwork, getPlayerDisplayRating]);
+  }, [isViewModeLoading, getAllPlayers, getPlayerRelationshipNetwork, getPlayerDisplayRating, minGames, dateRange]);
 
   // Configure forces after graph ref is available
   useEffect(() => {
@@ -356,7 +379,9 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBac
 
       setLoading(true);
       try {
-        const relationships = await getPlayerRelationshipNetwork(playerIds, 1);
+        const startDate = dateRange.start ? new Date(dateRange.start) : undefined;
+        const endDate = dateRange.end ? new Date(dateRange.end + 'T23:59:59') : undefined;
+        const relationships = await getPlayerRelationshipNetwork(playerIds, minGames, startDate, endDate);
         const data = buildGraphData(playerIds, relationships);
         setGraphData(data);
       } catch (error) {
@@ -367,7 +392,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBac
     };
 
     loadData();
-  }, [selectedPlayers, getPlayerRelationshipNetwork]);
+  }, [selectedPlayers, getPlayerRelationshipNetwork, minGames, dateRange]);
 
   // Build graph data from relationships - preserves existing node positions
   const buildGraphData = useCallback((
@@ -565,6 +590,14 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBac
     setShowFilters(!showFilters);
   };
 
+  // Clear inherited filters and reset to defaults
+  const clearInheritedFilters = () => {
+    playSound('buttonClick');
+    setUsingInheritedFilters(false);
+    setMinGames(1);
+    setDateRange({ start: null, end: null });
+  };
+
   // Custom node rendering with player initials and win rate colors
   const nodeCanvasObject = useCallback((node: GraphNode, ctx: CanvasRenderingContext2D, _globalScale: number) => {
     const size = 40;
@@ -691,6 +724,25 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBac
           Player Relationship Network
         </h2>
       </div>
+
+      {/* Inherited Filters Banner */}
+      {usingInheritedFilters && (
+        <div className="mb-4 p-3 bg-purple-900/30 border border-purple-700/50 rounded-lg flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center">
+            <Filter size={18} className="mr-2 text-purple-400" />
+            <span className="text-sm text-purple-200">
+              Using filters from Player Stats: Min {minGames} games
+              {dateRange.start && dateRange.end && ` | ${dateRange.start} to ${dateRange.end}`}
+            </span>
+          </div>
+          <button
+            onClick={clearInheritedFilters}
+            className="text-sm text-purple-400 hover:text-purple-300 underline"
+          >
+            Reset to Defaults
+          </button>
+        </div>
+      )}
 
       {/* Mobile Filter Toggle */}
       <div className="mb-4 sm:hidden no-screenshot">

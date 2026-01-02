@@ -12,6 +12,7 @@ import { heroes as allHeroes } from '../../data/heroes';
 interface HeroRelationshipGraphProps {
   onBack: () => void;
   initialStatsMode?: 'local' | 'global';
+  inheritedMinGames?: number;
 }
 
 // Edge types
@@ -62,7 +63,7 @@ const edgeLabels: Record<EdgeType, string> = {
   opponent_lost: 'Lost to'
 };
 
-const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, initialStatsMode = 'local' }) => {
+const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, initialStatsMode = 'local', inheritedMinGames }) => {
   const { playSound } = useSound();
   const [loading, setLoading] = useState(false);
   const [selectedHeroes, setSelectedHeroes] = useState<Set<number>>(new Set());
@@ -76,6 +77,10 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
   const [globalLoading, setGlobalLoading] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const cloudAvailable = isSupabaseConfigured();
+
+  // Inherited filter state
+  const [usingInheritedFilters, setUsingInheritedFilters] = useState<boolean>(!!inheritedMinGames);
+  const [minGames, setMinGames] = useState<number>(inheritedMinGames ?? 1);
 
   // Heroes with recorded relationships (filtered list)
   const [availableHeroes, setAvailableHeroes] = useState<typeof allHeroes>([]);
@@ -167,14 +172,14 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
 
         if (statsMode === 'local') {
           // Get all relationships from local data
-          const relationships = await dbService.getHeroRelationshipNetwork(allHeroIds, 1);
+          const relationships = await dbService.getHeroRelationshipNetwork(allHeroIds, minGames);
           relationships.forEach(rel => {
             heroIdsWithData.add(rel.heroId);
             heroIdsWithData.add(rel.relatedHeroId);
           });
         } else {
           // Get from global data
-          const result = await GlobalStatsService.getHeroRelationshipNetwork(allHeroIds, 1);
+          const result = await GlobalStatsService.getHeroRelationshipNetwork(allHeroIds, minGames);
           if (result.success && result.data) {
             result.data.forEach(rel => {
               heroIdsWithData.add(rel.heroId);
@@ -196,7 +201,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
     };
 
     loadAvailableHeroes();
-  }, [statsMode]);
+  }, [statsMode, minGames]);
 
   // Preload hero images
   useEffect(() => {
@@ -325,7 +330,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
       if (statsMode === 'local') {
         setLoading(true);
         try {
-          const relationships = await dbService.getHeroRelationshipNetwork(heroIds, 1);
+          const relationships = await dbService.getHeroRelationshipNetwork(heroIds, minGames);
           const data = buildGraphData(heroIds, relationships);
           setGraphData(data);
         } catch (error) {
@@ -338,7 +343,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
         setGlobalLoading(true);
         setGlobalError(null);
         try {
-          const result = await GlobalStatsService.getHeroRelationshipNetwork(heroIds, 1);
+          const result = await GlobalStatsService.getHeroRelationshipNetwork(heroIds, minGames);
           if (result.success && result.data) {
             const data = buildGraphData(heroIds, result.data);
             setGraphData(data);
@@ -355,7 +360,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
     };
 
     loadData();
-  }, [selectedHeroes, statsMode]);
+  }, [selectedHeroes, statsMode, minGames]);
 
   // Build graph data from relationships - preserves existing node positions
   const buildGraphData = useCallback((
@@ -565,6 +570,12 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
     setShowFilters(!showFilters);
   };
 
+  const clearInheritedFilters = useCallback(() => {
+    playSound('buttonClick');
+    setUsingInheritedFilters(false);
+    setMinGames(1); // Reset to default
+  }, [playSound]);
+
   // Custom node rendering with hero images
   const nodeCanvasObject = useCallback((node: GraphNode, ctx: CanvasRenderingContext2D, _globalScale: number) => {
     const size = 40;
@@ -771,6 +782,24 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
       {statsMode === 'global' && globalError && (
         <div className="mb-4 p-3 bg-red-900/30 border border-red-700/50 rounded-lg no-screenshot">
           <p className="text-sm text-red-200">{globalError}</p>
+        </div>
+      )}
+
+      {/* Inherited Filters Banner */}
+      {usingInheritedFilters && inheritedMinGames && (
+        <div className="mb-4 p-3 bg-purple-900/30 border border-purple-700/50 rounded-lg flex items-center justify-between flex-wrap gap-2 no-screenshot">
+          <div className="flex items-center">
+            <Filter size={18} className="mr-2 text-purple-400" />
+            <span className="text-sm text-purple-200">
+              Using filters from Hero Stats: Min {inheritedMinGames} games
+            </span>
+          </div>
+          <button
+            onClick={clearInheritedFilters}
+            className="text-sm text-purple-400 hover:text-purple-300 underline"
+          >
+            Reset to Defaults
+          </button>
         </div>
       )}
 

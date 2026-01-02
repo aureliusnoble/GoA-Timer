@@ -499,6 +499,8 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
       <HeroWinRateOverTime
         onBack={() => setShowWinRateOverTime(false)}
         initialStatsMode={statsMode}
+        inheritedMinGames={minGamesRelationship}
+        inheritedDateRange={dateRange.startDate ? { startDate: dateRange.startDate, endDate: dateRange.endDate } : undefined}
       />
     );
   }
@@ -509,6 +511,7 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
       <HeroRelationshipGraph
         onBack={() => setShowRelationshipGraph(false)}
         initialStatsMode={statsMode}
+        inheritedMinGames={minGamesRelationship}
       />
     );
   }

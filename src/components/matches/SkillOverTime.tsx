@@ -6,6 +6,7 @@ import {
 } from 'victory';
 import { useSound } from '../../context/SoundContext';
 import { useDataSource } from '../../hooks/useDataSource';
+import { useStatsFilter } from '../../context/StatsFilterContext';
 
 interface SkillOverTimeProps {
   onBack: () => void;
@@ -37,6 +38,7 @@ interface PlayerChartData {
 const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
   const { playSound } = useSound();
   const { isViewModeLoading, getAllPlayers, getHistoricalRatings, getCurrentTrueSkillRatings } = useDataSource();
+  const { playerStatsFilters } = useStatsFilter();
   const [loading, setLoading] = useState(true);
   const [playerHistory, setPlayerHistory] = useState<PlayerRatingHistory[]>([]);
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
@@ -46,11 +48,36 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
   const [isMobile, setIsMobile] = useState(false);
   const [hoveredPlayer, setHoveredPlayer] = useState<string | null>(null);
 
-  // Date range filter state
-  const [dateRange, setDateRange] = useState<{ start: string | null; end: string | null }>(() => ({
-    start: localStorage.getItem('skillOverTime_startDate'),
-    end: localStorage.getItem('skillOverTime_endDate')
-  }));
+  // Track if using inherited filters from PlayerStats
+  const [usingInheritedFilters, setUsingInheritedFilters] = useState<boolean>(false);
+
+  // Date range filter state - initialize from inherited filters or localStorage
+  const [dateRange, setDateRange] = useState<{ start: string | null; end: string | null }>(() => {
+    // Check for inherited filters from PlayerStats context
+    if (playerStatsFilters?.dateRange?.startDate && playerStatsFilters?.dateRange?.endDate) {
+      return {
+        start: playerStatsFilters.dateRange.startDate.toISOString().split('T')[0],
+        end: playerStatsFilters.dateRange.endDate.toISOString().split('T')[0]
+      };
+    }
+    // Fall back to localStorage
+    return {
+      start: localStorage.getItem('skillOverTime_startDate'),
+      end: localStorage.getItem('skillOverTime_endDate')
+    };
+  });
+
+  // Set inherited filter flag on mount
+  useEffect(() => {
+    if (playerStatsFilters?.dateRange?.startDate && playerStatsFilters?.dateRange?.endDate) {
+      setUsingInheritedFilters(true);
+      // Apply inherited filters
+      setDateRange({
+        start: playerStatsFilters.dateRange.startDate.toISOString().split('T')[0],
+        end: playerStatsFilters.dateRange.endDate.toISOString().split('T')[0]
+      });
+    }
+  }, []); // Only run on mount
 
   // Detect mobile viewport
   useEffect(() => {
@@ -269,6 +296,16 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
     setShowFilters(!showFilters);
   };
 
+  // Clear inherited filters and reset to defaults
+  const clearInheritedFilters = () => {
+    playSound('buttonClick');
+    setUsingInheritedFilters(false);
+    setDateRange({ start: null, end: null });
+    // Clear localStorage as well
+    localStorage.removeItem('skillOverTime_startDate');
+    localStorage.removeItem('skillOverTime_endDate');
+  };
+
   // Calculate domain for Y axis
   const yDomain = useMemo((): [number, number] => {
     let minRating = Infinity;
@@ -311,6 +348,24 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
 
         <h2 className="text-xl sm:text-2xl font-bold">Skill Rating Over Time</h2>
       </div>
+
+      {/* Inherited Filters Banner */}
+      {usingInheritedFilters && playerStatsFilters?.recencyMonths && (
+        <div className="mb-4 p-3 bg-purple-900/30 border border-purple-700/50 rounded-lg flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center">
+            <Filter size={18} className="mr-2 text-purple-400" />
+            <span className="text-sm text-purple-200">
+              Using filters from Player Stats: Last {playerStatsFilters.recencyMonths} months
+            </span>
+          </div>
+          <button
+            onClick={clearInheritedFilters}
+            className="text-sm text-purple-400 hover:text-purple-300 underline"
+          >
+            Reset to Defaults
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center items-center h-64">

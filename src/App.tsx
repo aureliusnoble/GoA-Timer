@@ -17,6 +17,7 @@ import { SoundProvider, useSound } from './context/SoundContext';
 import { ConnectionProvider } from './context/ConnectionContext';
 import { AuthProvider } from './context/AuthContext';
 import { ViewModeProvider, useViewMode } from './context/ViewModeContext';
+import { StatsFilterProvider } from './context/StatsFilterContext';
 import CloudSidebar from './components/cloud/CloudSidebar';
 import ViewModeBanner from './components/common/ViewModeBanner';
 import { PlayerRoundStats } from './components/EndOfRoundAssistant';
@@ -1775,7 +1776,7 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
       {/* Main content area */}
       {showMatchStatistics ? (
   // Match Statistics View
-  <>
+  <StatsFilterProvider>
     {currentMatchView === 'menu' && (
       <MatchesMenu 
         onBack={handleBackFromMatchStatistics}
@@ -1868,7 +1869,7 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
         }}
       />
     )}
-  </>
+  </StatsFilterProvider>
 ) : !gameStarted ? (
         <div className="game-setup-container">
           {showDraftModeSelection ? (

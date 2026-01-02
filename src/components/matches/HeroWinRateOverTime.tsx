@@ -10,6 +10,8 @@ import { useSound } from '../../context/SoundContext';
 interface HeroWinRateOverTimeProps {
   onBack: () => void;
   initialStatsMode?: 'local' | 'global';
+  inheritedMinGames?: number;
+  inheritedDateRange?: { startDate?: Date; endDate?: Date };
 }
 
 interface HeroTimeSeries {
@@ -32,7 +34,12 @@ interface HeroWinRateData {
   dateRange: { firstMatch: string; lastMatch: string } | null;
 }
 
-const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({ onBack, initialStatsMode = 'local' }) => {
+const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
+  onBack,
+  initialStatsMode = 'local',
+  inheritedMinGames,
+  inheritedDateRange
+}) => {
   const { playSound } = useSound();
   const [loading, setLoading] = useState(true);
   const [heroData, setHeroData] = useState<HeroWinRateData | null>(null);
@@ -48,17 +55,31 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({ onBack, initi
   const [globalError, setGlobalError] = useState<string | null>(null);
   const cloudAvailable = isSupabaseConfigured();
 
-  // Min games filter
+  // Inherited filter state
+  const [usingInheritedFilters, setUsingInheritedFilters] = useState<boolean>(
+    !!(inheritedMinGames || inheritedDateRange)
+  );
+
+  // Min games filter - initialize from inherited or localStorage
   const [minGames, setMinGames] = useState<number>(() => {
+    if (inheritedMinGames !== undefined) return inheritedMinGames;
     const saved = localStorage.getItem('heroWinRateOverTime_minGames');
     return saved ? parseInt(saved, 10) : 3;
   });
 
-  // Date range filter
-  const [dateRange, setDateRange] = useState<{ start: string | null; end: string | null }>(() => ({
-    start: localStorage.getItem('heroWinRateOverTime_startDate'),
-    end: localStorage.getItem('heroWinRateOverTime_endDate')
-  }));
+  // Date range filter - initialize from inherited or localStorage
+  const [dateRange, setDateRange] = useState<{ start: string | null; end: string | null }>(() => {
+    if (inheritedDateRange?.startDate && inheritedDateRange?.endDate) {
+      return {
+        start: inheritedDateRange.startDate.toISOString().split('T')[0],
+        end: inheritedDateRange.endDate.toISOString().split('T')[0]
+      };
+    }
+    return {
+      start: localStorage.getItem('heroWinRateOverTime_startDate'),
+      end: localStorage.getItem('heroWinRateOverTime_endDate')
+    };
+  });
 
   // Detect mobile viewport
   useEffect(() => {
@@ -216,6 +237,16 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({ onBack, initi
     setShowFilters(!showFilters);
   };
 
+  const clearInheritedFilters = useCallback(() => {
+    playSound('buttonClick');
+    setUsingInheritedFilters(false);
+    // Reset to default values
+    setMinGames(3);
+    setDateRange({ start: null, end: null });
+    localStorage.removeItem('heroWinRateOverTime_startDate');
+    localStorage.removeItem('heroWinRateOverTime_endDate');
+  }, [playSound]);
+
   // Get chart data for a hero - converts data points to x/y format
   const getHeroChartData = useCallback((heroId: number) => {
     const hero = heroData?.heroes.find(h => h.heroId === heroId);
@@ -357,6 +388,28 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({ onBack, initi
       {statsMode === 'global' && globalError && (
         <div className="mb-4 p-3 bg-red-900/30 border border-red-700/50 rounded-lg no-screenshot">
           <p className="text-sm text-red-200">{globalError}</p>
+        </div>
+      )}
+
+      {/* Inherited Filters Banner */}
+      {usingInheritedFilters && (inheritedMinGames || inheritedDateRange) && (
+        <div className="mb-4 p-3 bg-purple-900/30 border border-purple-700/50 rounded-lg flex items-center justify-between flex-wrap gap-2 no-screenshot">
+          <div className="flex items-center">
+            <Filter size={18} className="mr-2 text-purple-400" />
+            <span className="text-sm text-purple-200">
+              Using filters from Hero Stats
+              {inheritedMinGames && `: Min ${inheritedMinGames} games`}
+              {inheritedDateRange?.startDate && inheritedDateRange?.endDate &&
+                `, ${inheritedDateRange.startDate.toLocaleDateString()} - ${inheritedDateRange.endDate.toLocaleDateString()}`
+              }
+            </span>
+          </div>
+          <button
+            onClick={clearInheritedFilters}
+            className="text-sm text-purple-400 hover:text-purple-300 underline"
+          >
+            Reset to Defaults
+          </button>
         </div>
       )}
 

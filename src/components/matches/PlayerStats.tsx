@@ -7,6 +7,7 @@ import { useSound } from '../../context/SoundContext';
 import EnhancedTooltip from '../common/EnhancedTooltip';
 import PlayerRelationshipGraph from './PlayerRelationshipGraph';
 import { useDataSource } from '../../hooks/useDataSource';
+import { useStatsFilter } from '../../context/StatsFilterContext';
 
 
 interface PlayerStatsProps {
@@ -285,6 +286,7 @@ const RankDisplay: React.FC<{ rank: number; skill: number }> = ({ rank, skill })
 const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, onViewPlayerDetails }) => {
   const { playSound } = useSound();
   const { isViewMode, isViewModeLoading, getAllPlayers, getAllMatchPlayers, getFilteredPlayerStats } = useDataSource();
+  const { setPlayerStatsFilters } = useStatsFilter();
   const [players, setPlayers] = useState<PlayerWithStats[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
@@ -334,6 +336,16 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
     startDate.setMonth(startDate.getMonth() - recencyMonths);
     return { startDate, endDate };
   }, [recencyMonths]);
+
+  // Sync filters to context for child components (SkillOverTime)
+  useEffect(() => {
+    setPlayerStatsFilters({
+      recencyMonths,
+      minGamesRelationship,
+      recalculateTrueSkill,
+      dateRange
+    });
+  }, [recencyMonths, minGamesRelationship, recalculateTrueSkill, dateRange, setPlayerStatsFilters]);
 
   // Load player data on component mount and when filters change
   useEffect(() => {
@@ -610,7 +622,13 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
 
   // Show relationship graph if toggled
   if (showRelationshipGraph) {
-    return <PlayerRelationshipGraph onBack={() => setShowRelationshipGraph(false)} />;
+    return (
+      <PlayerRelationshipGraph
+        onBack={() => setShowRelationshipGraph(false)}
+        inheritedMinGames={minGamesRelationship}
+        inheritedDateRange={dateRange.startDate ? { startDate: dateRange.startDate, endDate: dateRange.endDate } : undefined}
+      />
+    );
   }
 
   return (
