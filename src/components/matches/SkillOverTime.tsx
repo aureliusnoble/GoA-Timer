@@ -1,12 +1,11 @@
 // src/components/matches/SkillOverTime.tsx
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { ChevronLeft, TrendingUp, Users, Info, Camera, Filter, ChevronDown, ChevronUp, Calendar } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { ChevronLeft, TrendingUp, Users, Info, Filter, ChevronDown, ChevronUp, Calendar } from 'lucide-react';
 import {
   VictoryChart, VictoryLine, VictoryScatter, VictoryAxis
 } from 'victory';
-import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
-import html2canvas from 'html2canvas';
+import { useDataSource } from '../../hooks/useDataSource';
 
 interface SkillOverTimeProps {
   onBack: () => void;
@@ -37,12 +36,12 @@ interface PlayerChartData {
 
 const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
   const { playSound } = useSound();
+  const { isViewModeLoading, getAllPlayers, getHistoricalRatings, getCurrentTrueSkillRatings } = useDataSource();
   const [loading, setLoading] = useState(true);
   const [playerHistory, setPlayerHistory] = useState<PlayerRatingHistory[]>([]);
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [selectedPlayers, setSelectedPlayers] = useState<Set<string>>(new Set());
   const [colorMap, setColorMap] = useState<{ [key: string]: string }>({});
-  const [takingScreenshot, setTakingScreenshot] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [hoveredPlayer, setHoveredPlayer] = useState<string | null>(null);
@@ -52,8 +51,6 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
     start: localStorage.getItem('skillOverTime_startDate'),
     end: localStorage.getItem('skillOverTime_endDate')
   }));
-
-  const contentRef = useRef<HTMLDivElement>(null);
 
   // Detect mobile viewport
   useEffect(() => {
@@ -66,14 +63,17 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Load data on mount
+  // Load data on mount (view mode aware)
   useEffect(() => {
+    // Wait for view mode loading to complete
+    if (isViewModeLoading) return;
+
     const loadRatingHistory = async () => {
       setLoading(true);
       try {
-        const history = await dbService.getHistoricalRatings();
-        const currentRatings = await dbService.getCurrentTrueSkillRatings();
-        const players = await dbService.getAllPlayers();
+        const history = await getHistoricalRatings();
+        const currentRatings = await getCurrentTrueSkillRatings();
+        const players = await getAllPlayers();
         const nameMap = new Map(players.map(p => [p.id, p.name]));
 
         // Get all unique player IDs
@@ -147,7 +147,7 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
     };
 
     loadRatingHistory();
-  }, []);
+  }, [isViewModeLoading, getHistoricalRatings, getCurrentTrueSkillRatings, getAllPlayers]);
 
   // Filter chart data by date range
   const filteredChartData = useMemo(() => {
@@ -264,52 +264,6 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
     return result;
   };
 
-  const handleTakeScreenshot = async () => {
-    if (!contentRef.current) return;
-
-    playSound('buttonClick');
-    setTakingScreenshot(true);
-
-    try {
-      const titleElement = document.createElement('div');
-      titleElement.className = 'screenshot-title text-center mb-6 bg-gray-800 p-6';
-      titleElement.innerHTML = `
-        <h1 class="text-3xl font-bold">Guards of Atlantis II - Skill Rating Over Time</h1>
-        <p class="text-gray-400 mt-2">Generated on ${new Date().toLocaleDateString()}</p>
-      `;
-
-      contentRef.current.insertBefore(titleElement, contentRef.current.firstChild);
-
-      const noScreenshotElements = contentRef.current.querySelectorAll('.no-screenshot');
-      noScreenshotElements.forEach(el => {
-        (el as HTMLElement).style.display = 'none';
-      });
-
-      const canvas = await html2canvas(contentRef.current, {
-        backgroundColor: '#1F2937',
-        scale: 2,
-        logging: false,
-        windowWidth: 1400,
-        windowHeight: contentRef.current.scrollHeight
-      });
-
-      const dataUrl = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.download = `skill-over-time-${new Date().toISOString().slice(0, 10)}.png`;
-      link.href = dataUrl;
-      link.click();
-
-      contentRef.current.removeChild(titleElement);
-      noScreenshotElements.forEach(el => {
-        (el as HTMLElement).style.display = '';
-      });
-    } catch (error) {
-      console.error('Error creating screenshot:', error);
-    } finally {
-      setTakingScreenshot(false);
-    }
-  };
-
   const toggleFilters = () => {
     playSound('buttonClick');
     setShowFilters(!showFilters);
@@ -344,7 +298,7 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
   }, [filteredChartData]);
 
   return (
-    <div ref={contentRef} className="bg-gray-800 rounded-lg p-4 sm:p-6">
+    <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 no-screenshot">
         <button
@@ -356,15 +310,6 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
         </button>
 
         <h2 className="text-xl sm:text-2xl font-bold">Skill Rating Over Time</h2>
-
-        <button
-          onClick={handleTakeScreenshot}
-          disabled={takingScreenshot}
-          className="flex items-center px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg w-full sm:w-auto justify-center"
-        >
-          <Camera size={18} className="mr-2" />
-          <span>{takingScreenshot ? 'Capturing...' : 'Screenshot'}</span>
-        </button>
       </div>
 
       {loading ? (

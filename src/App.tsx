@@ -1724,11 +1724,17 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
   
   // NEW: Handle match statistics navigation
   const handleMatchStatisticsNavigate = (view: MatchesView) => {
+    // In view mode, only allow access to viewing stats, not editing/creating
+    if (isViewMode && (view === 'record-match' || view === 'match-maker')) {
+      return;
+    }
     setCurrentMatchView(view);
   };
   
   // NEW: Handle back from match statistics
   const handleBackFromMatchStatistics = () => {
+    // Prevent navigation back to setup in view mode
+    if (isViewMode) return;
     setShowMatchStatistics(false);
   };
 

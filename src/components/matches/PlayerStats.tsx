@@ -284,7 +284,7 @@ const RankDisplay: React.FC<{ rank: number; skill: number }> = ({ rank, skill })
 
 const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, onViewPlayerDetails }) => {
   const { playSound } = useSound();
-  const { isViewMode, isViewModeLoading, getAllPlayers, getAllMatchPlayers } = useDataSource();
+  const { isViewMode, isViewModeLoading, getAllPlayers, getAllMatchPlayers, getFilteredPlayerStats } = useDataSource();
   const [players, setPlayers] = useState<PlayerWithStats[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
@@ -305,10 +305,6 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
   });
   const [showRelationshipGraph, setShowRelationshipGraph] = useState<boolean>(false);
 
-
-  // In view mode, disable time-based filtering (use all-time stats)
-  const effectiveRecencyMonths = isViewMode ? null : recencyMonths;
-
   // Persist minGamesRelationship to localStorage
   useEffect(() => {
     localStorage.setItem('playerStats_minGames', minGamesRelationship.toString());
@@ -328,16 +324,16 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
     localStorage.setItem('playerStats_recalculateTrueSkill', recalculateTrueSkill.toString());
   }, [recalculateTrueSkill]);
 
-  // Calculate date range based on effectiveRecencyMonths (disabled in view mode)
+  // Calculate date range based on recencyMonths
   const dateRange = useMemo(() => {
-    if (effectiveRecencyMonths === null) {
+    if (recencyMonths === null) {
       return { startDate: undefined, endDate: undefined };
     }
     const endDate = new Date();
     const startDate = new Date();
-    startDate.setMonth(startDate.getMonth() - effectiveRecencyMonths);
+    startDate.setMonth(startDate.getMonth() - recencyMonths);
     return { startDate, endDate };
-  }, [effectiveRecencyMonths]);
+  }, [recencyMonths]);
 
   // Load player data on component mount and when filters change
   useEffect(() => {
@@ -347,8 +343,8 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
         let playersWithStats: PlayerWithStats[];
 
         if (dateRange.startDate && dateRange.endDate) {
-          // Use filtered player stats when date range is active
-          const filteredResult = await dbService.getFilteredPlayerStats(
+          // Use filtered player stats when date range is active (view mode aware)
+          const filteredResult = await getFilteredPlayerStats(
             dateRange.startDate,
             dateRange.endDate,
             recalculateTrueSkill
@@ -487,7 +483,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
     // Don't load data while view mode is still being determined
     if (isViewModeLoading) return;
     loadPlayers();
-  }, [isViewModeLoading, dateRange.startDate, dateRange.endDate, recalculateTrueSkill, isViewMode, getAllPlayers, getAllMatchPlayers]);
+  }, [isViewModeLoading, dateRange.startDate, dateRange.endDate, recalculateTrueSkill, isViewMode, getAllPlayers, getAllMatchPlayers, getFilteredPlayerStats]);
   
   const handleBack = () => {
     playSound('buttonClick');
@@ -726,8 +722,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
             </button>
           </div>
 
-          {/* Filter Button - hidden in view mode */}
-          {!isViewMode && (
+          {/* Filter Button */}
           <div className="relative">
             <button
               onClick={() => {
@@ -861,10 +856,9 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
               </div>
             )}
           </div>
-          )}
         </div>
       </div>
-      
+
       {searchTerm !== '' && (
         <div className="mb-4 p-4 bg-gray-700 rounded-lg screenshot-info">
           <h3 className="font-semibold mb-2">Search Results:</h3>

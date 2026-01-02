@@ -91,6 +91,7 @@ This app has not been officially approved by Wolff Designa (the designers of Gua
 
 # Future
 
-Add Firebase database. This would allow automatic synchronisation across your devices (with login) of IndexedDB database (which we retain), and the option to add friends (and to automatically or manually synchroise with them).
-
-Option to opt into global database. Which would track Global Player ELOs; as well as hero stats, win rates by hero. Best partners for each hero. Best counters for each hero. Which heroes each hero is most effective against. 
+Add a Builds page where users can suggest builds? Users can rate these
+Add an openings section where users can suggest openings. Users can rate these.
+Add all the card data.
+Record Build during game: items and upgrades.

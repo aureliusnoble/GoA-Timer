@@ -1,11 +1,11 @@
 // src/components/matches/PlayerRelationshipGraph.tsx
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { ChevronLeft, Camera, Filter, ChevronDown, ChevronUp, Loader2, Network, Info } from 'lucide-react';
+import { ChevronLeft, Filter, ChevronDown, ChevronUp, Loader2, Network, Info } from 'lucide-react';
 import ForceGraph2D, { ForceGraphMethods } from 'react-force-graph-2d';
 import * as d3 from 'd3-force';
-import dbService, { DBPlayer } from '../../services/DatabaseService';
+import { DBPlayer } from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
-import html2canvas from 'html2canvas';
+import { useDataSource } from '../../hooks/useDataSource';
 
 interface PlayerRelationshipGraphProps {
   onBack: () => void;
@@ -121,10 +121,10 @@ const calculateSkillPercentile = (displayRating: number, allRatings: number[]): 
 
 const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBack }) => {
   const { playSound } = useSound();
+  const { isViewModeLoading, getAllPlayers, getPlayerRelationshipNetwork, getPlayerDisplayRating } = useDataSource();
   const [loading, setLoading] = useState(false);
   const [selectedPlayers, setSelectedPlayers] = useState<Set<string>>(new Set());
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
-  const [takingScreenshot, setTakingScreenshot] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
@@ -143,7 +143,6 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBac
 
   // Graph ref
   const graphRef = useRef<ForceGraphMethods<GraphNode, GraphLink> | undefined>();
-  const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const hasInitializedRef = useRef(false); // Track if initial zoomToFit has been done
@@ -206,18 +205,21 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBac
 
   // Load available players (those with at least one recorded relationship)
   useEffect(() => {
+    // Wait for view mode loading to complete
+    if (isViewModeLoading) return;
+
     const loadAvailablePlayers = async () => {
       setLoadingPlayers(true);
       try {
         // Get all players with games
-        const allPlayers = await dbService.getAllPlayers();
+        const allPlayers = await getAllPlayers();
         const playersWithGames = allPlayers.filter(p => p.totalGames > 0);
 
         // Get all player IDs
         const allPlayerIds = playersWithGames.map(p => p.id);
 
         // Get relationships to filter to only players with data
-        const relationships = await dbService.getPlayerRelationshipNetwork(allPlayerIds, 1);
+        const relationships = await getPlayerRelationshipNetwork(allPlayerIds, 1);
         const playerIdsWithData = new Set<string>();
         relationships.forEach(rel => {
           playerIdsWithData.add(rel.playerId);
@@ -230,7 +232,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBac
           .map(p => ({
             ...p,
             winRate: p.totalGames > 0 ? (p.wins / p.totalGames) * 100 : 0,
-            displayRating: dbService.getDisplayRating(p),
+            displayRating: getPlayerDisplayRating(p),
             skillPercentile: 0 // Will be calculated below
           }));
 
@@ -254,7 +256,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBac
     };
 
     loadAvailablePlayers();
-  }, []);
+  }, [isViewModeLoading, getAllPlayers, getPlayerRelationshipNetwork, getPlayerDisplayRating]);
 
   // Configure forces after graph ref is available
   useEffect(() => {
@@ -354,7 +356,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBac
 
       setLoading(true);
       try {
-        const relationships = await dbService.getPlayerRelationshipNetwork(playerIds, 1);
+        const relationships = await getPlayerRelationshipNetwork(playerIds, 1);
         const data = buildGraphData(playerIds, relationships);
         setGraphData(data);
       } catch (error) {
@@ -365,7 +367,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBac
     };
 
     loadData();
-  }, [selectedPlayers]);
+  }, [selectedPlayers, getPlayerRelationshipNetwork]);
 
   // Build graph data from relationships - preserves existing node positions
   const buildGraphData = useCallback((
@@ -558,52 +560,6 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBac
     }));
   }, [playSound]);
 
-  const handleTakeScreenshot = async () => {
-    if (!contentRef.current) return;
-
-    playSound('buttonClick');
-    setTakingScreenshot(true);
-
-    try {
-      const titleElement = document.createElement('div');
-      titleElement.className = 'screenshot-title text-center mb-6 bg-gray-800 p-6';
-      titleElement.innerHTML = `
-        <h1 class="text-3xl font-bold">Guards of Atlantis II - Player Relationship Network</h1>
-        <p class="text-gray-400 mt-2">Generated on ${new Date().toLocaleDateString()}</p>
-      `;
-
-      contentRef.current.insertBefore(titleElement, contentRef.current.firstChild);
-
-      const noScreenshotElements = contentRef.current.querySelectorAll('.no-screenshot');
-      noScreenshotElements.forEach(el => {
-        (el as HTMLElement).style.display = 'none';
-      });
-
-      const canvas = await html2canvas(contentRef.current, {
-        backgroundColor: '#1F2937',
-        scale: 2,
-        logging: false,
-        windowWidth: 1400,
-        windowHeight: contentRef.current.scrollHeight
-      });
-
-      const dataUrl = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.download = `player-relationship-network-${new Date().toISOString().slice(0, 10)}.png`;
-      link.href = dataUrl;
-      link.click();
-
-      contentRef.current.removeChild(titleElement);
-      noScreenshotElements.forEach(el => {
-        (el as HTMLElement).style.display = '';
-      });
-    } catch (error) {
-      console.error('Error creating screenshot:', error);
-    } finally {
-      setTakingScreenshot(false);
-    }
-  };
-
   const toggleFilters = () => {
     playSound('buttonClick');
     setShowFilters(!showFilters);
@@ -719,7 +675,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBac
   }, [graphData.nodes, dimensions.width, dimensions.height]);
 
   return (
-    <div ref={contentRef} className="bg-gray-800 rounded-lg p-4 sm:p-6">
+    <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4 no-screenshot">
         <button
@@ -734,15 +690,6 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({ onBac
           <Network size={24} className="mr-2" />
           Player Relationship Network
         </h2>
-
-        <button
-          onClick={handleTakeScreenshot}
-          disabled={takingScreenshot}
-          className="flex items-center px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg w-full sm:w-auto justify-center"
-        >
-          <Camera size={18} className="mr-2" />
-          <span>{takingScreenshot ? 'Capturing...' : 'Screenshot'}</span>
-        </button>
       </div>
 
       {/* Mobile Filter Toggle */}

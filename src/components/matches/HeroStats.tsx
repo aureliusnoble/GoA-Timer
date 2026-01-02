@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { ChevronLeft, Search, Info, Filter, ChevronDown, ChevronUp, Shield, Calendar, Globe, Users, RefreshCw, Loader2, AlertCircle, TrendingUp, Network } from 'lucide-react';
 import { Hero } from '../../types';
-import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
 import EnhancedTooltip from '../common/EnhancedTooltip';
 import HeroInfoDisplay from '../common/HeroInfoDisplay';
@@ -11,6 +10,7 @@ import { GlobalStatsService, GlobalHeroStats } from '../../services/supabase/Glo
 import { isSupabaseConfigured } from '../../services/supabase/SupabaseClient';
 import HeroWinRateOverTime from './HeroWinRateOverTime';
 import HeroRelationshipGraph from './HeroRelationshipGraph';
+import { useDataSource } from '../../hooks/useDataSource';
 
 // Hero statistics interface
 interface HeroStats {
@@ -53,6 +53,7 @@ interface HeroStatsProps {
 
 const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
   const { playSound } = useSound();
+  const { isViewMode, isViewModeLoading, getHeroStats } = useDataSource();
   const [heroStats, setHeroStats] = useState<HeroStats[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -82,6 +83,13 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
 
   // Relationship graph view state
   const [showRelationshipGraph, setShowRelationshipGraph] = useState(false);
+
+  // Force local stats mode in view mode (viewers only see shared user's data)
+  useEffect(() => {
+    if (isViewMode && statsMode !== 'local') {
+      setStatsMode('local');
+    }
+  }, [isViewMode, statsMode]);
 
   // Check if cloud features are available
   const cloudAvailable = isSupabaseConfigured();
@@ -133,12 +141,15 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
 
   // Load local hero stats on component mount and when filters change
   useEffect(() => {
+    // Wait for view mode loading to complete
+    if (isViewModeLoading) return;
+
     if (statsMode === 'local') {
       const loadHeroStats = async () => {
         setLoading(true);
         try {
-          // Get hero statistics from database with date filtering
-          const stats = await dbService.getHeroStats(
+          // Get hero statistics using the view-mode aware data source
+          const stats = await getHeroStats(
             minGamesRelationship,
             dateRange.startDate,
             dateRange.endDate
@@ -152,7 +163,7 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
       };
       loadHeroStats();
     }
-  }, [statsMode, minGamesRelationship, dateRange.startDate, dateRange.endDate]);
+  }, [statsMode, minGamesRelationship, dateRange.startDate, dateRange.endDate, isViewModeLoading, getHeroStats]);
 
   // Load global stats when switching to global mode (initial load)
   useEffect(() => {
@@ -547,8 +558,8 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
         </div>
       </div>
 
-      {/* Stats Mode Toggle - Play Group vs Global */}
-      {cloudAvailable && (
+      {/* Stats Mode Toggle - Play Group vs Global (hidden in view mode - only show shared user's data) */}
+      {cloudAvailable && !isViewMode && (
         <div className="mb-4 no-screenshot">
           <div className="flex items-center justify-center gap-2">
             <button
