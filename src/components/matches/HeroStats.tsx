@@ -84,13 +84,6 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
   // Relationship graph view state
   const [showRelationshipGraph, setShowRelationshipGraph] = useState(false);
 
-  // Force local stats mode in view mode (viewers only see shared user's data)
-  useEffect(() => {
-    if (isViewMode && statsMode !== 'local') {
-      setStatsMode('local');
-    }
-  }, [isViewMode, statsMode]);
-
   // Check if cloud features are available
   const cloudAvailable = isSupabaseConfigured();
 
@@ -561,8 +554,8 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
         </div>
       </div>
 
-      {/* Stats Mode Toggle - Play Group vs Global (hidden in view mode - only show shared user's data) */}
-      {cloudAvailable && !isViewMode && (
+      {/* Stats Mode Toggle - Play Group vs Global */}
+      {cloudAvailable && (
         <div className="mb-4 no-screenshot">
           <div className="flex items-center justify-center gap-2">
             <button
@@ -596,7 +589,7 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
           </div>
           <p className="text-center text-xs text-gray-500 mt-2">
             {statsMode === 'local'
-              ? 'Showing statistics from your match history'
+              ? (isViewMode ? 'Showing statistics from the shared match history' : 'Showing statistics from your match history')
               : 'Showing aggregated statistics from all players'}
           </p>
         </div>
