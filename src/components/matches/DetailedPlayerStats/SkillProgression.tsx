@@ -10,6 +10,8 @@ import EnhancedTooltip from '../../common/EnhancedTooltip';
 interface SkillProgressionProps {
   playerId: string;
   playerName: string;
+  dateRange?: { startDate?: Date; endDate?: Date };
+  recalculateTrueSkill?: boolean;
 }
 
 interface ChartDataPoint {
@@ -101,14 +103,19 @@ const getVolatilityDescription = (volatility: number) => {
   return { level: 'Very High', description: 'Highly unpredictable' };
 };
 
-const SkillProgression: React.FC<SkillProgressionProps> = ({ playerId, playerName }) => {
+const SkillProgression: React.FC<SkillProgressionProps> = ({
+  playerId,
+  playerName,
+  dateRange,
+  recalculateTrueSkill = false
+}) => {
   const [loading, setLoading] = useState(true);
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [allCurrentRatings, setAllCurrentRatings] = useState<number[]>([]);
   const [isMobile, setIsMobile] = useState(false);
 
   // Use view-mode-aware data source
-  const { isViewModeLoading, getHistoricalRatings, getCurrentTrueSkillRatings } = useDataSource();
+  const { isViewModeLoading, getHistoricalRatings, getHistoricalRatingsForPeriod, getCurrentTrueSkillRatings } = useDataSource();
 
   // Detect mobile viewport
   useEffect(() => {
@@ -126,10 +133,20 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({ playerId, playerNam
 
       try {
         setLoading(true);
-        const [historicalRatings, currentRatings] = await Promise.all([
-          getHistoricalRatings(),
-          getCurrentTrueSkillRatings()
-        ]);
+
+        // Use period-filtered ratings if dateRange or recalculateTrueSkill is set
+        let historicalRatings;
+        if (dateRange?.startDate || dateRange?.endDate || recalculateTrueSkill) {
+          historicalRatings = await getHistoricalRatingsForPeriod(
+            dateRange?.startDate,
+            dateRange?.endDate,
+            recalculateTrueSkill
+          );
+        } else {
+          historicalRatings = await getHistoricalRatings();
+        }
+
+        const currentRatings = await getCurrentTrueSkillRatings();
 
         setAllCurrentRatings(Object.values(currentRatings));
 
@@ -208,7 +225,7 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({ playerId, playerNam
     if (!isViewModeLoading) {
       loadChartData();
     }
-  }, [playerId, isViewModeLoading, getHistoricalRatings, getCurrentTrueSkillRatings]);
+  }, [playerId, isViewModeLoading, getHistoricalRatings, getHistoricalRatingsForPeriod, getCurrentTrueSkillRatings, dateRange?.startDate, dateRange?.endDate, recalculateTrueSkill]);
 
   // Calculate progression statistics
   const progressionStats = useMemo(() => {

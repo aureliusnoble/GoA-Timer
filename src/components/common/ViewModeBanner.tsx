@@ -1,9 +1,10 @@
 import React from 'react';
 import { Eye, X, Loader2, AlertCircle } from 'lucide-react';
 import { useViewMode } from '../../context/ViewModeContext';
+import ExpiredLinkPage from './ExpiredLinkPage';
 
 const ViewModeBanner: React.FC = () => {
-  const { isViewMode, ownerDisplayName, isLoading, error, exitViewMode } = useViewMode();
+  const { isViewMode, ownerDisplayName, isLoading, error, isExpired, expiredAt, exitViewMode } = useViewMode();
 
   // Show loading state
   if (isLoading) {
@@ -17,8 +18,13 @@ const ViewModeBanner: React.FC = () => {
     );
   }
 
-  // Show error state
-  if (error) {
+  // Show expired link page (full screen)
+  if (isExpired) {
+    return <ExpiredLinkPage expiredAt={expiredAt} onGoHome={exitViewMode} />;
+  }
+
+  // Show error state (for non-expired errors)
+  if (error && !isExpired) {
     return (
       <div className="fixed top-0 left-0 right-0 z-50 bg-red-600 text-white py-2 px-4 shadow-lg">
         <div className="max-w-7xl mx-auto flex items-center justify-between">

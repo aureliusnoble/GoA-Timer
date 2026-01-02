@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { ShareService, SharedData } from '../services/supabase/ShareService';
+import { ShareService, SharedData, ShareLinkErrorCode } from '../services/supabase/ShareService';
 import { isSupabaseConfigured } from '../services/supabase/SupabaseClient';
 
 interface ViewModeContextType {
@@ -9,6 +9,9 @@ interface ViewModeContextType {
   ownerDisplayName: string | null;
   isLoading: boolean;
   error: string | null;
+  errorCode: ShareLinkErrorCode | null;
+  isExpired: boolean;
+  expiredAt: Date | null;
   exitViewMode: () => void;
 }
 
@@ -19,6 +22,9 @@ const ViewModeContext = createContext<ViewModeContextType>({
   ownerDisplayName: null,
   isLoading: false,
   error: null,
+  errorCode: null,
+  isExpired: false,
+  expiredAt: null,
   exitViewMode: () => {},
 });
 
@@ -31,6 +37,9 @@ export const ViewModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [ownerDisplayName, setOwnerDisplayName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<ShareLinkErrorCode | null>(null);
+  const [isExpired, setIsExpired] = useState(false);
+  const [expiredAt, setExpiredAt] = useState<Date | null>(null);
 
   // Check for share token in URL on mount
   useEffect(() => {
@@ -49,6 +58,9 @@ export const ViewModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setShareToken(token);
     setIsLoading(true);
     setError(null);
+    setErrorCode(null);
+    setIsExpired(false);
+    setExpiredAt(null);
 
     const loadSharedData = async () => {
       const result = await ShareService.getSharedData(token);
@@ -59,6 +71,13 @@ export const ViewModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setIsViewMode(true);
       } else {
         setError(result.error || 'Failed to load shared data');
+        setErrorCode(result.errorCode || null);
+
+        // Handle expired link state
+        if (result.errorCode === 'LINK_EXPIRED') {
+          setIsExpired(true);
+          setExpiredAt(result.expiredAt || null);
+        }
       }
 
       setIsLoading(false);
@@ -77,6 +96,9 @@ export const ViewModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setSharedData(null);
     setOwnerDisplayName(null);
     setError(null);
+    setErrorCode(null);
+    setIsExpired(false);
+    setExpiredAt(null);
 
     // Reload page to get fresh local data
     window.location.reload();
@@ -91,6 +113,9 @@ export const ViewModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         ownerDisplayName,
         isLoading,
         error,
+        errorCode,
+        isExpired,
+        expiredAt,
         exitViewMode,
       }}
     >

@@ -2,10 +2,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ChevronLeft, TrendingUp, Info, Filter, ChevronDown, ChevronUp, Globe, Users, Loader2 } from 'lucide-react';
 import { VictoryChart, VictoryLine, VictoryScatter, VictoryAxis } from 'victory';
-import dbService from '../../services/DatabaseService';
 import { GlobalStatsService } from '../../services/supabase/GlobalStatsService';
 import { isSupabaseConfigured } from '../../services/supabase/SupabaseClient';
 import { useSound } from '../../context/SoundContext';
+import { useDataSource } from '../../hooks/useDataSource';
 
 interface HeroWinRateOverTimeProps {
   onBack: () => void;
@@ -41,6 +41,7 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
   inheritedDateRange
 }) => {
   const { playSound } = useSound();
+  const { isViewModeLoading, getHeroWinRateOverTime } = useDataSource();
   const [loading, setLoading] = useState(true);
   const [heroData, setHeroData] = useState<HeroWinRateData | null>(null);
   const [selectedHeroes, setSelectedHeroes] = useState<Set<number>>(new Set());
@@ -91,6 +92,9 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
 
   // Load data
   useEffect(() => {
+    // Wait for view mode data to load if applicable
+    if (isViewModeLoading) return;
+
     const loadData = async () => {
       if (statsMode === 'local') {
         setLoading(true);
@@ -98,7 +102,7 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
           const startDate = dateRange.start ? new Date(dateRange.start) : undefined;
           const endDate = dateRange.end ? new Date(dateRange.end + 'T23:59:59') : undefined;
 
-          const data = await dbService.getHeroWinRateOverTime(undefined, minGames, startDate, endDate);
+          const data = await getHeroWinRateOverTime(undefined, minGames, startDate, endDate);
           setHeroData(data);
 
           // Auto-select top 5 heroes if none selected
@@ -164,7 +168,7 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
     };
 
     loadData();
-  }, [statsMode, minGames, dateRange.start, dateRange.end]);
+  }, [statsMode, minGames, dateRange.start, dateRange.end, isViewModeLoading, getHeroWinRateOverTime]);
 
   const handleBack = useCallback(() => {
     playSound('buttonClick');
@@ -286,7 +290,7 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
     return [minDate - dayMs, maxDate + dayMs];
   }, [heroData, selectedHeroes]);
 
-  const isLoading = loading || globalLoading;
+  const isLoading = loading || globalLoading || isViewModeLoading;
 
   return (
     <div className="bg-gray-800 rounded-lg p-4 sm:p-6">

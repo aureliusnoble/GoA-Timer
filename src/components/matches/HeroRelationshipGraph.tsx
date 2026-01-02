@@ -12,7 +12,6 @@ import { heroes as allHeroes } from '../../data/heroes';
 interface HeroRelationshipGraphProps {
   onBack: () => void;
   initialStatsMode?: 'local' | 'global';
-  inheritedMinGames?: number;
   inheritedDateRange?: { startDate?: Date; endDate?: Date };
 }
 
@@ -64,7 +63,7 @@ const edgeLabels: Record<EdgeType, string> = {
   opponent_lost: 'Lost to'
 };
 
-const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, initialStatsMode = 'local', inheritedMinGames, inheritedDateRange }) => {
+const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, initialStatsMode = 'local', inheritedDateRange }) => {
   const { playSound } = useSound();
   const [loading, setLoading] = useState(false);
   const [selectedHeroes, setSelectedHeroes] = useState<Set<number>>(new Set());
@@ -78,13 +77,6 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
   const [globalLoading, setGlobalLoading] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const cloudAvailable = isSupabaseConfigured();
-
-  // Min games filter with local state and ± UI
-  const [minGames, setMinGames] = useState<number>(() => {
-    if (inheritedMinGames !== undefined) return inheritedMinGames;
-    const saved = localStorage.getItem('heroRelationshipGraph_minGames');
-    return saved ? parseInt(saved, 10) : 1;
-  });
 
   // Date range from inherited filters only
   const dateRange = useMemo(() => {
@@ -192,7 +184,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
           // Get all relationships from local data with date filtering
           const relationships = await dbService.getHeroRelationshipNetwork(
             allHeroIds,
-            minGames,
+            1, // Show all relationships
             dateRange.startDate,
             dateRange.endDate
           );
@@ -204,7 +196,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
           // Get from global data (no date filtering available for global stats)
           const result = await GlobalStatsService.getHeroRelationshipNetwork(
             allHeroIds,
-            minGames
+            1 // Show all relationships
           );
           if (result.success && result.data) {
             result.data.forEach(rel => {
@@ -227,7 +219,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
     };
 
     loadAvailableHeroes();
-  }, [statsMode, minGames, dateRange.startDate, dateRange.endDate]);
+  }, [statsMode, dateRange.startDate, dateRange.endDate]);
 
   // Preload hero images
   useEffect(() => {
@@ -358,7 +350,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
         try {
           const relationships = await dbService.getHeroRelationshipNetwork(
             heroIds,
-            minGames,
+            1, // Show all relationships
             dateRange.startDate,
             dateRange.endDate
           );
@@ -376,7 +368,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
         try {
           const result = await GlobalStatsService.getHeroRelationshipNetwork(
             heroIds,
-            minGames
+            1 // Show all relationships
           );
           if (result.success && result.data) {
             const data = buildGraphData(heroIds, result.data);
@@ -394,7 +386,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
     };
 
     loadData();
-  }, [selectedHeroes, statsMode, minGames, dateRange.startDate, dateRange.endDate]);
+  }, [selectedHeroes, statsMode, dateRange.startDate, dateRange.endDate]);
 
   // Build graph data from relationships - preserves existing node positions
   const buildGraphData = useCallback((
@@ -603,22 +595,6 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
     playSound('buttonClick');
     setShowFilters(!showFilters);
   };
-
-  // Persist minGames to localStorage
-  useEffect(() => {
-    localStorage.setItem('heroRelationshipGraph_minGames', minGames.toString());
-  }, [minGames]);
-
-  // Min games handlers
-  const incrementMinGames = useCallback(() => {
-    playSound('buttonClick');
-    setMinGames(prev => Math.min(50, prev + 1));
-  }, [playSound]);
-
-  const decrementMinGames = useCallback(() => {
-    playSound('buttonClick');
-    setMinGames(prev => Math.max(1, prev - 1));
-  }, [playSound]);
 
   // Custom node rendering with hero images
   const nodeCanvasObject = useCallback((node: GraphNode, ctx: CanvasRenderingContext2D, _globalScale: number) => {
@@ -855,35 +831,6 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
 
       {/* Filters Section */}
       <div className={`${isMobile && !showFilters ? 'hidden' : ''} mb-4 space-y-4 no-screenshot`}>
-        {/* Min Games Filter */}
-        <div className="bg-gray-700 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="font-medium">Minimum Games</span>
-              <p className="text-xs text-gray-400 mt-1">Hero pairs must have at least this many games together</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={decrementMinGames}
-                disabled={minGames <= 1}
-                className="w-10 h-10 flex items-center justify-center bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-xl font-bold"
-              >
-                −
-              </button>
-              <div className="w-12 h-10 flex items-center justify-center bg-gray-800 border border-gray-600 rounded-lg font-medium">
-                {minGames}
-              </div>
-              <button
-                onClick={incrementMinGames}
-                disabled={minGames >= 50}
-                className="w-10 h-10 flex items-center justify-center bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-xl font-bold"
-              >
-                +
-              </button>
-            </div>
-          </div>
-        </div>
-
         {/* Hero Selection */}
         <div className="bg-gray-700 rounded-lg p-4">
           {/* Hero Selection Header */}

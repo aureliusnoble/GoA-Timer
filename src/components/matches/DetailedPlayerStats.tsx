@@ -69,6 +69,10 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
     return saved ? parseInt(saved, 10) : null; // null = All Time
   })();
 
+  // Read recalculateTrueSkill from context or localStorage
+  const recalculateTrueSkill = playerStatsFilters?.recalculateTrueSkill ??
+    (localStorage.getItem('playerStats_recalculateTrueSkill') === 'true');
+
   // Calculate date range based on recencyMonths
   const dateRange = useMemo(() => {
     if (recencyMonths === null) {
@@ -427,7 +431,7 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
         averageGold={combatStats.averageGold}
         averageMinionKills={combatStats.averageMinionKills}
         averageLevel={combatStats.averageLevel}
-        totalGames={player.totalGames}
+        totalGames={playerDetails.matches.length}
         hasCombatStats={combatStats.hasCombatStats}
       />
 
@@ -435,6 +439,8 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
       <SkillProgression
         playerId={player.id}
         playerName={player.name}
+        dateRange={dateRange.startDate ? { startDate: dateRange.startDate, endDate: dateRange.endDate ?? undefined } : undefined}
+        recalculateTrueSkill={recalculateTrueSkill}
       />
 
       {/* Relationship Statistics (Nemesis/BFF) */}
@@ -449,7 +455,7 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
         allHeroesPlayed={stats.allHeroesPlayed}
         favoriteRoles={stats.favoriteRoles}
         allRolesPlayed={stats.allRolesPlayed}
-        totalGames={player.totalGames}
+        totalGames={playerDetails.matches.length}
         matches={playerDetails.matches}
       />
 

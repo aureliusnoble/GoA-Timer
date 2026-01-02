@@ -625,7 +625,6 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
     return (
       <PlayerRelationshipGraph
         onBack={() => setShowRelationshipGraph(false)}
-        inheritedMinGames={minGamesRelationship}
         inheritedDateRange={dateRange.startDate ? { startDate: dateRange.startDate, endDate: dateRange.endDate } : undefined}
         recalculateTrueSkill={recalculateTrueSkill}
       />

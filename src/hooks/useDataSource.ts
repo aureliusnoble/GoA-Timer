@@ -919,6 +919,304 @@ export function useDataSource() {
     lastPlayed: Date | null;
   }
 
+  // Get hero win rate over time (view mode aware)
+  const getHeroWinRateOverTime = useCallback(async (
+    heroIds?: number[],
+    minGames: number = 3,
+    startDate?: Date,
+    endDate?: Date
+  ): Promise<{
+    heroes: Array<{
+      heroId: number;
+      heroName: string;
+      icon: string;
+      totalGames: number;
+      currentWinRate: number;
+      dataPoints: Array<{
+        date: string;
+        gamesPlayedTotal: number;
+        winsTotal: number;
+        winRate: number;
+        gamesPlayedOnDate: number;
+      }>;
+    }>;
+    dateRange: { firstMatch: string; lastMatch: string } | null;
+  }> => {
+    // In view mode, calculate from local data
+    if (isViewMode && localMatches && localMatchPlayers) {
+      let allMatches = [...localMatches];
+
+      // Sort matches by date chronologically
+      allMatches.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      // Filter matches by date range if specified
+      if (startDate || endDate) {
+        allMatches = allMatches.filter(match => {
+          const matchDate = new Date(match.date);
+          if (startDate && matchDate < startDate) return false;
+          if (endDate && matchDate > endDate) return false;
+          return true;
+        });
+      }
+
+      if (allMatches.length === 0) {
+        return { heroes: [], dateRange: null };
+      }
+
+      // Create a set of valid match IDs for filtering
+      const validMatchIds = new Set(allMatches.map(m => m.id));
+      const allMatchPlayers = localMatchPlayers.filter(mp => validMatchIds.has(mp.matchId));
+      const matchesMap = new Map(allMatches.map(m => [m.id, m]));
+
+      // Build hero tracking data structure
+      const heroTracking = new Map<number, {
+        heroName: string;
+        icon: string;
+        matches: Array<{ date: string; won: boolean }>;
+      }>();
+
+      // Process each match player to build match history per hero
+      for (const matchPlayer of allMatchPlayers) {
+        const heroId = matchPlayer.heroId;
+        if (heroId === undefined || heroId === null) continue;
+
+        // Skip if filtering by heroIds and this hero is not in the list
+        if (heroIds && heroIds.length > 0 && !heroIds.includes(heroId)) continue;
+
+        const match = matchesMap.get(matchPlayer.matchId);
+        if (!match) continue;
+
+        if (!heroTracking.has(heroId)) {
+          heroTracking.set(heroId, {
+            heroName: matchPlayer.heroName,
+            icon: `heroes/${matchPlayer.heroName.toLowerCase().replace(/\s+/g, '')}.png`,
+            matches: []
+          });
+        }
+
+        const heroData = heroTracking.get(heroId)!;
+        const matchDate = new Date(match.date).toISOString().split('T')[0]; // YYYY-MM-DD
+        const won = matchPlayer.team === match.winningTeam;
+
+        heroData.matches.push({ date: matchDate, won });
+      }
+
+      // Convert to time series data with cumulative stats
+      const heroResults: Array<{
+        heroId: number;
+        heroName: string;
+        icon: string;
+        totalGames: number;
+        currentWinRate: number;
+        dataPoints: Array<{
+          date: string;
+          gamesPlayedTotal: number;
+          winsTotal: number;
+          winRate: number;
+          gamesPlayedOnDate: number;
+        }>;
+      }> = [];
+
+      for (const [heroId, heroData] of heroTracking.entries()) {
+        // Sort matches by date
+        heroData.matches.sort((a, b) => a.date.localeCompare(b.date));
+
+        // Group by date and calculate cumulative stats
+        const dateGroups = new Map<string, { wins: number; games: number }>();
+        for (const match of heroData.matches) {
+          if (!dateGroups.has(match.date)) {
+            dateGroups.set(match.date, { wins: 0, games: 0 });
+          }
+          const group = dateGroups.get(match.date)!;
+          group.games++;
+          if (match.won) group.wins++;
+        }
+
+        // Build cumulative data points
+        const dataPoints: Array<{
+          date: string;
+          gamesPlayedTotal: number;
+          winsTotal: number;
+          winRate: number;
+          gamesPlayedOnDate: number;
+        }> = [];
+
+        let cumulativeGames = 0;
+        let cumulativeWins = 0;
+
+        // Sort dates and process chronologically
+        const sortedDates = Array.from(dateGroups.keys()).sort();
+        for (const date of sortedDates) {
+          const dayStats = dateGroups.get(date)!;
+          cumulativeGames += dayStats.games;
+          cumulativeWins += dayStats.wins;
+
+          dataPoints.push({
+            date,
+            gamesPlayedTotal: cumulativeGames,
+            winsTotal: cumulativeWins,
+            winRate: cumulativeGames > 0 ? (cumulativeWins / cumulativeGames) * 100 : 0,
+            gamesPlayedOnDate: dayStats.games
+          });
+        }
+
+        // Filter data points to only show from minGames onwards
+        const filteredDataPoints = dataPoints.filter(dp => dp.gamesPlayedTotal >= minGames);
+
+        // Only include heroes that have data points meeting the threshold
+        if (filteredDataPoints.length > 0) {
+          heroResults.push({
+            heroId,
+            heroName: heroData.heroName,
+            icon: heroData.icon,
+            totalGames: cumulativeGames,
+            currentWinRate: cumulativeGames > 0 ? (cumulativeWins / cumulativeGames) * 100 : 0,
+            dataPoints: filteredDataPoints
+          });
+        }
+      }
+
+      // Sort heroes by total games descending
+      heroResults.sort((a, b) => b.totalGames - a.totalGames);
+
+      // Enrich with icon data from heroes.ts
+      for (const heroResult of heroResults) {
+        const heroData = allHeroesData.find(h => h.name === heroResult.heroName);
+        if (heroData) {
+          heroResult.icon = heroData.icon;
+        }
+      }
+
+      // Calculate overall date range
+      const allDates = heroResults.flatMap(h => h.dataPoints.map(dp => dp.date));
+      const dateRange = allDates.length > 0
+        ? {
+            firstMatch: allDates.reduce((min, d) => d < min ? d : min),
+            lastMatch: allDates.reduce((max, d) => d > max ? d : max)
+          }
+        : null;
+
+      return { heroes: heroResults, dateRange };
+    }
+
+    // Not in view mode - use database service
+    return dbService.getHeroWinRateOverTime(heroIds, minGames, startDate, endDate);
+  }, [isViewMode, localMatches, localMatchPlayers]);
+
+  // Get hero relationship network (view mode aware)
+  const getHeroRelationshipNetwork = useCallback(async (
+    heroIds: number[],
+    minGames: number = 1,
+    startDate?: Date,
+    endDate?: Date
+  ): Promise<{
+    heroId: number;
+    relatedHeroId: number;
+    teammateWins: number;
+    teammateLosses: number;
+    opponentWins: number;
+    opponentLosses: number;
+  }[]> => {
+    // In view mode, calculate from local data
+    if (isViewMode && localMatches && localMatchPlayers) {
+      let allMatches = [...localMatches];
+
+      // Filter matches by date range if specified
+      if (startDate || endDate) {
+        allMatches = allMatches.filter(match => {
+          const matchDate = new Date(match.date);
+          if (startDate && matchDate < startDate) return false;
+          if (endDate && matchDate > endDate) return false;
+          return true;
+        });
+      }
+
+      if (allMatches.length === 0) {
+        return [];
+      }
+
+      // Create a set of valid match IDs for filtering
+      const validMatchIds = new Set(allMatches.map(m => m.id));
+      const allMatchPlayers = localMatchPlayers.filter(mp => validMatchIds.has(mp.matchId));
+
+      // Create a set of selected hero IDs for filtering
+      const selectedHeroIds = new Set(heroIds);
+
+      // Track relationships: key is "heroId-relatedHeroId"
+      const relationshipMap = new Map<string, {
+        heroId: number;
+        relatedHeroId: number;
+        teammateWins: number;
+        teammateLosses: number;
+        opponentWins: number;
+        opponentLosses: number;
+      }>();
+
+      // Process each match
+      for (const match of allMatches) {
+        const matchHeroes = allMatchPlayers.filter(mp => mp.matchId === match.id);
+
+        // For each hero in the match
+        for (const hero1 of matchHeroes) {
+          if (hero1.heroId === undefined || hero1.heroId === null) continue;
+          if (!selectedHeroIds.has(hero1.heroId)) continue;
+
+          const hero1Won = hero1.team === match.winningTeam;
+
+          // Compare with every other hero in the match
+          for (const hero2 of matchHeroes) {
+            if (hero2.heroId === undefined || hero2.heroId === null) continue;
+            if (hero1.heroId === hero2.heroId) continue;
+            if (!selectedHeroIds.has(hero2.heroId)) continue;
+
+            const key = `${hero1.heroId}-${hero2.heroId}`;
+
+            if (!relationshipMap.has(key)) {
+              relationshipMap.set(key, {
+                heroId: hero1.heroId,
+                relatedHeroId: hero2.heroId,
+                teammateWins: 0,
+                teammateLosses: 0,
+                opponentWins: 0,
+                opponentLosses: 0
+              });
+            }
+
+            const rel = relationshipMap.get(key)!;
+            const sameTeam = hero1.team === hero2.team;
+
+            if (sameTeam) {
+              // Teammates
+              if (hero1Won) {
+                rel.teammateWins++;
+              } else {
+                rel.teammateLosses++;
+              }
+            } else {
+              // Opponents
+              if (hero1Won) {
+                rel.opponentWins++;  // hero1 beat hero2
+              } else {
+                rel.opponentLosses++; // hero1 lost to hero2
+              }
+            }
+          }
+        }
+      }
+
+      // Filter by minGames and convert to array
+      const relationships = Array.from(relationshipMap.values()).filter(rel => {
+        const totalGames = rel.teammateWins + rel.teammateLosses + rel.opponentWins + rel.opponentLosses;
+        return totalGames >= minGames;
+      });
+
+      return relationships;
+    }
+
+    // Not in view mode - use database service
+    return dbService.getHeroRelationshipNetwork(heroIds, minGames, startDate, endDate);
+  }, [isViewMode, localMatches, localMatchPlayers]);
+
   // Get filtered player stats (view mode aware)
   const getFilteredPlayerStats = useCallback(async (
     startDate?: Date,
@@ -1171,5 +1469,6 @@ export function useDataSource() {
     getCurrentTrueSkillRatings,
     getPlayerDisplayRating,
     getFilteredPlayerStats,
+    getHeroWinRateOverTime,
   };
 }

@@ -7,6 +7,33 @@ export interface ShareLink {
   createdAt: Date;
   viewCount: number;
   lastViewedAt: Date | null;
+  // Enhanced fields for multiple links
+  label: string | null;
+  expiresAt: Date | null;
+  isAnonymized: boolean;
+}
+
+export interface CreateShareLinkOptions {
+  label?: string;
+  expiresAt?: Date;
+  isAnonymized?: boolean;
+}
+
+export interface UpdateShareLinkOptions {
+  label?: string | null;
+  expiresAt?: Date | null;
+  isAnonymized?: boolean;
+  isActive?: boolean;
+}
+
+export type ShareLinkErrorCode = 'LINK_NOT_FOUND' | 'LINK_EXPIRED';
+
+export interface GetSharedDataResult {
+  success: boolean;
+  data?: SharedData;
+  error?: string;
+  errorCode?: ShareLinkErrorCode;
+  expiredAt?: Date;
 }
 
 export interface CloudPlayer {
@@ -63,6 +90,8 @@ export interface SharedData {
   players: CloudPlayer[];
   matches: CloudMatch[];
   matchPlayers: CloudMatchPlayer[];
+  isAnonymized: boolean;
+  playerNameMapping?: Record<string, string>; // Maps local_id to anonymized name
 }
 
 class ShareServiceClass {
@@ -77,53 +106,60 @@ class ShareServiceClass {
   }
 
   /**
-   * Get the current user's share link (if it exists)
+   * Map database row to ShareLink interface
    */
-  async getMyShareLink(): Promise<ShareLink | null> {
+  private mapDbRowToShareLink(row: Record<string, unknown>): ShareLink {
+    return {
+      id: row.id as string,
+      shareToken: row.share_token as string,
+      isActive: row.is_active as boolean,
+      createdAt: new Date(row.created_at as string),
+      viewCount: row.view_count as number,
+      lastViewedAt: row.last_viewed_at ? new Date(row.last_viewed_at as string) : null,
+      label: row.label as string | null,
+      expiresAt: row.expires_at ? new Date(row.expires_at as string) : null,
+      isAnonymized: row.is_anonymized as boolean ?? false,
+    };
+  }
+
+  /**
+   * Get all share links for the current user (up to 3)
+   */
+  async getMyShareLinks(): Promise<ShareLink[]> {
     if (!isSupabaseConfigured() || !supabase) {
-      return null;
+      return [];
     }
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        return null;
-      }
+      if (!user) return [];
 
       const { data, error } = await supabase
         .from('share_links')
         .select('*')
         .eq('owner_id', user.id)
-        .single();
+        .order('created_at', { ascending: true });
 
       if (error) {
-        if (error.code === 'PGRST116') {
-          // No rows found - this is expected if no link exists yet
-          return null;
-        }
-        console.error('[ShareService] Get share link error:', error);
-        return null;
+        console.error('[ShareService] Get share links error:', error);
+        return [];
       }
 
-      return {
-        id: data.id,
-        shareToken: data.share_token,
-        isActive: data.is_active,
-        createdAt: new Date(data.created_at),
-        viewCount: data.view_count,
-        lastViewedAt: data.last_viewed_at ? new Date(data.last_viewed_at) : null,
-      };
+      return (data || []).map(row => this.mapDbRowToShareLink(row));
     } catch (error) {
-      console.error('[ShareService] Get share link error:', error);
-      return null;
+      console.error('[ShareService] Get share links error:', error);
+      return [];
     }
   }
 
   /**
-   * Enable sharing for the current user
-   * Creates a new share link if one doesn't exist, or activates the existing one
+   * Create a new share link (up to 3 allowed)
    */
-  async enableSharing(): Promise<{ success: boolean; shareLink?: ShareLink; error?: string }> {
+  async createShareLink(options: CreateShareLinkOptions = {}): Promise<{
+    success: boolean;
+    shareLink?: ShareLink;
+    error?: string;
+  }> {
     if (!isSupabaseConfigured() || !supabase) {
       return { success: false, error: 'Cloud features are not configured' };
     }
@@ -134,27 +170,12 @@ class ShareServiceClass {
         return { success: false, error: 'Not authenticated' };
       }
 
-      // Check if link already exists
-      const existingLink = await this.getMyShareLink();
-
-      if (existingLink) {
-        // Activate existing link
-        const { error } = await supabase
-          .from('share_links')
-          .update({ is_active: true })
-          .eq('id', existingLink.id);
-
-        if (error) {
-          return { success: false, error: error.message };
-        }
-
-        return {
-          success: true,
-          shareLink: { ...existingLink, isActive: true },
-        };
+      // Check current link count
+      const existingLinks = await this.getMyShareLinks();
+      if (existingLinks.length >= 3) {
+        return { success: false, error: 'Maximum of 3 share links allowed' };
       }
 
-      // Create new share link
       const token = this.generateToken();
       const { data, error } = await supabase
         .from('share_links')
@@ -162,6 +183,9 @@ class ShareServiceClass {
           owner_id: user.id,
           share_token: token,
           is_active: true,
+          label: options.label || null,
+          expires_at: options.expiresAt?.toISOString() || null,
+          is_anonymized: options.isAnonymized || false,
         })
         .select()
         .single();
@@ -172,26 +196,93 @@ class ShareServiceClass {
 
       return {
         success: true,
-        shareLink: {
-          id: data.id,
-          shareToken: data.share_token,
-          isActive: data.is_active,
-          createdAt: new Date(data.created_at),
-          viewCount: data.view_count,
-          lastViewedAt: null,
-        },
+        shareLink: this.mapDbRowToShareLink(data),
       };
     } catch (error) {
-      console.error('[ShareService] Enable sharing error:', error);
+      console.error('[ShareService] Create share link error:', error);
       return { success: false, error: 'An unexpected error occurred' };
     }
   }
 
   /**
-   * Disable sharing for the current user
-   * Does not delete the link, just deactivates it (preserves view count, etc.)
+   * Update an existing share link
    */
-  async disableSharing(): Promise<{ success: boolean; error?: string }> {
+  async updateShareLink(
+    linkId: string,
+    options: UpdateShareLinkOptions
+  ): Promise<{ success: boolean; shareLink?: ShareLink; error?: string }> {
+    if (!isSupabaseConfigured() || !supabase) {
+      return { success: false, error: 'Cloud features are not configured' };
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        return { success: false, error: 'Not authenticated' };
+      }
+
+      const updateData: Record<string, unknown> = {};
+      if (options.label !== undefined) updateData.label = options.label;
+      if (options.expiresAt !== undefined) {
+        updateData.expires_at = options.expiresAt?.toISOString() || null;
+      }
+      if (options.isAnonymized !== undefined) {
+        updateData.is_anonymized = options.isAnonymized;
+      }
+      if (options.isActive !== undefined) {
+        updateData.is_active = options.isActive;
+      }
+
+      const { data, error } = await supabase
+        .from('share_links')
+        .update(updateData)
+        .eq('id', linkId)
+        .eq('owner_id', user.id)
+        .select()
+        .single();
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      return {
+        success: true,
+        shareLink: this.mapDbRowToShareLink(data),
+      };
+    } catch (error) {
+      console.error('[ShareService] Update share link error:', error);
+      return { success: false, error: 'An unexpected error occurred' };
+    }
+  }
+
+  /**
+   * Expire a share link immediately (permanent)
+   */
+  async expireShareLink(linkId: string): Promise<{ success: boolean; error?: string }> {
+    if (!isSupabaseConfigured() || !supabase) {
+      return { success: false, error: 'Cloud features are not configured' };
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('expire_share_link', {
+        p_link_id: linkId,
+      });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      return { success: data === true };
+    } catch (error) {
+      console.error('[ShareService] Expire share link error:', error);
+      return { success: false, error: 'An unexpected error occurred' };
+    }
+  }
+
+  /**
+   * Delete a share link permanently
+   */
+  async deleteShareLink(linkId: string): Promise<{ success: boolean; error?: string }> {
     if (!isSupabaseConfigured() || !supabase) {
       return { success: false, error: 'Cloud features are not configured' };
     }
@@ -204,7 +295,8 @@ class ShareServiceClass {
 
       const { error } = await supabase
         .from('share_links')
-        .update({ is_active: false })
+        .delete()
+        .eq('id', linkId)
         .eq('owner_id', user.id);
 
       if (error) {
@@ -213,16 +305,16 @@ class ShareServiceClass {
 
       return { success: true };
     } catch (error) {
-      console.error('[ShareService] Disable sharing error:', error);
+      console.error('[ShareService] Delete share link error:', error);
       return { success: false, error: 'An unexpected error occurred' };
     }
   }
 
   /**
-   * Fetch shared data for a given share token
+   * Fetch shared data for a given share token with enhanced error handling
    * This can be called by anonymous users
    */
-  async getSharedData(token: string): Promise<{ success: boolean; data?: SharedData; error?: string }> {
+  async getSharedData(token: string): Promise<GetSharedDataResult> {
     if (!isSupabaseConfigured() || !supabase) {
       return { success: false, error: 'Cloud features are not configured' };
     }
@@ -239,7 +331,12 @@ class ShareServiceClass {
 
       // Check if the function returned an error
       if (data && data.error) {
-        return { success: false, error: data.error };
+        return {
+          success: false,
+          error: data.error,
+          errorCode: data.error_code as ShareLinkErrorCode,
+          expiredAt: data.expired_at ? new Date(data.expired_at) : undefined,
+        };
       }
 
       return {
@@ -250,6 +347,8 @@ class ShareServiceClass {
           players: data.players || [],
           matches: data.matches || [],
           matchPlayers: data.match_players || [],
+          isAnonymized: data.is_anonymized || false,
+          playerNameMapping: data.player_name_mapping || undefined,
         },
       };
     } catch (error) {
@@ -281,6 +380,44 @@ class ShareServiceClass {
     const url = new URL(window.location.href);
     url.searchParams.delete('share');
     window.history.replaceState({}, '', url.toString());
+  }
+
+  // ============================================
+  // DEPRECATED: Keep for backwards compatibility
+  // ============================================
+
+  /**
+   * @deprecated Use getMyShareLinks() instead
+   * Get the current user's first share link (if it exists)
+   */
+  async getMyShareLink(): Promise<ShareLink | null> {
+    const links = await this.getMyShareLinks();
+    return links.length > 0 ? links[0] : null;
+  }
+
+  /**
+   * @deprecated Use createShareLink() instead
+   * Enable sharing for the current user
+   */
+  async enableSharing(): Promise<{ success: boolean; shareLink?: ShareLink; error?: string }> {
+    const existingLinks = await this.getMyShareLinks();
+    if (existingLinks.length > 0) {
+      // Activate the first existing link
+      return this.updateShareLink(existingLinks[0].id, { isActive: true });
+    }
+    return this.createShareLink();
+  }
+
+  /**
+   * @deprecated Use updateShareLink() or expireShareLink() instead
+   * Disable sharing for the current user (deactivates all links)
+   */
+  async disableSharing(): Promise<{ success: boolean; error?: string }> {
+    const links = await this.getMyShareLinks();
+    for (const link of links) {
+      await this.updateShareLink(link.id, { isActive: false });
+    }
+    return { success: true };
   }
 }
 

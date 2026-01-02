@@ -1,90 +1,134 @@
 import React, { useState, useEffect } from 'react';
-import { Share2, Copy, Check, Loader2, Eye, Link, AlertCircle } from 'lucide-react';
-import { ShareService, ShareLink } from '../../services/supabase/ShareService';
+import {
+  Share2,
+  Plus,
+  Loader2,
+  AlertCircle,
+  X,
+  UserX,
+  Calendar,
+  Info,
+} from 'lucide-react';
+import {
+  ShareService,
+  ShareLink,
+  CreateShareLinkOptions,
+} from '../../services/supabase/ShareService';
 import { useSound } from '../../context/SoundContext';
+import ShareLinkCard from './ShareLinkCard';
+
+type ExpirationPreset = 'never' | '1day' | '7days' | '30days' | 'custom';
 
 const SharePanel: React.FC = () => {
   const { playSound } = useSound();
 
-  const [shareLink, setShareLink] = useState<ShareLink | null>(null);
+  const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isToggling, setIsToggling] = useState(false);
-  const [isCopied, setIsCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load existing share link on mount
+  // Create modal state
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newLinkLabel, setNewLinkLabel] = useState('');
+  const [expirationPreset, setExpirationPreset] = useState<ExpirationPreset>('never');
+  const [customExpirationDate, setCustomExpirationDate] = useState('');
+  const [isAnonymized, setIsAnonymized] = useState(false);
+
+  // Load existing share links on mount
   useEffect(() => {
-    const loadShareLink = async () => {
+    const loadShareLinks = async () => {
       setIsLoading(true);
-      const link = await ShareService.getMyShareLink();
-      setShareLink(link);
+      const links = await ShareService.getMyShareLinks();
+      setShareLinks(links);
       setIsLoading(false);
     };
 
-    loadShareLink();
+    loadShareLinks();
   }, []);
 
-  const handleToggleSharing = async () => {
-    playSound('toggleSwitch');
-    setIsToggling(true);
+  const calculateExpirationDate = (): Date | undefined => {
+    const now = new Date();
+
+    switch (expirationPreset) {
+      case 'never':
+        return undefined;
+      case '1day':
+        return new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      case '7days':
+        return new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      case '30days':
+        return new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+      case 'custom':
+        return customExpirationDate ? new Date(customExpirationDate) : undefined;
+      default:
+        return undefined;
+    }
+  };
+
+  const handleCreateLink = async () => {
+    playSound('buttonClick');
+    setIsCreating(true);
     setError(null);
 
-    if (shareLink?.isActive) {
-      // Disable sharing
-      const result = await ShareService.disableSharing();
-      if (result.success) {
-        setShareLink(prev => prev ? { ...prev, isActive: false } : null);
-      } else {
-        setError(result.error || 'Failed to disable sharing');
-      }
+    const options: CreateShareLinkOptions = {
+      label: newLinkLabel.trim() || undefined,
+      expiresAt: calculateExpirationDate(),
+      isAnonymized,
+    };
+
+    const result = await ShareService.createShareLink(options);
+
+    if (result.success && result.shareLink) {
+      setShareLinks((prev) => [...prev, result.shareLink!]);
+      setShowCreateModal(false);
+      resetCreateForm();
     } else {
-      // Enable sharing
-      const result = await ShareService.enableSharing();
-      if (result.success && result.shareLink) {
-        setShareLink(result.shareLink);
-      } else {
-        setError(result.error || 'Failed to enable sharing');
-      }
+      setError(result.error || 'Failed to create share link');
     }
 
-    setIsToggling(false);
+    setIsCreating(false);
   };
 
-  const handleCopyLink = async () => {
-    if (!shareLink) return;
+  const resetCreateForm = () => {
+    setNewLinkLabel('');
+    setExpirationPreset('never');
+    setCustomExpirationDate('');
+    setIsAnonymized(false);
+  };
 
-    playSound('buttonClick');
-    const url = ShareService.getShareUrl(shareLink.shareToken);
+  const handleUpdateLink = (updatedLink: ShareLink) => {
+    setShareLinks((prev) =>
+      prev.map((link) => (link.id === updatedLink.id ? updatedLink : link))
+    );
+  };
 
-    try {
-      await navigator.clipboard.writeText(url);
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-      setError('Failed to copy to clipboard');
+  const handleExpireLink = async (linkId: string) => {
+    const result = await ShareService.expireShareLink(linkId);
+    if (result.success) {
+      // Refresh links to get updated state
+      const links = await ShareService.getMyShareLinks();
+      setShareLinks(links);
+    } else {
+      setError(result.error || 'Failed to expire link');
     }
   };
 
-  const formatViewCount = (count: number): string => {
-    if (count === 0) return 'No views yet';
-    if (count === 1) return '1 view';
-    return `${count} views`;
+  const handleDeleteLink = async (linkId: string) => {
+    const result = await ShareService.deleteShareLink(linkId);
+    if (result.success) {
+      setShareLinks((prev) => prev.filter((link) => link.id !== linkId));
+    } else {
+      setError(result.error || 'Failed to delete link');
+    }
   };
 
-  const formatLastViewed = (date: Date | null): string => {
-    if (!date) return 'Never';
+  const canCreateMore = shareLinks.length < 3;
 
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes} min ago`;
-    if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
-    return `${days} day${days > 1 ? 's' : ''} ago`;
+  // Get minimum date for custom expiration (tomorrow)
+  const getMinDate = () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split('T')[0];
   };
 
   if (isLoading) {
@@ -104,7 +148,8 @@ const SharePanel: React.FC = () => {
           <h3 className="text-lg font-semibold text-white">Public Sharing</h3>
         </div>
         <p className="text-sm text-gray-400">
-          Create a shareable link that lets anyone with the link view your player stats, match history, and hero statistics.
+          Create shareable links that let anyone view your stats. You can have up to 3 active
+          share links with different settings.
         </p>
       </div>
 
@@ -113,80 +158,55 @@ const SharePanel: React.FC = () => {
         <div className="bg-red-900/30 border border-red-700 text-red-300 text-sm p-3 rounded flex items-center">
           <AlertCircle size={16} className="mr-2 flex-shrink-0" />
           {error}
-        </div>
-      )}
-
-      {/* Toggle Sharing */}
-      <div className="bg-gray-800 rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <Link size={18} className="text-gray-400 mr-3" />
-            <div>
-              <p className="text-white font-medium">Enable Sharing</p>
-              <p className="text-gray-500 text-xs">
-                {shareLink?.isActive
-                  ? 'Your stats are publicly viewable'
-                  : 'Your stats are private'}
-              </p>
-            </div>
-          </div>
           <button
-            onClick={handleToggleSharing}
-            disabled={isToggling}
-            className={`w-12 h-6 rounded-full flex items-center p-1 transition-colors ${
-              shareLink?.isActive
-                ? 'bg-orange-600 justify-end'
-                : 'bg-gray-600 justify-start'
-            }`}
+            onClick={() => setError(null)}
+            className="ml-auto text-red-400 hover:text-red-300"
           >
-            {isToggling ? (
-              <Loader2 size={14} className="animate-spin text-white mx-auto" />
-            ) : (
-              <div className="bg-white w-4 h-4 rounded-full shadow" />
-            )}
+            <X size={16} />
           </button>
         </div>
-      </div>
+      )}
 
-      {/* Share URL (only shown when active) */}
-      {shareLink?.isActive && (
-        <div className="bg-gray-800 rounded-lg p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-gray-400">Your share link:</p>
-            <button
-              onClick={handleCopyLink}
-              className="flex items-center text-sm text-orange-400 hover:text-orange-300 transition-colors"
-            >
-              {isCopied ? (
-                <>
-                  <Check size={14} className="mr-1" />
-                  Copied!
-                </>
-              ) : (
-                <>
-                  <Copy size={14} className="mr-1" />
-                  Copy
-                </>
-              )}
-            </button>
-          </div>
-
-          <div className="bg-gray-900 rounded p-2 break-all">
-            <code className="text-xs text-green-400">
-              {ShareService.getShareUrl(shareLink.shareToken)}
-            </code>
-          </div>
-
-          {/* View Stats */}
-          <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-700">
-            <div className="flex items-center">
-              <Eye size={14} className="mr-1" />
-              {formatViewCount(shareLink.viewCount)}
-            </div>
-            <div>Last viewed: {formatLastViewed(shareLink.lastViewedAt)}</div>
-          </div>
+      {/* Share Links List */}
+      {shareLinks.length > 0 ? (
+        <div className="space-y-4">
+          {shareLinks.map((link, index) => (
+            <ShareLinkCard
+              key={link.id}
+              link={link}
+              index={index}
+              onUpdate={handleUpdateLink}
+              onDelete={handleDeleteLink}
+              onExpire={handleExpireLink}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="bg-gray-800 rounded-lg p-6 text-center">
+          <Share2 size={32} className="text-gray-600 mx-auto mb-3" />
+          <p className="text-gray-400 mb-2">No share links yet</p>
+          <p className="text-gray-500 text-sm">
+            Create a share link to let others view your stats
+          </p>
         </div>
       )}
+
+      {/* Create New Link Button */}
+      <button
+        onClick={() => {
+          playSound('buttonClick');
+          setShowCreateModal(true);
+        }}
+        disabled={!canCreateMore}
+        className={`w-full flex items-center justify-center gap-2 py-3 rounded-lg font-medium transition-colors ${
+          canCreateMore
+            ? 'bg-orange-600 hover:bg-orange-700 text-white'
+            : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+        }`}
+      >
+        <Plus size={18} />
+        {canCreateMore ? 'Create New Share Link' : 'Maximum Links Reached (3/3)'}
+      </button>
 
       {/* What's Shared Info */}
       <div className="bg-gray-800 rounded-lg p-4">
@@ -206,9 +226,143 @@ const SharePanel: React.FC = () => {
           </li>
         </ul>
         <p className="text-xs text-gray-600 mt-3">
-          Viewers cannot modify your data. You can disable sharing at any time.
+          Viewers cannot modify your data. You can expire or delete links at any time.
         </p>
       </div>
+
+      {/* Create Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+          <div className="bg-gray-800 rounded-lg max-w-md w-full p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-white">Create Share Link</h3>
+              <button
+                onClick={() => {
+                  setShowCreateModal(false);
+                  resetCreateForm();
+                }}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-5">
+              {/* Label */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Label (optional)
+                </label>
+                <input
+                  type="text"
+                  value={newLinkLabel}
+                  onChange={(e) => setNewLinkLabel(e.target.value)}
+                  placeholder="e.g., Friends, Discord, Public"
+                  maxLength={50}
+                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
+                />
+              </div>
+
+              {/* Expiration */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <Calendar size={14} className="inline mr-1" />
+                  Expiration
+                </label>
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  {[
+                    { value: 'never', label: 'Never' },
+                    { value: '1day', label: '1 Day' },
+                    { value: '7days', label: '7 Days' },
+                    { value: '30days', label: '30 Days' },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => setExpirationPreset(option.value as ExpirationPreset)}
+                      className={`py-2 px-3 rounded text-sm font-medium transition-colors ${
+                        expirationPreset === option.value
+                          ? 'bg-orange-600 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setExpirationPreset('custom')}
+                  className={`w-full py-2 px-3 rounded text-sm font-medium transition-colors ${
+                    expirationPreset === 'custom'
+                      ? 'bg-orange-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  Custom Date
+                </button>
+                {expirationPreset === 'custom' && (
+                  <input
+                    type="date"
+                    value={customExpirationDate}
+                    onChange={(e) => setCustomExpirationDate(e.target.value)}
+                    min={getMinDate()}
+                    className="w-full mt-2 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500"
+                  />
+                )}
+              </div>
+
+              {/* Anonymize */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <UserX size={16} className="text-purple-400" />
+                    <span className="text-sm font-medium text-gray-300">Anonymize Players</span>
+                  </div>
+                  <button
+                    onClick={() => setIsAnonymized(!isAnonymized)}
+                    className={`w-12 h-6 rounded-full flex items-center p-1 transition-colors ${
+                      isAnonymized ? 'bg-purple-600 justify-end' : 'bg-gray-600 justify-start'
+                    }`}
+                  >
+                    <div className="bg-white w-4 h-4 rounded-full shadow" />
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-2 flex items-start gap-1">
+                  <Info size={12} className="mt-0.5 flex-shrink-0" />
+                  Player names will be shown as "Player 1", "Player 2", etc. Your display name will
+                  still be visible.
+                </p>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowCreateModal(false);
+                  resetCreateForm();
+                }}
+                className="flex-1 py-2 px-4 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateLink}
+                disabled={isCreating || (expirationPreset === 'custom' && !customExpirationDate)}
+                className="flex-1 py-2 px-4 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                {isCreating ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  'Create Link'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

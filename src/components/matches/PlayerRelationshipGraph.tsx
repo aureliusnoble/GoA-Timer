@@ -9,7 +9,6 @@ import { useDataSource } from '../../hooks/useDataSource';
 
 interface PlayerRelationshipGraphProps {
   onBack: () => void;
-  inheritedMinGames?: number;
   inheritedDateRange?: { startDate?: Date; endDate?: Date };
   recalculateTrueSkill?: boolean;
 }
@@ -124,7 +123,6 @@ const calculateSkillPercentile = (displayRating: number, allRatings: number[]): 
 
 const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
   onBack,
-  inheritedMinGames,
   inheritedDateRange,
   recalculateTrueSkill = false
 }) => {
@@ -141,11 +139,10 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
   const [availablePlayers, setAvailablePlayers] = useState<PlayerWithStats[]>([]);
   const [loadingPlayers, setLoadingPlayers] = useState(true);
 
-  // Inherited filter state
+  // Inherited filter state (only date range now)
   const [usingInheritedFilters, setUsingInheritedFilters] = useState<boolean>(
-    !!(inheritedMinGames || inheritedDateRange)
+    !!(inheritedDateRange?.startDate && inheritedDateRange?.endDate)
   );
-  const [minGames, setMinGames] = useState<number>(inheritedMinGames ?? 1);
   const [dateRange, setDateRange] = useState<{ start: string | null; end: string | null }>(() => {
     if (inheritedDateRange?.startDate && inheritedDateRange?.endDate) {
       return {
@@ -244,7 +241,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
         // Get relationships to filter to only players with data
         const startDate = dateRange.start ? new Date(dateRange.start) : undefined;
         const endDate = dateRange.end ? new Date(dateRange.end + 'T23:59:59') : undefined;
-        const relationships = await getPlayerRelationshipNetwork(allPlayerIds, minGames, startDate, endDate);
+        const relationships = await getPlayerRelationshipNetwork(allPlayerIds, 1, startDate, endDate);
         const playerIdsWithData = new Set<string>();
         relationships.forEach(rel => {
           playerIdsWithData.add(rel.playerId);
@@ -297,7 +294,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
     };
 
     loadAvailablePlayers();
-  }, [isViewModeLoading, getAllPlayers, getPlayerRelationshipNetwork, getPlayerDisplayRating, getFilteredPlayerStats, minGames, dateRange, recalculateTrueSkill]);
+  }, [isViewModeLoading, getAllPlayers, getPlayerRelationshipNetwork, getPlayerDisplayRating, getFilteredPlayerStats, dateRange, recalculateTrueSkill]);
 
   // Configure forces after graph ref is available
   useEffect(() => {
@@ -399,7 +396,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
       try {
         const startDate = dateRange.start ? new Date(dateRange.start) : undefined;
         const endDate = dateRange.end ? new Date(dateRange.end + 'T23:59:59') : undefined;
-        const relationships = await getPlayerRelationshipNetwork(playerIds, minGames, startDate, endDate);
+        const relationships = await getPlayerRelationshipNetwork(playerIds, 1, startDate, endDate);
         const data = buildGraphData(playerIds, relationships);
         setGraphData(data);
       } catch (error) {
@@ -410,7 +407,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
     };
 
     loadData();
-  }, [selectedPlayers, getPlayerRelationshipNetwork, minGames, dateRange]);
+  }, [selectedPlayers, getPlayerRelationshipNetwork, dateRange]);
 
   // Build graph data from relationships - preserves existing node positions
   const buildGraphData = useCallback((
@@ -612,7 +609,6 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
   const clearInheritedFilters = () => {
     playSound('buttonClick');
     setUsingInheritedFilters(false);
-    setMinGames(1);
     setDateRange({ start: null, end: null });
   };
 
@@ -749,8 +745,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
           <div className="flex items-center">
             <Filter size={18} className="mr-2 text-purple-400" />
             <span className="text-sm text-purple-200">
-              Using filters from Player Stats: Min {minGames} games
-              {dateRange.start && dateRange.end && ` | ${dateRange.start} to ${dateRange.end}`}
+              Using date filter from Player Stats: {dateRange.start} to {dateRange.end}
               {recalculateTrueSkill && ' | TrueSkill recalculated'}
             </span>
           </div>
