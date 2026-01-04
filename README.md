@@ -95,3 +95,25 @@ Add a Builds page where users can suggest builds? Users can rate these
 Add an openings section where users can suggest openings. Users can rate these.
 Add all the card data.
 Record Build during game: items and upgrades.
+
+
+Match Types
+
+- Allow match maker in view only mode
+
+
+Record Victory Types
+- Throne Victory
+- Wave Victory
+- Kills Victory
+
+Fix bug
+- Over Time (as we increase min games should crop games before that value from hero and player stats)
+
+New Draft Type
+- Novel
+-- Each player can choose from 3 options at least 1 1-2 star and at least 1 3-4 star they havent played with
+
+- Pass
+- Select Num Players + 4 heroes at random
+- Each team chooses from these and pass them round.

@@ -340,6 +340,13 @@ class ShareServiceClass {
         };
       }
 
+      // Debug log to see what's coming from the RPC
+      console.log('[ShareService] Raw shared data from RPC:', {
+        is_anonymized: data.is_anonymized,
+        expires_at: data.expires_at,
+        display_name: data.display_name,
+      });
+
       return {
         success: true,
         data: {

@@ -1,10 +1,10 @@
 // src/components/matches/MatchMaker.tsx
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Users, Shuffle, Award, Info, Plus, ArrowRight, ArrowLeft, RefreshCw, Play, Trophy, Clock, ChevronUp, ChevronDown } from 'lucide-react';
+import { ChevronLeft, Users, Shuffle, Award, Info, Plus, ArrowRight, ArrowLeft, RefreshCw, Play, Trophy, Clock, ChevronUp, ChevronDown, Sparkles, Clock3, TrendingUp, Sliders } from 'lucide-react';
 import { DBPlayer } from '../../services/DatabaseService';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
-import EnhancedTooltip from '../common/EnhancedTooltip';
+import { CustomMatchMakerModal, MatchMakerWeights, ScoredConfiguration } from './CustomMatchMaker';
 
 export type MatchesView = 'menu' | 'player-stats' | 'match-history' | 'match-maker';
 
@@ -134,7 +134,38 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
   const [winProbability, setWinProbability] = useState<WinProbabilityResult | null>(null);
   // New state for collapsible win probability section
   const [showWinProbability, setShowWinProbability] = useState<boolean>(false);
-  
+
+  // Track which balancing mode was used for display purposes
+  const [lastBalanceMode, setLastBalanceMode] = useState<'ranking' | 'experience' | 'novel' | 'reunion' | 'winRate' | 'random' | null>(null);
+
+  // Store familiarity stats when using Novel mode
+  const [novelStats, setNovelStats] = useState<{
+    team1Familiarity: number;
+    team2Familiarity: number;
+    avgFamiliarity: number;
+  } | null>(null);
+
+  // Store recency stats when using Reunion mode
+  const [reunionStats, setReunionStats] = useState<{
+    team1Recency: number;
+    team2Recency: number;
+    avgDaysSinceTeamed: number;
+  } | null>(null);
+
+  // Custom match maker state
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [customStats, setCustomStats] = useState<{
+    weights: MatchMakerWeights;
+    score: number;
+  } | null>(null);
+
+  // Store win rate stats when using Win Rate mode
+  const [winRateStats, setWinRateStats] = useState<{
+    team1AvgWinRate: number;
+    team2AvgWinRate: number;
+    difference: number;
+  } | null>(null);
+
   // Load player data on component mount
   useEffect(() => {
     const loadPlayers = async () => {
@@ -284,6 +315,460 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     return { team1, team2 };
   };
 
+  // Build familiarity matrix - counts games each pair of players have been teammates
+  const buildFamiliarityMatrix = async (
+    playerIds: string[]
+  ): Promise<Map<string, Map<string, number>>> => {
+    const matrix = new Map<string, Map<string, number>>();
+    const playerIdSet = new Set(playerIds);
+
+    // Initialize matrix with zeros
+    for (const p1 of playerIds) {
+      matrix.set(p1, new Map());
+      for (const p2 of playerIds) {
+        if (p1 !== p2) {
+          matrix.get(p1)!.set(p2, 0);
+        }
+      }
+    }
+
+    // Get all matches and count teammate occurrences
+    const allMatches = await dbService.getAllMatches();
+
+    for (const match of allMatches) {
+      const matchPlayers = await dbService.getMatchPlayers(match.id);
+
+      // Group players by team, only including selected players
+      const titanPlayers = matchPlayers
+        .filter(p => p.team === 'titans' && playerIdSet.has(p.playerId))
+        .map(p => p.playerId);
+      const atlanteanPlayers = matchPlayers
+        .filter(p => p.team === 'atlanteans' && playerIdSet.has(p.playerId))
+        .map(p => p.playerId);
+
+      // Count pairs for Titans team
+      for (let i = 0; i < titanPlayers.length; i++) {
+        for (let j = i + 1; j < titanPlayers.length; j++) {
+          const p1 = titanPlayers[i];
+          const p2 = titanPlayers[j];
+          matrix.get(p1)!.set(p2, (matrix.get(p1)?.get(p2) ?? 0) + 1);
+          matrix.get(p2)!.set(p1, (matrix.get(p2)?.get(p1) ?? 0) + 1);
+        }
+      }
+
+      // Count pairs for Atlanteans team
+      for (let i = 0; i < atlanteanPlayers.length; i++) {
+        for (let j = i + 1; j < atlanteanPlayers.length; j++) {
+          const p1 = atlanteanPlayers[i];
+          const p2 = atlanteanPlayers[j];
+          matrix.get(p1)!.set(p2, (matrix.get(p1)?.get(p2) ?? 0) + 1);
+          matrix.get(p2)!.set(p1, (matrix.get(p2)?.get(p1) ?? 0) + 1);
+        }
+      }
+    }
+
+    return matrix;
+  };
+
+  // Calculate total familiarity score for a team (sum of games together for all pairs)
+  const calculateTeamFamiliarity = (
+    team: DBPlayer[],
+    matrix: Map<string, Map<string, number>>
+  ): number => {
+    let total = 0;
+    for (let i = 0; i < team.length; i++) {
+      for (let j = i + 1; j < team.length; j++) {
+        total += matrix.get(team[i].id)?.get(team[j].id) ?? 0;
+      }
+    }
+    return total;
+  };
+
+  // Find optimal team split that minimizes total familiarity (novel teams)
+  const findNovelTeams = (
+    players: DBPlayer[],
+    matrix: Map<string, Map<string, number>>
+  ): {
+    team1: DBPlayer[];
+    team2: DBPlayer[];
+    team1Familiarity: number;
+    team2Familiarity: number;
+    avgFamiliarity: number;
+  } => {
+    const n = players.length;
+    if (n < 2) {
+      return {
+        team1: [...players],
+        team2: [],
+        team1Familiarity: 0,
+        team2Familiarity: 0,
+        avgFamiliarity: 0
+      };
+    }
+
+    // Sort players deterministically for consistent results
+    const sorted = [...players].sort((a, b) => a.id.localeCompare(b.id));
+
+    const team1Size = Math.ceil(n / 2);
+
+    // Generate all combinations of indices for team1 (reuse pattern from findOptimalTeams)
+    const generateCombinations = (k: number): number[][] => {
+      const result: number[][] = [];
+      const combine = (start: number, current: number[]) => {
+        if (current.length === k) {
+          result.push([...current]);
+          return;
+        }
+        for (let i = start; i <= n - (k - current.length); i++) {
+          current.push(i);
+          combine(i + 1, current);
+          current.pop();
+        }
+      };
+      combine(0, []);
+      return result;
+    };
+
+    const allCombinations = generateCombinations(team1Size);
+    let bestTeam1Indices: number[] = [];
+    let bestTotalFamiliarity = Infinity;
+
+    for (const team1Indices of allCombinations) {
+      const team1Set = new Set(team1Indices);
+      const team1 = team1Indices.map(i => sorted[i]);
+      const team2 = sorted.filter((_, i) => !team1Set.has(i));
+
+      const familiarity1 = calculateTeamFamiliarity(team1, matrix);
+      const familiarity2 = calculateTeamFamiliarity(team2, matrix);
+      const totalFamiliarity = familiarity1 + familiarity2;
+
+      if (totalFamiliarity < bestTotalFamiliarity) {
+        bestTotalFamiliarity = totalFamiliarity;
+        bestTeam1Indices = team1Indices;
+      }
+      // Tie-breaker: first lexicographic combination wins (deterministic)
+    }
+
+    const team1Set = new Set(bestTeam1Indices);
+    const team1 = bestTeam1Indices.map(i => sorted[i]);
+    const team2 = sorted.filter((_, i) => !team1Set.has(i));
+    const team1Fam = calculateTeamFamiliarity(team1, matrix);
+    const team2Fam = calculateTeamFamiliarity(team2, matrix);
+
+    // Calculate number of pairs: C(n,2) = n*(n-1)/2
+    const team1Pairs = (team1.length * (team1.length - 1)) / 2;
+    const team2Pairs = (team2.length * (team2.length - 1)) / 2;
+    const totalPairs = team1Pairs + team2Pairs;
+    const avgFam = totalPairs > 0 ? (team1Fam + team2Fam) / totalPairs : 0;
+
+    return {
+      team1,
+      team2,
+      team1Familiarity: team1Fam,
+      team2Familiarity: team2Fam,
+      avgFamiliarity: avgFam
+    };
+  };
+
+  // Balance teams by novelty - finds teams where players have played together the least
+  const balanceTeamsByNovelty = async () => {
+    if (selectedPlayers.length < 4) {
+      return; // Not enough players
+    }
+
+    setIsBalancing(true);
+    playSound('phaseChange');
+
+    try {
+      const playerIds = selectedPlayers.map(p => p.id);
+      const matrix = await buildFamiliarityMatrix(playerIds);
+      const result = findNovelTeams(selectedPlayers, matrix);
+
+      setTeam1(result.team1);
+      setTeam2(result.team2);
+      setLastBalanceMode('novel');
+      setNovelStats({
+        team1Familiarity: result.team1Familiarity,
+        team2Familiarity: result.team2Familiarity,
+        avgFamiliarity: result.avgFamiliarity
+      });
+      setReunionStats(null);
+      setCustomStats(null);
+      setWinRateStats(null);
+
+      // Keep win probability collapsed by default
+      setShowWinProbability(false);
+    } catch (error) {
+      console.error('Error balancing teams by novelty:', error);
+    } finally {
+      setIsBalancing(false);
+    }
+  };
+
+  // Constant for "never played together" - 10 years in days
+  const NEVER_TEAMED_DAYS = 3650;
+
+  // Build recency matrix - tracks when each pair of players last played together as teammates
+  const buildRecencyMatrix = async (
+    playerIds: string[]
+  ): Promise<Map<string, Map<string, Date | null>>> => {
+    const matrix = new Map<string, Map<string, Date | null>>();
+    const playerIdSet = new Set(playerIds);
+
+    // Initialize matrix with null (never played together)
+    for (const p1 of playerIds) {
+      matrix.set(p1, new Map());
+      for (const p2 of playerIds) {
+        if (p1 !== p2) {
+          matrix.get(p1)!.set(p2, null);
+        }
+      }
+    }
+
+    // Get all matches sorted by date descending (most recent first)
+    const allMatches = await dbService.getAllMatches();
+    allMatches.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    for (const match of allMatches) {
+      const matchPlayers = await dbService.getMatchPlayers(match.id);
+      const matchDate = new Date(match.date);
+
+      // Group players by team, only including selected players
+      const titanPlayers = matchPlayers
+        .filter(p => p.team === 'titans' && playerIdSet.has(p.playerId))
+        .map(p => p.playerId);
+      const atlanteanPlayers = matchPlayers
+        .filter(p => p.team === 'atlanteans' && playerIdSet.has(p.playerId))
+        .map(p => p.playerId);
+
+      // Record date for Titans team pairs (only keep most recent, which is first encountered)
+      for (let i = 0; i < titanPlayers.length; i++) {
+        for (let j = i + 1; j < titanPlayers.length; j++) {
+          const p1 = titanPlayers[i];
+          const p2 = titanPlayers[j];
+          // Only set if not already set (keep most recent)
+          if (matrix.get(p1)?.get(p2) === null) {
+            matrix.get(p1)!.set(p2, matchDate);
+            matrix.get(p2)!.set(p1, matchDate);
+          }
+        }
+      }
+
+      // Record date for Atlanteans team pairs
+      for (let i = 0; i < atlanteanPlayers.length; i++) {
+        for (let j = i + 1; j < atlanteanPlayers.length; j++) {
+          const p1 = atlanteanPlayers[i];
+          const p2 = atlanteanPlayers[j];
+          if (matrix.get(p1)?.get(p2) === null) {
+            matrix.get(p1)!.set(p2, matchDate);
+            matrix.get(p2)!.set(p1, matchDate);
+          }
+        }
+      }
+    }
+
+    return matrix;
+  };
+
+  // Calculate total recency score for a team (sum of days since last teamed for all pairs)
+  const calculateTeamRecency = (
+    team: DBPlayer[],
+    matrix: Map<string, Map<string, Date | null>>,
+    now: Date
+  ): number => {
+    let total = 0;
+    for (let i = 0; i < team.length; i++) {
+      for (let j = i + 1; j < team.length; j++) {
+        const lastTeamed = matrix.get(team[i].id)?.get(team[j].id);
+        if (lastTeamed === null || lastTeamed === undefined) {
+          // Never played together or not in matrix - treat as maximum
+          total += NEVER_TEAMED_DAYS;
+        } else {
+          // Calculate days difference
+          const diffMs = now.getTime() - lastTeamed.getTime();
+          const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+          total += diffDays;
+        }
+      }
+    }
+    return total;
+  };
+
+  // Find optimal team split that maximizes total recency (reunion teams)
+  const findReunionTeams = (
+    players: DBPlayer[],
+    matrix: Map<string, Map<string, Date | null>>,
+    now: Date
+  ): {
+    team1: DBPlayer[];
+    team2: DBPlayer[];
+    team1Recency: number;
+    team2Recency: number;
+    avgDaysSinceTeamed: number;
+  } => {
+    const n = players.length;
+    if (n < 2) {
+      return {
+        team1: [...players],
+        team2: [],
+        team1Recency: 0,
+        team2Recency: 0,
+        avgDaysSinceTeamed: 0
+      };
+    }
+
+    // Sort players deterministically for consistent results
+    const sorted = [...players].sort((a, b) => a.id.localeCompare(b.id));
+
+    const team1Size = Math.ceil(n / 2);
+
+    // Generate all combinations of indices for team1 (reuse pattern)
+    const generateCombinations = (k: number): number[][] => {
+      const result: number[][] = [];
+      const combine = (start: number, current: number[]) => {
+        if (current.length === k) {
+          result.push([...current]);
+          return;
+        }
+        for (let i = start; i <= n - (k - current.length); i++) {
+          current.push(i);
+          combine(i + 1, current);
+          current.pop();
+        }
+      };
+      combine(0, []);
+      return result;
+    };
+
+    const allCombinations = generateCombinations(team1Size);
+    let bestTeam1Indices: number[] = [];
+    let bestTotalRecency = -Infinity; // We want to MAXIMIZE
+
+    for (const team1Indices of allCombinations) {
+      const team1Set = new Set(team1Indices);
+      const team1 = team1Indices.map(i => sorted[i]);
+      const team2 = sorted.filter((_, i) => !team1Set.has(i));
+
+      const recency1 = calculateTeamRecency(team1, matrix, now);
+      const recency2 = calculateTeamRecency(team2, matrix, now);
+      const totalRecency = recency1 + recency2;
+
+      if (totalRecency > bestTotalRecency) {
+        bestTotalRecency = totalRecency;
+        bestTeam1Indices = team1Indices;
+      }
+      // Tie-breaker: first lexicographic combination wins (deterministic)
+    }
+
+    const team1Set = new Set(bestTeam1Indices);
+    const team1 = bestTeam1Indices.map(i => sorted[i]);
+    const team2 = sorted.filter((_, i) => !team1Set.has(i));
+    const team1Rec = calculateTeamRecency(team1, matrix, now);
+    const team2Rec = calculateTeamRecency(team2, matrix, now);
+
+    // Calculate number of pairs: C(n,2) = n*(n-1)/2
+    const team1Pairs = (team1.length * (team1.length - 1)) / 2;
+    const team2Pairs = (team2.length * (team2.length - 1)) / 2;
+    const totalPairs = team1Pairs + team2Pairs;
+    const avgDays = totalPairs > 0 ? (team1Rec + team2Rec) / totalPairs : 0;
+
+    return {
+      team1,
+      team2,
+      team1Recency: team1Rec,
+      team2Recency: team2Rec,
+      avgDaysSinceTeamed: avgDays
+    };
+  };
+
+  // Balance teams by reunion - finds teams where players haven't played together recently
+  const balanceTeamsByReunion = async () => {
+    if (selectedPlayers.length < 4) {
+      return; // Not enough players
+    }
+
+    setIsBalancing(true);
+    playSound('phaseChange');
+
+    try {
+      const playerIds = selectedPlayers.map(p => p.id);
+      const matrix = await buildRecencyMatrix(playerIds);
+      const now = new Date();
+      const result = findReunionTeams(selectedPlayers, matrix, now);
+
+      setTeam1(result.team1);
+      setTeam2(result.team2);
+      setLastBalanceMode('reunion');
+      setReunionStats({
+        team1Recency: result.team1Recency,
+        team2Recency: result.team2Recency,
+        avgDaysSinceTeamed: result.avgDaysSinceTeamed
+      });
+      setNovelStats(null);
+      setCustomStats(null);
+      setWinRateStats(null);
+
+      // Keep win probability collapsed by default
+      setShowWinProbability(false);
+    } catch (error) {
+      console.error('Error balancing teams by reunion:', error);
+    } finally {
+      setIsBalancing(false);
+    }
+  };
+
+  // Balance teams by win rate - optimal assignment minimizing average win rate difference
+  const balanceTeamsByWinRate = async () => {
+    if (selectedPlayers.length < 4) {
+      return; // Not enough players
+    }
+
+    setIsBalancing(true);
+    playSound('phaseChange');
+
+    try {
+      const { team1, team2 } = findOptimalTeams(
+        selectedPlayers,
+        (p) => p.totalGames > 0 ? p.wins / p.totalGames : 0.5
+      );
+
+      const team1Avg = team1.reduce((sum, p) =>
+        sum + (p.totalGames > 0 ? p.wins / p.totalGames : 0.5), 0) / team1.length;
+      const team2Avg = team2.reduce((sum, p) =>
+        sum + (p.totalGames > 0 ? p.wins / p.totalGames : 0.5), 0) / team2.length;
+
+      setTeam1(team1);
+      setTeam2(team2);
+      setLastBalanceMode('winRate');
+      setNovelStats(null);
+      setReunionStats(null);
+      setCustomStats(null);
+      setWinRateStats({
+        team1AvgWinRate: team1Avg,
+        team2AvgWinRate: team2Avg,
+        difference: Math.abs(team1Avg - team2Avg),
+      });
+      setShowWinProbability(false);
+    } catch (error) {
+      console.error('Error balancing teams by win rate:', error);
+    } finally {
+      setIsBalancing(false);
+    }
+  };
+
+  // Helper to format days since teamed for display
+  const formatDaysSinceTeamed = (days: number): string => {
+    if (days >= NEVER_TEAMED_DAYS) {
+      return "Never teamed!";
+    } else if (days >= 365) {
+      return `${(days / 365).toFixed(1)} years`;
+    } else if (days >= 30) {
+      return `${(days / 30).toFixed(1)} months`;
+    } else {
+      return `${Math.round(days)} days`;
+    }
+  };
+
   // Balance teams by skill rating - optimal assignment minimizing average skill difference
   const balanceTeams = async () => {
     if (selectedPlayers.length < 4) {
@@ -301,6 +786,11 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
 
       setTeam1(team1);
       setTeam2(team2);
+      setLastBalanceMode('ranking');
+      setNovelStats(null);
+      setReunionStats(null);
+      setCustomStats(null);
+      setWinRateStats(null);
 
       // Keep win probability collapsed by default
       setShowWinProbability(false);
@@ -328,6 +818,11 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
 
       setTeam1(team1);
       setTeam2(team2);
+      setLastBalanceMode('experience');
+      setNovelStats(null);
+      setReunionStats(null);
+      setCustomStats(null);
+      setWinRateStats(null);
 
       // Keep win probability collapsed by default
       setShowWinProbability(false);
@@ -337,7 +832,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
       setIsBalancing(false);
     }
   };
-  
+
   // Random teams without ELO consideration
   const randomizeTeams = () => {
     if (selectedPlayers.length < 4) {
@@ -359,19 +854,270 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     const halfway = Math.ceil(shuffled.length / 2);
     setTeam1(shuffled.slice(0, halfway));
     setTeam2(shuffled.slice(halfway));
-    
+    setLastBalanceMode('random');
+    setNovelStats(null);
+    setReunionStats(null);
+    setCustomStats(null);
+    setWinRateStats(null);
+
     // Keep win probability collapsed by default
     setShowWinProbability(false);
   };
-  
+
+  // Calculate all configuration scores for custom match maker
+  const calculateAllConfigurationScores = async (
+    players: DBPlayer[],
+    familiarityMatrix: Map<string, Map<string, number>>,
+    recencyMatrix: Map<string, Map<string, Date | null>>
+  ): Promise<ScoredConfiguration[]> => {
+    const n = players.length;
+    if (n < 4) return [];
+
+    const sorted = [...players].sort((a, b) => a.id.localeCompare(b.id));
+    const team1Size = Math.ceil(n / 2);
+    const now = new Date();
+
+    // Generate all combinations
+    const generateCombinations = (k: number): number[][] => {
+      const result: number[][] = [];
+      const combine = (start: number, current: number[]) => {
+        if (current.length === k) {
+          result.push([...current]);
+          return;
+        }
+        for (let i = start; i <= n - (k - current.length); i++) {
+          current.push(i);
+          combine(i + 1, current);
+          current.pop();
+        }
+      };
+      combine(0, []);
+      return result;
+    };
+
+    const allCombinations = generateCombinations(team1Size);
+    const configurations: ScoredConfiguration[] = [];
+
+    // Calculate raw scores for each configuration
+    for (const team1Indices of allCombinations) {
+      const team1Set = new Set(team1Indices);
+      const team2Indices = sorted.map((_, i) => i).filter(i => !team1Set.has(i));
+
+      const team1 = team1Indices.map(i => sorted[i]);
+      const team2 = team2Indices.map(i => sorted[i]);
+
+      // Ranking: skill difference (minimize)
+      const team1AvgSkill = team1.reduce((sum, p) => sum + dbService.getDisplayRating(p), 0) / team1.length;
+      const team2AvgSkill = team2.reduce((sum, p) => sum + dbService.getDisplayRating(p), 0) / team2.length;
+      const rankingRaw = Math.abs(team1AvgSkill - team2AvgSkill);
+
+      // Experience: games difference (minimize)
+      const team1AvgGames = team1.reduce((sum, p) => sum + p.totalGames, 0) / team1.length;
+      const team2AvgGames = team2.reduce((sum, p) => sum + p.totalGames, 0) / team2.length;
+      const experienceRaw = Math.abs(team1AvgGames - team2AvgGames);
+
+      // Novel: familiarity (minimize)
+      let novelRaw = 0;
+      for (let i = 0; i < team1.length; i++) {
+        for (let j = i + 1; j < team1.length; j++) {
+          novelRaw += familiarityMatrix.get(team1[i].id)?.get(team1[j].id) ?? 0;
+        }
+      }
+      for (let i = 0; i < team2.length; i++) {
+        for (let j = i + 1; j < team2.length; j++) {
+          novelRaw += familiarityMatrix.get(team2[i].id)?.get(team2[j].id) ?? 0;
+        }
+      }
+
+      // Reunion: recency in days (maximize)
+      let reunionRaw = 0;
+      for (let i = 0; i < team1.length; i++) {
+        for (let j = i + 1; j < team1.length; j++) {
+          const lastTeamed = recencyMatrix.get(team1[i].id)?.get(team1[j].id);
+          if (lastTeamed === null || lastTeamed === undefined) {
+            reunionRaw += NEVER_TEAMED_DAYS;
+          } else {
+            reunionRaw += Math.floor((now.getTime() - lastTeamed.getTime()) / (1000 * 60 * 60 * 24));
+          }
+        }
+      }
+      for (let i = 0; i < team2.length; i++) {
+        for (let j = i + 1; j < team2.length; j++) {
+          const lastTeamed = recencyMatrix.get(team2[i].id)?.get(team2[j].id);
+          if (lastTeamed === null || lastTeamed === undefined) {
+            reunionRaw += NEVER_TEAMED_DAYS;
+          } else {
+            reunionRaw += Math.floor((now.getTime() - lastTeamed.getTime()) / (1000 * 60 * 60 * 24));
+          }
+        }
+      }
+
+      // Win Rate: win rate difference (minimize)
+      const team1AvgWinRate = team1.reduce((sum, p) =>
+        sum + (p.totalGames > 0 ? p.wins / p.totalGames : 0.5), 0) / team1.length;
+      const team2AvgWinRate = team2.reduce((sum, p) =>
+        sum + (p.totalGames > 0 ? p.wins / p.totalGames : 0.5), 0) / team2.length;
+      const winRateRaw = Math.abs(team1AvgWinRate - team2AvgWinRate);
+
+      configurations.push({
+        team1Indices,
+        team2Indices,
+        rawScores: {
+          ranking: rankingRaw,
+          experience: experienceRaw,
+          novel: novelRaw,
+          reunion: reunionRaw,
+          winRate: winRateRaw,
+        },
+        normalizedScores: {
+          ranking: 0,
+          experience: 0,
+          novel: 0,
+          reunion: 0,
+          winRate: 0,
+          random: Math.random(),
+        },
+      });
+    }
+
+    // Normalize scores
+    const rankingMin = Math.min(...configurations.map(c => c.rawScores.ranking));
+    const rankingMax = Math.max(...configurations.map(c => c.rawScores.ranking));
+    const experienceMin = Math.min(...configurations.map(c => c.rawScores.experience));
+    const experienceMax = Math.max(...configurations.map(c => c.rawScores.experience));
+    const novelMin = Math.min(...configurations.map(c => c.rawScores.novel));
+    const novelMax = Math.max(...configurations.map(c => c.rawScores.novel));
+    const reunionMin = Math.min(...configurations.map(c => c.rawScores.reunion));
+    const reunionMax = Math.max(...configurations.map(c => c.rawScores.reunion));
+    const winRateMin = Math.min(...configurations.map(c => c.rawScores.winRate));
+    const winRateMax = Math.max(...configurations.map(c => c.rawScores.winRate));
+
+    for (const config of configurations) {
+      // For minimize metrics: (max - value) / (max - min) so lower raw = higher normalized
+      config.normalizedScores.ranking = rankingMax === rankingMin
+        ? 1
+        : (rankingMax - config.rawScores.ranking) / (rankingMax - rankingMin);
+
+      config.normalizedScores.experience = experienceMax === experienceMin
+        ? 1
+        : (experienceMax - config.rawScores.experience) / (experienceMax - experienceMin);
+
+      config.normalizedScores.novel = novelMax === novelMin
+        ? 1
+        : (novelMax - config.rawScores.novel) / (novelMax - novelMin);
+
+      // Win rate is also a minimize metric (minimize difference)
+      config.normalizedScores.winRate = winRateMax === winRateMin
+        ? 1
+        : (winRateMax - config.rawScores.winRate) / (winRateMax - winRateMin);
+
+      // For maximize metrics: (value - min) / (max - min) so higher raw = higher normalized
+      config.normalizedScores.reunion = reunionMax === reunionMin
+        ? 1
+        : (config.rawScores.reunion - reunionMin) / (reunionMax - reunionMin);
+    }
+
+    return configurations;
+  };
+
+  // Balance teams by custom weighted algorithm
+  const balanceTeamsByCustom = async (weights: MatchMakerWeights) => {
+    if (selectedPlayers.length < 4) {
+      return;
+    }
+
+    setIsBalancing(true);
+    playSound('phaseChange');
+
+    try {
+      // Build matrices if not already cached
+      const playerIds = selectedPlayers.map(p => p.id);
+      const familiarityMatrix = await buildFamiliarityMatrix(playerIds);
+      const recencyMatrix = await buildRecencyMatrix(playerIds);
+
+      // Calculate all configuration scores
+      const configs = await calculateAllConfigurationScores(
+        selectedPlayers,
+        familiarityMatrix,
+        recencyMatrix
+      );
+
+      if (configs.length === 0) {
+        console.error('No configurations generated');
+        return;
+      }
+
+      // Normalize weights
+      const totalWeight = weights.ranking + weights.experience + weights.novel + weights.reunion + weights.winRate + weights.random;
+      const normalizedWeights = totalWeight > 0 ? {
+        ranking: weights.ranking / totalWeight,
+        experience: weights.experience / totalWeight,
+        novel: weights.novel / totalWeight,
+        reunion: weights.reunion / totalWeight,
+        winRate: weights.winRate / totalWeight,
+        random: weights.random / totalWeight,
+      } : {
+        ranking: 1/6,
+        experience: 1/6,
+        novel: 1/6,
+        reunion: 1/6,
+        winRate: 1/6,
+        random: 1/6,
+      };
+
+      // Find best configuration
+      let bestConfig = configs[0];
+      let bestScore = -Infinity;
+
+      for (const config of configs) {
+        const score =
+          normalizedWeights.ranking * config.normalizedScores.ranking +
+          normalizedWeights.experience * config.normalizedScores.experience +
+          normalizedWeights.novel * config.normalizedScores.novel +
+          normalizedWeights.reunion * config.normalizedScores.reunion +
+          normalizedWeights.winRate * config.normalizedScores.winRate +
+          normalizedWeights.random * config.normalizedScores.random;
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestConfig = config;
+        }
+      }
+
+      // Apply the best configuration
+      const sorted = [...selectedPlayers].sort((a, b) => a.id.localeCompare(b.id));
+      setTeam1(bestConfig.team1Indices.map(i => sorted[i]));
+      setTeam2(bestConfig.team2Indices.map(i => sorted[i]));
+      setLastBalanceMode(null); // Custom mode doesn't use the standard modes
+      setNovelStats(null);
+      setReunionStats(null);
+      setWinRateStats(null);
+      setCustomStats({
+        weights,
+        score: bestScore,
+      });
+      setShowCustomModal(false);
+      setShowWinProbability(false);
+    } catch (error) {
+      console.error('Error balancing teams by custom:', error);
+    } finally {
+      setIsBalancing(false);
+    }
+  };
+
   // Reset teams
   const resetTeams = () => {
     playSound('buttonClick');
     setTeam1([]);
     setTeam2([]);
     setShowWinProbability(false);
+    setLastBalanceMode(null);
+    setNovelStats(null);
+    setReunionStats(null);
+    setCustomStats(null);
+    setWinRateStats(null);
   };
-  
+
   // Reset selection
   const resetSelection = () => {
     playSound('buttonClick');
@@ -379,19 +1125,29 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     setTeam1([]);
     setTeam2([]);
     setShowWinProbability(false);
+    setLastBalanceMode(null);
+    setNovelStats(null);
+    setReunionStats(null);
+    setCustomStats(null);
+    setWinRateStats(null);
   };
-  
+
   // Toggle manual team assignment mode
   const toggleManualMode = () => {
     playSound('toggleSwitch');
-    
+
     // If turning off manual mode, reset teams
     if (manualMode) {
       setTeam1([]);
       setTeam2([]);
       setShowWinProbability(false);
+      setLastBalanceMode(null);
+      setNovelStats(null);
+      setReunionStats(null);
+      setCustomStats(null);
+      setWinRateStats(null);
     }
-    
+
     setManualMode(!manualMode);
   };
   
@@ -444,14 +1200,119 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     }
   };
   
-  // Tooltip text definitions for buttons
-  const tooltips = {
-    ranking: "Find the optimal team assignment that minimizes the difference in average skill between teams. Equal team sizes guaranteed. Same players always produce the same teams.",
-    experience: "Find the optimal team assignment that minimizes the difference in average experience (games played) between teams. Equal team sizes guaranteed. Same players always produce the same teams.",
-    random: "Create random teams without consideration for player skill or experience. Each click generates a completely new random configuration.",
-    manual: "Enable manual team assignment mode to create teams by hand. You can move players between teams freely to create custom matchups.",
-    reset: "Reset both teams and start over. Player selection will be maintained but no players will be assigned to teams."
-  };
+  // Balance option card component for the new card-based UI
+  const BalanceOptionCard: React.FC<{
+    title: string;
+    description: string;
+    icon: React.ReactNode;
+    colorClass: string;
+    onClick: () => void;
+    disabled: boolean;
+    isActive?: boolean;
+  }> = ({ title, description, icon, colorClass, onClick, disabled, isActive }) => (
+    <button
+      onClick={() => {
+        if (!disabled) {
+          playSound('buttonClick');
+          onClick();
+        }
+      }}
+      disabled={disabled}
+      className={`p-4 rounded-lg border-2 text-left transition-all w-full ${
+        disabled
+          ? 'opacity-50 cursor-not-allowed border-gray-600 bg-gray-700/30'
+          : isActive
+            ? `border-${colorClass}-500 bg-${colorClass}-900/40 ring-2 ring-${colorClass}-500`
+            : `border-gray-600 hover:border-${colorClass}-500 hover:bg-${colorClass}-900/20 bg-gray-700/50`
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <div className={`text-${colorClass}-400 flex-shrink-0 mt-0.5`}>
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <h4 className="font-semibold text-white">{title}</h4>
+          <p className="text-sm text-gray-300 mt-1">{description}</p>
+        </div>
+      </div>
+    </button>
+  );
+
+  // Balance options configuration
+  const balanceOptions = [
+    {
+      id: 'ranking',
+      title: 'Ranking',
+      description: 'Minimize skill difference between teams',
+      icon: <Trophy size={22} />,
+      colorClass: 'blue',
+      onClick: balanceTeams,
+      disabledInManual: true,
+    },
+    {
+      id: 'experience',
+      title: 'Experience',
+      description: 'Balance by total games played',
+      icon: <Clock size={22} />,
+      colorClass: 'green',
+      onClick: balanceTeamsByExperience,
+      disabledInManual: true,
+    },
+    {
+      id: 'novel',
+      title: 'Novel',
+      description: 'Pair players who rarely team up together',
+      icon: <Sparkles size={22} />,
+      colorClass: 'amber',
+      onClick: balanceTeamsByNovelty,
+      disabledInManual: true,
+    },
+    {
+      id: 'reunion',
+      title: 'Reunion',
+      description: "Pair players who haven't teamed recently",
+      icon: <Clock3 size={22} />,
+      colorClass: 'indigo',
+      onClick: balanceTeamsByReunion,
+      disabledInManual: true,
+    },
+    {
+      id: 'winRate',
+      title: 'Win Rate',
+      description: 'Balance teams by average player win rates',
+      icon: <TrendingUp size={22} />,
+      colorClass: 'rose',
+      onClick: balanceTeamsByWinRate,
+      disabledInManual: true,
+    },
+    {
+      id: 'random',
+      title: 'Random',
+      description: 'Completely random team assignment',
+      icon: <Shuffle size={22} />,
+      colorClass: 'purple',
+      onClick: randomizeTeams,
+      disabledInManual: true,
+    },
+    {
+      id: 'custom',
+      title: 'Custom',
+      description: 'Blend multiple factors with your own weights',
+      icon: <Sliders size={22} />,
+      colorClass: 'cyan',
+      onClick: () => setShowCustomModal(true),
+      disabledInManual: true,
+    },
+    {
+      id: 'manual',
+      title: 'Manual',
+      description: 'Assign players to teams yourself',
+      icon: <Users size={22} />,
+      colorClass: 'gray',
+      onClick: toggleManualMode,
+      disabledInManual: false,
+    },
+  ];
   
   return (
     <div className="bg-gray-800 rounded-lg p-6">
@@ -543,209 +1404,40 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
             )}
           </div>
           
-          {/* Team Generation Controls - SIMPLIFIED LAYOUT */}
+          {/* Team Generation Controls - Card-based Layout */}
           <div className="mb-8">
-            {/* Balance Teams Box */}
-            <div className="mb-4">
-              <div className="bg-gray-700/30 p-4 rounded-lg mx-auto max-w-2xl">
-                {/* Balance Teams Header */}
-                <div className="flex items-center justify-center bg-gray-700/80 p-2 rounded-t-lg mb-3">
-                  <Award size={18} className="mr-2 text-blue-400" />
-                  <span className="font-medium">Balance Teams</span>
-                </div>
-                
-                {/* Balance Team Buttons - Vertical on mobile, horizontal on larger screens */}
-                <div className="flex flex-col sm:flex-row justify-center gap-3">
-                  {/* Balance by Ranking Button */}
-                  <div className="hidden sm:block">
-                    <EnhancedTooltip text={tooltips.ranking} maxWidth="max-w-md">
-                      <button
-                        onClick={balanceTeams}
-                        disabled={selectedPlayers.length < 4 || isBalancing || manualMode}
-                        className={`px-4 py-3 w-full rounded-lg flex items-center justify-center ${
-                          selectedPlayers.length < 4 || isBalancing || manualMode 
-                            ? 'opacity-50 cursor-not-allowed bg-gray-600' 
-                            : 'bg-blue-600 hover:bg-blue-500'
-                        }`}
-                      >
-                        {isBalancing ? (
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        ) : (
-                          <Trophy size={18} className="mr-2" />
-                        )}
-                        <span>On Ranking</span>
-                      </button>
-                    </EnhancedTooltip>
-                  </div>
-                  
-                  {/* Mobile version without tooltip */}
-                  <div className="sm:hidden">
-                    <button
-                      onClick={balanceTeams}
-                      disabled={selectedPlayers.length < 4 || isBalancing || manualMode}
-                      className={`px-4 py-3 w-full rounded-lg flex items-center justify-center ${
-                        selectedPlayers.length < 4 || isBalancing || manualMode 
-                          ? 'opacity-50 cursor-not-allowed bg-gray-600' 
-                          : 'bg-blue-600 hover:bg-blue-500'
-                      }`}
-                    >
-                      {isBalancing ? (
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      ) : (
-                        <Trophy size={18} className="mr-2" />
-                      )}
-                      <span>On Ranking</span>
-                    </button>
-                  </div>
-                  
-                  {/* Balance by Experience Button */}
-                  <div className="hidden sm:block">
-                    <EnhancedTooltip text={tooltips.experience} maxWidth="max-w-md">
-                      <button
-                        onClick={balanceTeamsByExperience}
-                        disabled={selectedPlayers.length < 4 || isBalancing || manualMode}
-                        className={`px-4 py-3 w-full rounded-lg flex items-center justify-center ${
-                          selectedPlayers.length < 4 || isBalancing || manualMode 
-                            ? 'opacity-50 cursor-not-allowed bg-gray-600' 
-                            : 'bg-green-600 hover:bg-green-500'
-                        }`}
-                      >
-                        {isBalancing ? (
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        ) : (
-                          <Clock size={18} className="mr-2" />
-                        )}
-                        <span>On Experience</span>
-                      </button>
-                    </EnhancedTooltip>
-                  </div>
-                  
-                  {/* Mobile version without tooltip */}
-                  <div className="sm:hidden">
-                    <button
-                      onClick={balanceTeamsByExperience}
-                      disabled={selectedPlayers.length < 4 || isBalancing || manualMode}
-                      className={`px-4 py-3 w-full rounded-lg flex items-center justify-center ${
-                        selectedPlayers.length < 4 || isBalancing || manualMode 
-                          ? 'opacity-50 cursor-not-allowed bg-gray-600' 
-                          : 'bg-green-600 hover:bg-green-500'
-                      }`}
-                    >
-                      {isBalancing ? (
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      ) : (
-                        <Clock size={18} className="mr-2" />
-                      )}
-                      <span>On Experience</span>
-                    </button>
-                  </div>
-                  
-                  {/* Random Teams Button */}
-                  <div className="hidden sm:block">
-                    <EnhancedTooltip text={tooltips.random} maxWidth="max-w-md">
-                      <button
-                        onClick={randomizeTeams}
-                        disabled={selectedPlayers.length < 4 || manualMode}
-                        className={`px-4 py-3 w-full rounded-lg flex items-center justify-center ${
-                          selectedPlayers.length < 4 || manualMode 
-                            ? 'opacity-50 cursor-not-allowed bg-gray-600' 
-                            : 'bg-purple-600 hover:bg-purple-500'
-                        }`}
-                      >
-                        <Shuffle size={18} className="mr-2" />
-                        <span>Random</span>
-                      </button>
-                    </EnhancedTooltip>
-                  </div>
-                  
-                  {/* Mobile version without tooltip */}
-                  <div className="sm:hidden">
-                    <button
-                      onClick={randomizeTeams}
-                      disabled={selectedPlayers.length < 4 || manualMode}
-                      className={`px-4 py-3 w-full rounded-lg flex items-center justify-center ${
-                        selectedPlayers.length < 4 || manualMode 
-                          ? 'opacity-50 cursor-not-allowed bg-gray-600' 
-                          : 'bg-purple-600 hover:bg-purple-500'
-                      }`}
-                    >
-                      <Shuffle size={18} className="mr-2" />
-                      <span>Random</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
+            <div className="flex items-center justify-center mb-4">
+              <Award size={20} className="mr-2 text-blue-400" />
+              <h3 className="text-lg font-semibold">Balance Teams</h3>
             </div>
-            
-            {/* Manual Mode and Reset Teams Buttons - Centered below Balance Teams */}
-            <div className="flex flex-col sm:flex-row justify-center gap-4">
-              {/* Manual Mode Button - Desktop with tooltip */}
-              <div className="hidden sm:block">
-                <EnhancedTooltip text={tooltips.manual} maxWidth="max-w-md">
-                  <button
-                    onClick={toggleManualMode}
-                    disabled={selectedPlayers.length < 4}
-                    className={`px-4 py-3 w-full rounded-lg flex items-center justify-center ${
-                      selectedPlayers.length < 4 
-                        ? 'opacity-50 cursor-not-allowed bg-gray-600' 
-                        : manualMode 
-                          ? 'bg-blue-600 hover:bg-blue-500' 
-                          : 'bg-gray-700 hover:bg-gray-600'
-                    }`}
-                  >
-                    <Users size={18} className="mr-2" />
-                    <span>Manual Mode</span>
-                  </button>
-                </EnhancedTooltip>
-              </div>
-              
-              {/* Manual Mode Button - Mobile without tooltip */}
-              <div className="sm:hidden">
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-w-4xl mx-auto">
+              {balanceOptions.map(option => (
+                <BalanceOptionCard
+                  key={option.id}
+                  title={option.title}
+                  description={option.description}
+                  icon={option.icon}
+                  colorClass={option.colorClass}
+                  onClick={option.onClick}
+                  disabled={selectedPlayers.length < 4 || isBalancing || (option.disabledInManual && manualMode)}
+                  isActive={option.id === 'manual' && manualMode}
+                />
+              ))}
+            </div>
+
+            {/* Reset Teams Button - Only shown when teams exist */}
+            {(team1.length > 0 || team2.length > 0) && (
+              <div className="flex justify-center mt-4">
                 <button
-                  onClick={toggleManualMode}
-                  disabled={selectedPlayers.length < 4}
-                  className={`px-4 py-3 w-full rounded-lg flex items-center justify-center ${
-                    selectedPlayers.length < 4 
-                      ? 'opacity-50 cursor-not-allowed bg-gray-600' 
-                      : manualMode 
-                        ? 'bg-blue-600 hover:bg-blue-500' 
-                        : 'bg-gray-700 hover:bg-gray-600'
-                  }`}
+                  onClick={resetTeams}
+                  className="px-4 py-3 bg-red-700 hover:bg-red-600 rounded-lg flex items-center justify-center"
                 >
-                  <Users size={18} className="mr-2" />
-                  <span>Manual Mode</span>
+                  <RefreshCw size={18} className="mr-2" />
+                  <span>Reset Teams</span>
                 </button>
               </div>
-              
-              {/* Reset Teams Button - Only shown when teams exist */}
-              {(team1.length > 0 || team2.length > 0) && (
-                <>
-                  {/* Desktop with tooltip */}
-                  <div className="hidden sm:block">
-                    <EnhancedTooltip text={tooltips.reset} maxWidth="max-w-md">
-                      <button
-                        onClick={resetTeams}
-                        className="px-4 py-3 w-full bg-red-700 hover:bg-red-600 rounded-lg flex items-center justify-center"
-                      >
-                        <RefreshCw size={18} className="mr-2" />
-                        <span>Reset Teams</span>
-                      </button>
-                    </EnhancedTooltip>
-                  </div>
-                  
-                  {/* Mobile without tooltip */}
-                  <div className="sm:hidden">
-                    <button
-                      onClick={resetTeams}
-                      className="px-4 py-3 w-full bg-red-700 hover:bg-red-600 rounded-lg flex items-center justify-center"
-                    >
-                      <RefreshCw size={18} className="mr-2" />
-                      <span>Reset Teams</span>
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+            )}
           </div>
           
           {/* Teams Display */}
@@ -759,7 +1451,15 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                     Titans Team
                     {team1.length > 0 && (
                       <span className="ml-3 text-sm font-normal">
-                        Avg Skill: {Math.round(team1.reduce((sum, p) => sum + dbService.getDisplayRating(p), 0) / team1.length)}
+                        {lastBalanceMode === 'novel' && novelStats ? (
+                          <>Avg Familiarity: {novelStats.avgFamiliarity.toFixed(1)}</>
+                        ) : lastBalanceMode === 'reunion' && reunionStats ? (
+                          <>Avg Days Apart: {formatDaysSinceTeamed(reunionStats.avgDaysSinceTeamed)}</>
+                        ) : lastBalanceMode === 'winRate' && winRateStats ? (
+                          <>Avg Win Rate: {(winRateStats.team1AvgWinRate * 100).toFixed(1)}%</>
+                        ) : (
+                          <>Avg Skill: {Math.round(team1.reduce((sum, p) => sum + dbService.getDisplayRating(p), 0) / team1.length)}</>
+                        )}
                       </span>
                     )}
                   </h3>
@@ -778,31 +1478,14 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                         </div>
                         
                         {manualMode && (
-                          <>
-                            {/* Desktop with tooltip */}
-                            <div className="hidden sm:block">
-                              <EnhancedTooltip text="Move to Atlanteans team">
-                                <button
-                                  onClick={() => assignPlayerToTeam(player, 2)}
-                                  className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-red-400 hover:text-red-300"
-                                  aria-label="Move to Atlanteans"
-                                >
-                                  <ArrowRight size={16} />
-                                </button>
-                              </EnhancedTooltip>
-                            </div>
-                            
-                            {/* Mobile without tooltip */}
-                            <div className="sm:hidden">
-                              <button
-                                onClick={() => assignPlayerToTeam(player, 2)}
-                                className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-red-400 hover:text-red-300"
-                                aria-label="Move to Atlanteans"
-                              >
-                                <ArrowRight size={16} />
-                              </button>
-                            </div>
-                          </>
+                          <button
+                            onClick={() => assignPlayerToTeam(player, 2)}
+                            className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-red-400 hover:text-red-300"
+                            aria-label="Move to Atlanteans"
+                            title="Move to Atlanteans"
+                          >
+                            <ArrowRight size={16} />
+                          </button>
                         )}
                       </div>
                     ))}
@@ -816,7 +1499,15 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                     Atlanteans Team
                     {team2.length > 0 && (
                       <span className="ml-3 text-sm font-normal">
-                        Avg Skill: {Math.round(team2.reduce((sum, p) => sum + dbService.getDisplayRating(p), 0) / team2.length)}
+                        {lastBalanceMode === 'novel' && novelStats ? (
+                          <>Avg Familiarity: {novelStats.avgFamiliarity.toFixed(1)}</>
+                        ) : lastBalanceMode === 'reunion' && reunionStats ? (
+                          <>Avg Days Apart: {formatDaysSinceTeamed(reunionStats.avgDaysSinceTeamed)}</>
+                        ) : lastBalanceMode === 'winRate' && winRateStats ? (
+                          <>Avg Win Rate: {(winRateStats.team2AvgWinRate * 100).toFixed(1)}%</>
+                        ) : (
+                          <>Avg Skill: {Math.round(team2.reduce((sum, p) => sum + dbService.getDisplayRating(p), 0) / team2.length)}</>
+                        )}
                       </span>
                     )}
                   </h3>
@@ -835,38 +1526,80 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                         </div>
                         
                         {manualMode && (
-                          <>
-                            {/* Desktop with tooltip */}
-                            <div className="hidden sm:block">
-                              <EnhancedTooltip text="Move to Titans team">
-                                <button
-                                  onClick={() => assignPlayerToTeam(player, 1)}
-                                  className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-blue-400 hover:text-blue-300"
-                                  aria-label="Move to Titans"
-                                >
-                                  <ArrowLeft size={16} />
-                                </button>
-                              </EnhancedTooltip>
-                            </div>
-                            
-                            {/* Mobile without tooltip */}
-                            <div className="sm:hidden">
-                              <button
-                                onClick={() => assignPlayerToTeam(player, 1)}
-                                className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-blue-400 hover:text-blue-300"
-                                aria-label="Move to Titans"
-                              >
-                                <ArrowLeft size={16} />
-                              </button>
-                            </div>
-                          </>
+                          <button
+                            onClick={() => assignPlayerToTeam(player, 1)}
+                            className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-blue-400 hover:text-blue-300"
+                            aria-label="Move to Titans"
+                            title="Move to Titans"
+                          >
+                            <ArrowLeft size={16} />
+                          </button>
                         )}
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
-              
+
+              {/* Novelty Summary Banner */}
+              {lastBalanceMode === 'novel' && novelStats && team1.length > 0 && team2.length > 0 && (
+                <div className="mt-4 p-4 bg-amber-900/30 border border-amber-700 rounded-lg">
+                  <div className="flex items-center">
+                    <Sparkles size={18} className="mr-2 text-amber-400" />
+                    <span className="text-amber-200">
+                      Novel Match: Avg {novelStats.avgFamiliarity.toFixed(1)} games together per pair
+                      {novelStats.avgFamiliarity === 0 && " (Perfect novelty - no repeat teammates!)"}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Reunion Summary Banner */}
+              {lastBalanceMode === 'reunion' && reunionStats && team1.length > 0 && team2.length > 0 && (
+                <div className="mt-4 p-4 bg-indigo-900/30 border border-indigo-700 rounded-lg">
+                  <div className="flex items-center">
+                    <Clock3 size={18} className="mr-2 text-indigo-400" />
+                    <span className="text-indigo-200">
+                      Reunion Match: Avg {formatDaysSinceTeamed(reunionStats.avgDaysSinceTeamed)} since teammates last played together
+                      {reunionStats.avgDaysSinceTeamed >= NEVER_TEAMED_DAYS && " (All new teammate pairings!)"}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Win Rate Summary Banner */}
+              {lastBalanceMode === 'winRate' && winRateStats && team1.length > 0 && team2.length > 0 && (
+                <div className="mt-4 p-4 bg-rose-900/30 border border-rose-700 rounded-lg">
+                  <div className="flex items-center">
+                    <TrendingUp size={18} className="mr-2 text-rose-400" />
+                    <span className="text-rose-200">
+                      Win Rate Match: Titans {(winRateStats.team1AvgWinRate * 100).toFixed(1)}% vs Atlanteans {(winRateStats.team2AvgWinRate * 100).toFixed(1)}%
+                      {winRateStats.difference < 0.01 && " (Perfect balance!)"}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Custom Match Summary Banner */}
+              {customStats && team1.length > 0 && team2.length > 0 && (
+                <div className="mt-4 p-4 bg-cyan-900/30 border border-cyan-700 rounded-lg">
+                  <div className="flex items-center">
+                    <Sliders size={18} className="mr-2 text-cyan-400" />
+                    <span className="text-cyan-200">
+                      Custom Match: Weighted score {(customStats.score * 100).toFixed(1)}%
+                      {' '}(
+                      {customStats.weights.ranking > 0 && `Skill ${customStats.weights.ranking}%`}
+                      {customStats.weights.experience > 0 && `${customStats.weights.ranking > 0 ? ', ' : ''}Exp ${customStats.weights.experience}%`}
+                      {customStats.weights.novel > 0 && `${(customStats.weights.ranking > 0 || customStats.weights.experience > 0) ? ', ' : ''}Novel ${customStats.weights.novel}%`}
+                      {customStats.weights.reunion > 0 && `${(customStats.weights.ranking > 0 || customStats.weights.experience > 0 || customStats.weights.novel > 0) ? ', ' : ''}Reunion ${customStats.weights.reunion}%`}
+                      {customStats.weights.winRate > 0 && `${(customStats.weights.ranking > 0 || customStats.weights.experience > 0 || customStats.weights.novel > 0 || customStats.weights.reunion > 0) ? ', ' : ''}WinRate ${customStats.weights.winRate}%`}
+                      {customStats.weights.random > 0 && `${(customStats.weights.ranking > 0 || customStats.weights.experience > 0 || customStats.weights.novel > 0 || customStats.weights.reunion > 0 || customStats.weights.winRate > 0) ? ', ' : ''}Random ${customStats.weights.random}%`}
+                      )
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Use These Teams Button */}
               {team1.length > 0 && team2.length > 0 && onUseTeams && (
                 <div className="mt-6 flex justify-center">
@@ -970,7 +1703,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
               <p className="flex items-start">
                 <Info size={16} className="mr-2 text-blue-400 mt-0.5 flex-shrink-0" />
                 <span>
-                  Manual Mode allows you to assign players to teams directly. 
+                  Manual Mode allows you to assign players to teams directly.
                   Use the arrow buttons to move players between teams or the team buttons for unassigned players.
                 </span>
               </p>
@@ -978,6 +1711,15 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
           )}
         </div>
       )}
+
+      {/* Custom Match Maker Modal */}
+      <CustomMatchMakerModal
+        isOpen={showCustomModal}
+        onClose={() => setShowCustomModal(false)}
+        onGenerate={balanceTeamsByCustom}
+        disabled={selectedPlayers.length < 4}
+        isGenerating={isBalancing}
+      />
     </div>
   );
 };
