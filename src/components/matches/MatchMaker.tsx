@@ -1017,6 +1017,16 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
         : (config.rawScores.reunion - reunionMin) / (reunionMax - reunionMin);
     }
 
+    // Normalize random values so min=0 and max=1
+    const randomMin = Math.min(...configurations.map(c => c.normalizedScores.random));
+    const randomMax = Math.max(...configurations.map(c => c.normalizedScores.random));
+
+    for (const config of configurations) {
+      config.normalizedScores.random = randomMax === randomMin
+        ? 1
+        : (config.normalizedScores.random - randomMin) / (randomMax - randomMin);
+    }
+
     return configurations;
   };
 

@@ -126,6 +126,13 @@ const CustomMatchMakerModal: React.FC<CustomMatchMakerModalProps> = ({
     }
   };
 
+  // Rename a preset
+  const handleRenamePreset = (presetId: string, newName: string) => {
+    setPresets(prev => prev.map(p =>
+      p.id === presetId ? { ...p, name: newName } : p
+    ));
+  };
+
   // Handle generate
   const handleGenerate = () => {
     if (isValid && !disabled && !isGenerating) {
@@ -229,7 +236,9 @@ const CustomMatchMakerModal: React.FC<CustomMatchMakerModalProps> = ({
               onSelectPreset={handleSelectPreset}
               onSaveClick={() => setShowSaveModal(true)}
               onDeletePreset={handleDeletePreset}
+              onRenamePreset={handleRenamePreset}
               hasUnsavedChanges={hasUnsavedChanges}
+              existingNames={existingNames}
             />
           </div>
         </div>
