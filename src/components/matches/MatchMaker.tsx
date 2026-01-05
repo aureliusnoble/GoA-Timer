@@ -4,6 +4,7 @@ import { ChevronLeft, Users, Shuffle, Award, Info, Plus, ArrowRight, ArrowLeft, 
 import { DBPlayer } from '../../services/DatabaseService';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
+import { useDataSource } from '../../hooks/useDataSource';
 import { CustomMatchMakerModal, MatchMakerWeights, ScoredConfiguration } from './CustomMatchMaker';
 
 export type MatchesView = 'menu' | 'player-stats' | 'match-history' | 'match-maker';
@@ -124,6 +125,13 @@ const WinProbabilityVisualization: React.FC<{
 
 const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
   const { playSound } = useSound();
+  const {
+    isViewMode,
+    getAllPlayers,
+    getAllMatches,
+    getMatchPlayers,
+    getPlayerDisplayRating,
+  } = useDataSource();
   const [allPlayers, setAllPlayers] = useState<DBPlayer[]>([]);
   const [selectedPlayers, setSelectedPlayers] = useState<DBPlayer[]>([]);
   const [team1, setTeam1] = useState<DBPlayer[]>([]);
@@ -171,15 +179,15 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     const loadPlayers = async () => {
       setLoading(true);
       try {
-        // Get all players from the database
-        const players = await dbService.getAllPlayers();
-        
+        // Get all players (works in both normal and view mode)
+        const players = await getAllPlayers();
+
         // Filter out players with no match history
         const playersWithMatches = players.filter(player => player.totalGames > 0);
-        
+
         // Sort by name
         playersWithMatches.sort((a, b) => a.name.localeCompare(b.name));
-        
+
         setAllPlayers(playersWithMatches);
       } catch (error) {
         console.error('Error loading players:', error);
@@ -187,22 +195,28 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
         setLoading(false);
       }
     };
-    
+
     loadPlayers();
-  }, []);
+  }, [getAllPlayers]);
   
-  // Calculate win probability when teams change
+  // Calculate win probability when teams change (not available in view mode)
   useEffect(() => {
     const calculateProbability = async () => {
+      // Skip win probability calculation in view mode (requires database access)
+      if (isViewMode) {
+        setWinProbability(null);
+        return;
+      }
+
       if (team1.length > 0 && team2.length > 0) {
         try {
           // Get player IDs for both teams
           const team1Ids = team1.map(p => p.id);
           const team2Ids = team2.map(p => p.id);
-          
+
           // Calculate win probability with confidence intervals using the database service
           const result = await dbService.calculateWinProbabilityWithCI(team1Ids, team2Ids);
-          
+
           setWinProbability(result);
         } catch (error) {
           console.error('Error calculating win probability:', error);
@@ -212,9 +226,9 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
         setWinProbability(null);
       }
     };
-    
+
     calculateProbability();
-  }, [team1, team2]);
+  }, [team1, team2, isViewMode]);
   
   // Handle back navigation with sound
   const handleBack = () => {
@@ -333,10 +347,10 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     }
 
     // Get all matches and count teammate occurrences
-    const allMatches = await dbService.getAllMatches();
+    const allMatches = await getAllMatches();
 
     for (const match of allMatches) {
-      const matchPlayers = await dbService.getMatchPlayers(match.id);
+      const matchPlayers = await getMatchPlayers(match.id);
 
       // Group players by team, only including selected players
       const titanPlayers = matchPlayers
@@ -526,11 +540,11 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     }
 
     // Get all matches sorted by date descending (most recent first)
-    const allMatches = await dbService.getAllMatches();
+    const allMatches = await getAllMatches();
     allMatches.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     for (const match of allMatches) {
-      const matchPlayers = await dbService.getMatchPlayers(match.id);
+      const matchPlayers = await getMatchPlayers(match.id);
       const matchDate = new Date(match.date);
 
       // Group players by team, only including selected players
@@ -781,7 +795,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     try {
       const { team1, team2 } = findOptimalTeams(
         selectedPlayers,
-        (p) => dbService.getDisplayRating(p)
+        (p) => getPlayerDisplayRating(p)
       );
 
       setTeam1(team1);
@@ -907,8 +921,8 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
       const team2 = team2Indices.map(i => sorted[i]);
 
       // Ranking: skill difference (minimize)
-      const team1AvgSkill = team1.reduce((sum, p) => sum + dbService.getDisplayRating(p), 0) / team1.length;
-      const team2AvgSkill = team2.reduce((sum, p) => sum + dbService.getDisplayRating(p), 0) / team2.length;
+      const team1AvgSkill = team1.reduce((sum, p) => sum + getPlayerDisplayRating(p), 0) / team1.length;
+      const team2AvgSkill = team2.reduce((sum, p) => sum + getPlayerDisplayRating(p), 0) / team2.length;
       const rankingRaw = Math.abs(team1AvgSkill - team2AvgSkill);
 
       // Experience: games difference (minimize)
@@ -1390,7 +1404,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                       <div className="flex flex-col items-center">
                         <div className="font-medium mb-1 truncate w-full text-center">{player.name}</div>
                         <div className={`text-sm mb-1`}>
-                          ({dbService.getDisplayRating(player)})
+                          ({getPlayerDisplayRating(player)})
                         </div>
                         <div className="text-xs text-gray-400">
                           W: {player.wins} L: {player.losses}
@@ -1468,7 +1482,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                         ) : lastBalanceMode === 'winRate' && winRateStats ? (
                           <>Avg Win Rate: {(winRateStats.team1AvgWinRate * 100).toFixed(1)}%</>
                         ) : (
-                          <>Avg Skill: {Math.round(team1.reduce((sum, p) => sum + dbService.getDisplayRating(p), 0) / team1.length)}</>
+                          <>Avg Skill: {Math.round(team1.reduce((sum, p) => sum + getPlayerDisplayRating(p), 0) / team1.length)}</>
                         )}
                       </span>
                     )}
@@ -1483,7 +1497,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                         <div>
                           <div className="font-medium">{player.name}</div>
                           <div className="text-sm text-gray-300">
-                            ({dbService.getDisplayRating(player)})
+                            ({getPlayerDisplayRating(player)})
                           </div>
                         </div>
                         
@@ -1516,7 +1530,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                         ) : lastBalanceMode === 'winRate' && winRateStats ? (
                           <>Avg Win Rate: {(winRateStats.team2AvgWinRate * 100).toFixed(1)}%</>
                         ) : (
-                          <>Avg Skill: {Math.round(team2.reduce((sum, p) => sum + dbService.getDisplayRating(p), 0) / team2.length)}</>
+                          <>Avg Skill: {Math.round(team2.reduce((sum, p) => sum + getPlayerDisplayRating(p), 0) / team2.length)}</>
                         )}
                       </span>
                     )}
@@ -1531,7 +1545,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                         <div>
                           <div className="font-medium">{player.name}</div>
                           <div className="text-sm text-gray-300">
-                            ({dbService.getDisplayRating(player)})
+                            ({getPlayerDisplayRating(player)})
                           </div>
                         </div>
                         
@@ -1642,7 +1656,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                     <div>
                       <div className="font-medium">{player.name}</div>
                       <div className="text-sm text-gray-300">
-                        ({dbService.getDisplayRating(player)})
+                        ({getPlayerDisplayRating(player)})
                       </div>
                     </div>
                     

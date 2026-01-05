@@ -1726,7 +1726,7 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
   // NEW: Handle match statistics navigation
   const handleMatchStatisticsNavigate = (view: MatchesView) => {
     // In view mode, only allow access to viewing stats, not editing/creating
-    if (isViewMode && (view === 'record-match' || view === 'match-maker')) {
+    if (isViewMode && view === 'record-match') {
       return;
     }
     setCurrentMatchView(view);
@@ -1830,12 +1830,12 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
       />
     )}
     {currentMatchView === 'match-maker' && (
-      <MatchMaker 
+      <MatchMaker
         onBack={() => handleMatchStatisticsNavigate('menu')}
-        onUseTeams={(titanPlayerNames, atlanteanPlayerNames) => {
+        onUseTeams={isViewMode ? undefined : (titanPlayerNames, atlanteanPlayerNames) => {
           // Clear existing players
           setLocalPlayers([]);
-          
+
           // Create new players based on the teams
           // First the Titans
           const newPlayers = titanPlayerNames.map((name, index) => ({
@@ -1845,7 +1845,7 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
             name,
             // No initial stats - will be created when EndOfRoundAssistant logging enabled
           }));
-          
+
           // Then add the Atlanteans with continuing IDs
           const atlanteanPlayers = atlanteanPlayerNames.map((name, index) => ({
             id: titanPlayerNames.length + index + 1,
@@ -1854,16 +1854,16 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
             name,
             // No initial stats - will be created when EndOfRoundAssistant logging enabled
           }));
-          
+
           // Combine both teams
           const allPlayers = [...newPlayers, ...atlanteanPlayers];
-          
+
           // Set the new players
           setLocalPlayers(allPlayers);
-          
+
           // Return to game setup
           setShowMatchStatistics(false);
-          
+
           // Play a sound to indicate success
           playSound('phaseChange');
         }}
