@@ -1,5 +1,5 @@
 // src/services/DatabaseService.ts
-import { Team, GameLength } from '../types';
+import { Team, GameLength, VictoryType } from '../types';
 import { rating, rate, ordinal } from 'openskill';
 import NormalDistribution from 'normal-distribution';
 import { CloudSyncService } from './supabase/CloudSyncService';
@@ -50,6 +50,7 @@ export interface DBMatch {
   titanPlayers: number;
   atlanteanPlayers: number;
   deviceId?: string;
+  victoryType?: VictoryType; // Optional for backward compatibility with legacy matches
 }
 
 // MatchPlayer database model
@@ -1453,6 +1454,7 @@ class DatabaseService {
       winningTeam: Team;
       gameLength: GameLength;
       doubleLanes: boolean;
+      victoryType?: VictoryType;
     },
     playerData: {
       id: string;
@@ -1552,7 +1554,8 @@ class DatabaseService {
       doubleLanes: matchData.doubleLanes,
       titanPlayers: titanPlayers.length,
       atlanteanPlayers: atlanteanPlayers.length,
-      deviceId: this.getDeviceId()
+      deviceId: this.getDeviceId(),
+      victoryType: matchData.victoryType
     };
     
     // Save the match

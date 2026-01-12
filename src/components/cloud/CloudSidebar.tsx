@@ -20,7 +20,7 @@ import SharePanel from './SharePanel';
 type PanelType = 'login' | 'profile' | 'friends' | 'sync' | 'share';
 
 const CloudSidebar: React.FC = () => {
-  const { user, isConfigured, isLoading } = useAuth();
+  const { user, isConfigured, isLoading, isPasswordRecoveryMode } = useAuth();
   const { playSound } = useSound();
 
   const [isCollapsed, setIsCollapsed] = useState(() => {
@@ -36,12 +36,15 @@ const CloudSidebar: React.FC = () => {
   }, [isCollapsed]);
 
   useEffect(() => {
-    if (user && activePanel === 'login') {
+    // Don't switch away from login panel if in password recovery mode
+    if (isPasswordRecoveryMode) {
+      setActivePanel('login');
+    } else if (user && activePanel === 'login') {
       setActivePanel('profile');
     } else if (!user && activePanel !== 'login') {
       setActivePanel('login');
     }
-  }, [user, activePanel]);
+  }, [user, activePanel, isPasswordRecoveryMode]);
 
   const toggleCollapsed = () => {
     playSound('buttonClick');
@@ -163,7 +166,7 @@ const CloudSidebar: React.FC = () => {
             <div className="flex items-center justify-center h-32">
               <RefreshCw size={24} className="animate-spin text-orange-400" />
             </div>
-          ) : !user ? (
+          ) : !user || isPasswordRecoveryMode ? (
             <LoginPanel />
           ) : (
             <>

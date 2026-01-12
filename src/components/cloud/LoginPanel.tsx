@@ -657,10 +657,10 @@ const LoginPanel: React.FC = () => {
 
       {/* Forgot password link (login mode only) */}
       {mode === 'login' && (
-        <div className="text-center">
+        <div className="text-center pt-2">
           <button
             onClick={handleForgotPassword}
-            className="text-gray-500 hover:text-gray-400 text-xs"
+            className="text-gray-400 hover:text-orange-400 text-sm underline"
             disabled={isSubmitting}
           >
             Forgot your password?

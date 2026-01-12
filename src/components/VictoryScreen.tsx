@@ -1,11 +1,12 @@
 // src/components/VictoryScreen.tsx
 import React, { useEffect, useState } from 'react';
-import { Team, GameLength, Player } from '../types';
+import { Team, GameLength, Player, VictoryType } from '../types';
 import { Trophy, Home, Database, AlertTriangle, CheckCircle } from 'lucide-react';
 import { useSound } from '../context/SoundContext';
 import dbService from '../services/DatabaseService';
 import EnhancedTooltip from './common/EnhancedTooltip';
 import EndOfRoundAssistant, { PlayerRoundStats } from './EndOfRoundAssistant';
+import VictoryTypeSelector from './common/VictoryTypeSelector';
 
 interface VictoryScreenProps {
   winningTeam: Team;
@@ -32,6 +33,9 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
   // NEW: State for managing final round stats collection
   const [showStatsCollection, setShowStatsCollection] = useState<boolean>(false);
   const [finalRoundStatsRecorded, setFinalRoundStatsRecorded] = useState<boolean>(false);
+  // State for victory type selection
+  const [victoryType, setVictoryType] = useState<VictoryType | undefined>(undefined);
+  const [victoryTypeError, setVictoryTypeError] = useState<string | null>(null);
   const { playSound } = useSound();
   
   useEffect(() => {
@@ -55,18 +59,27 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
   
   // Save match data to database
   const handleSaveMatchData = async () => {
+    // Validate victory type selection
+    if (!victoryType) {
+      setVictoryTypeError('Please select how the match was won');
+      playSound('buttonClick');
+      return;
+    }
+
     setSavingMatchData(true);
     setSaveError(null);
-    
+    setVictoryTypeError(null);
+
     try {
       playSound('buttonClick');
-      
+
       // Prepare match data
       const matchData = {
         date: new Date(),
         winningTeam,
         gameLength,
-        doubleLanes
+        doubleLanes,
+        victoryType
       };
       
       // Prepare player data
@@ -200,10 +213,10 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
                 onClick={handleSaveMatchData}
                 disabled={isSavingMatchData || matchDataSaved}
                 className={`px-6 py-3 rounded-lg text-white font-medium flex items-center mx-auto
-                  ${matchDataSaved 
-                    ? 'bg-green-600 cursor-default' 
-                    : winningTeam === Team.Titans 
-                      ? 'bg-blue-700 hover:bg-blue-600' 
+                  ${matchDataSaved
+                    ? 'bg-green-600 cursor-default'
+                    : winningTeam === Team.Titans
+                      ? 'bg-blue-700 hover:bg-blue-600'
                       : 'bg-red-700 hover:bg-red-600'
                   } ${isSavingMatchData ? 'opacity-70 cursor-wait' : 'opacity-100'}`}
               >
@@ -227,6 +240,27 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
             </EnhancedTooltip>
           )}
         </div>
+
+        {/* Victory Type Selection - Show before save button, hidden once saved */}
+        {animationComplete && !matchDataSaved && (
+          <div className="mt-6 p-4 bg-gray-800/80 rounded-lg max-w-md mx-auto">
+            <VictoryTypeSelector
+              value={victoryType}
+              onChange={(type) => {
+                setVictoryType(type);
+                setVictoryTypeError(null);
+                playSound('buttonClick');
+              }}
+              required={true}
+            />
+            {victoryTypeError && (
+              <div className="mt-2 text-red-400 text-sm flex items-center justify-center">
+                <AlertTriangle size={14} className="mr-1" />
+                {victoryTypeError}
+              </div>
+            )}
+          </div>
+        )}
         
         {/* Match Data Saved Confirmation - shown below the buttons */}
 

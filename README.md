@@ -117,3 +117,10 @@ New Draft Type
 - Pass
 - Select Num Players + 4 heroes at random
 - Each team chooses from these and pass them round.
+
+Win Streaks (Best and current)
+
+Card Database
+- Opening Guides
+- Build Guides
+- Voting System

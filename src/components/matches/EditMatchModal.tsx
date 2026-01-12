@@ -7,6 +7,7 @@ import dbService, { DBMatch, DBMatchPlayer, ValidationResult } from '../../servi
 import { heroes } from '../../data/heroes';
 import HeroSelector from './HeroSelector';
 import EnhancedTooltip from '../common/EnhancedTooltip';
+import VictoryTypeSelector from '../common/VictoryTypeSelector';
 
 interface EditMatchModalProps {
   isOpen: boolean;
@@ -465,6 +466,15 @@ const EditMatchModal: React.FC<EditMatchModalProps> = ({
                       />
                       <span className="text-gray-300">Double Lanes</span>
                     </label>
+                  </div>
+
+                  {/* Victory Type */}
+                  <div className="mt-4">
+                    <VictoryTypeSelector
+                      value={matchData.victoryType}
+                      onChange={(type) => updateMatchField('victoryType', type)}
+                      showNotRecorded={true}
+                    />
                   </div>
                 </div>
               </div>

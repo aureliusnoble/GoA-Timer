@@ -10,6 +10,9 @@ export enum GameLength {
   Long = 'long'
 }
 
+// Victory condition types for match recording
+export type VictoryType = 'throne' | 'wave' | 'kills';
+
 export enum Lane {
   Top = 'top',
   Bottom = 'bottom',

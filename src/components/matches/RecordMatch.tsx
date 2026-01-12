@@ -1,11 +1,12 @@
 // src/components/matches/RecordMatch.tsx
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Calendar, Shield, Users, Check, HelpCircle, Plus, Save, ArrowDown, ArrowUp, Minus, Sword, Heart, HandHelping, Coins, Target, Star, Database } from 'lucide-react';
-import { Team, GameLength, Hero } from '../../types';
+import { ChevronLeft, Calendar, Shield, Users, Check, HelpCircle, Plus, Save, ArrowDown, ArrowUp, Minus, Sword, Heart, HandHelping, Coins, Target, Star, Database, Trophy } from 'lucide-react';
+import { Team, GameLength, Hero, VictoryType } from '../../types';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
 import { getAllExpansions, filterHeroesByExpansions } from '../../data/heroes';
 import PlayerNameInput from '../PlayerNameInput';
+import VictoryTypeSelector from '../common/VictoryTypeSelector';
 
 interface RecordMatchProps {
   onBack: () => void;
@@ -56,6 +57,7 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
   const [gameLength, setGameLength] = useState<GameLength>(GameLength.Long);
   const [doubleLanes, setDoubleLanes] = useState<boolean>(false);
   const [winningTeam, setWinningTeam] = useState<Team>(Team.Titans);
+  const [victoryType, setVictoryType] = useState<VictoryType | undefined>(undefined);
   const [players, setPlayers] = useState<PlayerEntry[]>([]);
   const [showHeroSelector, setShowHeroSelector] = useState<boolean>(false);
   const [currentPlayerIndex, setCurrentPlayerIndex] = useState<number>(-1);
@@ -77,6 +79,7 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
     heroDuplicates?: string;
     teamBalance?: string;
     stats?: string;
+    victoryType?: string;
   }>({});
   
   // Track duplicate player names and hero IDs
@@ -467,7 +470,13 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
       heroDuplicates?: string;
       teamBalance?: string;
       stats?: string;
+      victoryType?: string;
     } = {};
+
+    // Check if victory type is selected
+    if (!victoryType) {
+      errors.victoryType = 'Please select how the match was won';
+    }
     
     // Check if date is valid
     if (!matchDate) {
@@ -578,7 +587,8 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
         date: new Date(`${matchDate}T${matchTime || '00:00'}`),
         winningTeam,
         gameLength,
-        doubleLanes
+        doubleLanes,
+        victoryType
       };
       
       // Create player data array
@@ -625,11 +635,12 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
       
       // Show success message
       setSuccessMessage(`Match successfully recorded!`);
-      
+
       // Reset form for a new entry
       setPlayers([]);
       setMatchDate(new Date().toISOString().split('T')[0]);
       setMatchTime(new Date().toTimeString().split(' ')[0].substring(0, 5));
+      setVictoryType(undefined);
       
     } catch (error) {
       console.error('Error recording match:', error);
@@ -1128,8 +1139,8 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
             <button
               onClick={() => setWinningTeam(Team.Atlanteans)}
               className={`p-4 rounded-lg border-2 ${
-                winningTeam === Team.Atlanteans 
-                  ? 'border-red-500 bg-red-900/50' 
+                winningTeam === Team.Atlanteans
+                  ? 'border-red-500 bg-red-900/50'
                   : 'border-gray-600 bg-gray-800 hover:bg-gray-700'
               } flex items-center`}
             >
@@ -1140,7 +1151,23 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
             </button>
           </div>
         </div>
-        
+
+        {/* Victory Type Section */}
+        <div className="bg-gray-700 rounded-lg p-4">
+          <VictoryTypeSelector
+            value={victoryType}
+            onChange={(type) => {
+              playSound('buttonClick');
+              setVictoryType(type);
+              setFormErrors({ ...formErrors, victoryType: undefined });
+            }}
+            required={true}
+          />
+          {formErrors.victoryType && (
+            <div className="text-red-400 text-sm mt-2">{formErrors.victoryType}</div>
+          )}
+        </div>
+
         {/* Submit Button */}
         <div className="flex justify-center mt-6">
           <button
@@ -1329,17 +1356,6 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
 };
 
 // Missing components for the code to work
-const Trophy: React.FC<{ size: number, className?: string }> = ({ size, className }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
-    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
-    <path d="M4 22h16"></path>
-    <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path>
-    <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path>
-    <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
-  </svg>
-);
-
 const Search: React.FC<{ size: number, className?: string }> = ({ size, className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
     <circle cx="11" cy="11" r="8"></circle>

@@ -64,6 +64,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [isConfigured]);
 
   useEffect(() => {
+    // Check URL for recovery tokens on initial load
+    // Supabase can redirect with either:
+    // - Hash: #access_token=...&type=recovery (implicit flow)
+    // - Query: ?code=xxx&type=recovery (PKCE flow)
+    const checkUrlForRecovery = () => {
+      console.log('[AuthContext] Checking URL for recovery...');
+      console.log('[AuthContext] Full URL:', window.location.href);
+      console.log('[AuthContext] Hash:', window.location.hash);
+      console.log('[AuthContext] Search:', window.location.search);
+
+      // Check hash fragment (implicit flow)
+      const hash = window.location.hash;
+      if (hash) {
+        const hashParams = new URLSearchParams(hash.substring(1));
+        const hashType = hashParams.get('type');
+        console.log('[AuthContext] Hash params - type:', hashType);
+        if (hashType === 'recovery') {
+          console.log('[AuthContext] Detected recovery from URL hash');
+          return true;
+        }
+      }
+
+      // Check query parameters (PKCE flow)
+      const searchParams = new URLSearchParams(window.location.search);
+      const queryType = searchParams.get('type');
+      console.log('[AuthContext] Query params - type:', queryType);
+      if (queryType === 'recovery') {
+        console.log('[AuthContext] Detected recovery from URL query params');
+        return true;
+      }
+
+      return false;
+    };
+
+    // Check URL immediately before setting up listener
+    const recoveryDetectedFromUrl = checkUrlForRecovery();
+
     const initAuth = async () => {
       if (!isConfigured) {
         setIsLoading(false);
@@ -80,13 +117,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(false);
     };
 
-    initAuth();
-
+    // Set up listener BEFORE calling initAuth to avoid missing events
     const unsubscribe = AuthService.onAuthStateChange(async (newUser, event) => {
+      console.log('[AuthContext] Auth state change - event:', event, 'user:', newUser?.email);
+
       setUser(newUser);
 
       // Detect password recovery mode when user clicks reset link from email
       if (event === 'PASSWORD_RECOVERY') {
+        console.log('[AuthContext] PASSWORD_RECOVERY event detected');
         setIsPasswordRecoveryMode(true);
       }
 
@@ -96,6 +135,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setProfile(null);
       }
     });
+
+    initAuth();
+
+    // If we detected recovery from URL but state wasn't set yet, ensure it's set
+    if (recoveryDetectedFromUrl) {
+      setIsPasswordRecoveryMode(true);
+    }
 
     return unsubscribe;
   }, [isConfigured, refreshProfile]);

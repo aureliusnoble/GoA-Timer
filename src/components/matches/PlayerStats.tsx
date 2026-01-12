@@ -1,19 +1,26 @@
 // src/components/matches/PlayerStats.tsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { ChevronLeft, Search, TrendingUp, Users, Swords, Info, Trophy, Medal, Hexagon, X, HelpCircle, User, Filter, ChevronDown, ChevronUp, Calendar, Network } from 'lucide-react';
-import { DBPlayer } from '../../services/DatabaseService';
+import { ChevronLeft, Search, TrendingUp, Users, Swords, Info, Trophy, Medal, Hexagon, X, HelpCircle, User, Filter, ChevronDown, ChevronUp, Calendar, Network, Crown, Flag, Skull } from 'lucide-react';
+import { DBPlayer, DBMatch } from '../../services/DatabaseService';
 import dbService, { getDisplayRating } from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
 import EnhancedTooltip from '../common/EnhancedTooltip';
 import PlayerRelationshipGraph from './PlayerRelationshipGraph';
 import { useDataSource } from '../../hooks/useDataSource';
 import { useStatsFilter } from '../../context/StatsFilterContext';
+import { Team } from '../../types';
 
 
 interface PlayerStatsProps {
   onBack: () => void;
   onViewSkillOverTime: () => void;
   onViewPlayerDetails: (playerId: string) => void;
+}
+
+interface VictoryTypeStats {
+  throne: { wins: number; total: number };
+  wave: { wins: number; total: number };
+  kills: { wins: number; total: number };
 }
 
 interface PlayerWithStats extends DBPlayer {
@@ -29,6 +36,7 @@ interface PlayerWithStats extends DBPlayer {
   hasCombatStats: boolean;
   rank: number;
   displayRating: number;
+  victoryTypeStats: VictoryTypeStats;
 }
 
 // Modal component for skill rating explanation
@@ -285,7 +293,7 @@ const RankDisplay: React.FC<{ rank: number; skill: number }> = ({ rank, skill })
 
 const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, onViewPlayerDetails }) => {
   const { playSound } = useSound();
-  const { isViewMode, isViewModeLoading, getAllPlayers, getAllMatchPlayers, getFilteredPlayerStats } = useDataSource();
+  const { isViewMode, isViewModeLoading, getAllPlayers, getAllMatchPlayers, getAllMatches, getFilteredPlayerStats } = useDataSource();
   const { setPlayerStatsFilters } = useStatsFilter();
   const [players, setPlayers] = useState<PlayerWithStats[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -354,6 +362,38 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
       try {
         let playersWithStats: PlayerWithStats[];
 
+        // Fetch matches for victory type stats
+        const allMatches = await getAllMatches();
+        const matchMap = new Map<string, DBMatch>();
+        allMatches.forEach(match => matchMap.set(match.id, match));
+
+        // Helper function to calculate victory type stats for a player
+        const calculateVictoryTypeStats = (
+          playerMatchIds: string[],
+          playerTeams: Map<string, Team>
+        ): VictoryTypeStats => {
+          const stats: VictoryTypeStats = {
+            throne: { wins: 0, total: 0 },
+            wave: { wins: 0, total: 0 },
+            kills: { wins: 0, total: 0 }
+          };
+
+          playerMatchIds.forEach(matchId => {
+            const match = matchMap.get(matchId);
+            if (match?.victoryType) {
+              const playerTeam = playerTeams.get(matchId);
+              const isWin = playerTeam === match.winningTeam;
+              const key = match.victoryType as keyof VictoryTypeStats;
+              stats[key].total++;
+              if (isWin) {
+                stats[key].wins++;
+              }
+            }
+          });
+
+          return stats;
+        };
+
         if (dateRange.startDate && dateRange.endDate) {
           // Use filtered player stats when date range is active (view mode aware)
           const filteredResult = await getFilteredPlayerStats(
@@ -362,30 +402,44 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
             recalculateTrueSkill
           );
 
-          playersWithStats = filteredResult.players.map(stats => ({
-            id: stats.id,
-            name: stats.name,
-            totalGames: stats.gamesPlayed,
-            wins: stats.wins,
-            losses: stats.losses,
-            mu: 0, // Not used in display
-            sigma: 0, // Not used in display
-            elo: 0, // Not used in display
-            lastPlayed: stats.lastPlayed || new Date(),
-            dateCreated: new Date(), // Not used in filtered display
-            favoriteHeroes: stats.favoriteHeroes,
-            favoriteRoles: stats.favoriteRoles,
-            winRate: stats.winRate,
-            kills: stats.kills,
-            deaths: stats.deaths,
-            assists: stats.assists,
-            kdRatio: stats.kdRatio,
-            averageGold: stats.averageGold,
-            averageMinionKills: stats.averageMinionKills,
-            hasCombatStats: stats.hasCombatStats,
-            displayRating: stats.displayRating,
-            rank: 0
-          }));
+          // Get all match players for victory type calculation
+          const allMatchPlayers = await getAllMatchPlayers();
+
+          playersWithStats = filteredResult.players.map(stats => {
+            // Find player's matches and teams for victory type stats
+            const playerMatches = allMatchPlayers.filter(mp =>
+              mp.playerId === stats.id || mp.playerId === stats.name
+            );
+            const playerMatchIds = playerMatches.map(pm => pm.matchId);
+            const playerTeams = new Map<string, Team>();
+            playerMatches.forEach(pm => playerTeams.set(pm.matchId, pm.team));
+
+            return {
+              id: stats.id,
+              name: stats.name,
+              totalGames: stats.gamesPlayed,
+              wins: stats.wins,
+              losses: stats.losses,
+              mu: 0, // Not used in display
+              sigma: 0, // Not used in display
+              elo: 0, // Not used in display
+              lastPlayed: stats.lastPlayed || new Date(),
+              dateCreated: new Date(), // Not used in filtered display
+              favoriteHeroes: stats.favoriteHeroes,
+              favoriteRoles: stats.favoriteRoles,
+              winRate: stats.winRate,
+              kills: stats.kills,
+              deaths: stats.deaths,
+              assists: stats.assists,
+              kdRatio: stats.kdRatio,
+              averageGold: stats.averageGold,
+              averageMinionKills: stats.averageMinionKills,
+              hasCombatStats: stats.hasCombatStats,
+              displayRating: stats.displayRating,
+              rank: 0,
+              victoryTypeStats: calculateVictoryTypeStats(playerMatchIds, playerTeams)
+            };
+          });
         } else {
           // Use original logic for all-time stats
           // In view mode, use shared data via hook; otherwise use dbService
@@ -442,6 +496,12 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
               // Use fresh TrueSkill rating calculation (consistent with SkillOverTime)
               const displayRating = currentRatings[player.id] || getDisplayRating(player);
 
+              // Calculate victory type stats
+              const playerMatchIds = playerMatches.map(pm => pm.matchId);
+              const playerTeams = new Map<string, Team>();
+              playerMatches.forEach(pm => playerTeams.set(pm.matchId, pm.team));
+              const victoryTypeStats = calculateVictoryTypeStats(playerMatchIds, playerTeams);
+
               return {
                 ...player,
                 favoriteHeroes,
@@ -455,7 +515,8 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
                 averageMinionKills: player.totalGames > 0 ? Math.round(minionKills / player.totalGames) : 0,
                 hasCombatStats,
                 displayRating,
-                rank: 0
+                rank: 0,
+                victoryTypeStats
               };
             })
           );
@@ -495,7 +556,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
     // Don't load data while view mode is still being determined
     if (isViewModeLoading) return;
     loadPlayers();
-  }, [isViewModeLoading, dateRange.startDate, dateRange.endDate, recalculateTrueSkill, isViewMode, getAllPlayers, getAllMatchPlayers, getFilteredPlayerStats]);
+  }, [isViewModeLoading, dateRange.startDate, dateRange.endDate, recalculateTrueSkill, isViewMode, getAllPlayers, getAllMatchPlayers, getAllMatches, getFilteredPlayerStats]);
   
   const handleBack = () => {
     playSound('buttonClick');
@@ -958,7 +1019,68 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
                           <span>Total: {player.totalGames}</span>
                         </div>
                       </div>
-                      
+
+                      {/* Victory Type Distribution - Two Bars */}
+                      {(() => {
+                        const stats = player.victoryTypeStats;
+                        const totalGamesRecorded = stats.throne.total + stats.wave.total + stats.kills.total;
+                        const totalWinsRecorded = stats.throne.wins + stats.wave.wins + stats.kills.wins;
+
+                        if (totalGamesRecorded === 0) return null;
+
+                        const types = [
+                          { key: 'throne', label: 'Throne', Icon: Crown, bgColor: 'bg-yellow-500', data: stats.throne },
+                          { key: 'wave', label: 'Wave', Icon: Flag, bgColor: 'bg-blue-500', data: stats.wave },
+                          { key: 'kills', label: 'Kills', Icon: Skull, bgColor: 'bg-red-500', data: stats.kills }
+                        ];
+
+                        const renderBar = (
+                          getValue: (t: typeof types[0]) => number,
+                          total: number,
+                          label: string
+                        ) => {
+                          const filtered = types.filter(t => getValue(t) > 0);
+                          if (filtered.length === 0) return null;
+
+                          return (
+                            <div className="mb-2">
+                              <div className="text-xs text-gray-500 mb-1">{label}</div>
+                              <div className="flex h-6 rounded overflow-hidden bg-gray-800">
+                                {filtered.map(type => {
+                                  const value = getValue(type);
+                                  const percentage = (value / total) * 100;
+                                  const Icon = type.Icon;
+
+                                  return (
+                                    <div
+                                      key={type.key}
+                                      className={`${type.bgColor} h-full flex items-center justify-center gap-1 text-white text-xs font-medium`}
+                                      style={{ width: `${percentage}%` }}
+                                      title={`${type.label}: ${value} (${Math.round(percentage)}%)`}
+                                    >
+                                      <Icon size={12} />
+                                      {percentage >= 20 && <span>{value}</span>}
+                                      {percentage >= 35 && <span className="text-white/70">({Math.round(percentage)}%)</span>}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        };
+
+                        return (
+                          <div className="mb-4">
+                            <div className="flex justify-between items-center mb-2">
+                              <div className="text-sm text-gray-400">Victory Types</div>
+                              <div className="text-xs text-gray-500">{totalGamesRecorded} of {player.totalGames} games</div>
+                            </div>
+                            {renderBar(t => t.data.total, totalGamesRecorded, 'Games by Type')}
+                            {renderBar(t => t.data.wins, totalWinsRecorded, 'Wins by Type')}
+                          </div>
+                        );
+                      })()}
+
                       {player.hasCombatStats && (
                         <div className="grid grid-cols-3 gap-2 mb-4">
                           <div className="bg-gray-800 p-2 rounded">
