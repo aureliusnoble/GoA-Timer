@@ -200,6 +200,71 @@ class AuthServiceClass {
     }
   }
 
+  async sendPasswordResetEmail(email: string): Promise<{ success: boolean; error?: string }> {
+    if (!isSupabaseConfigured() || !supabase) {
+      return { success: false, error: 'Cloud features are not configured' };
+    }
+
+    // Validate email format
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return { success: false, error: 'Please enter a valid email address' };
+    }
+
+    try {
+      // Get the redirect URL - use current origin + base path for GitHub Pages
+      const redirectUrl = window.location.origin + (import.meta.env.BASE_URL || '/');
+
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: redirectUrl,
+      });
+
+      if (error) {
+        console.error('[AuthService] Password reset error:', error);
+        // Don't reveal the actual error to prevent email enumeration
+        // Supabase may return errors for rate limiting which we should surface
+        if (error.message.toLowerCase().includes('rate') ||
+            error.message.toLowerCase().includes('limit')) {
+          return { success: false, error: 'Too many requests. Please try again later.' };
+        }
+      }
+
+      // Always return success to prevent email enumeration attacks
+      // Supabase already handles this, but we ensure it at our layer too
+      return { success: true };
+    } catch (error) {
+      console.error('[AuthService] Password reset error:', error);
+      return { success: false, error: 'An unexpected error occurred' };
+    }
+  }
+
+  async updatePasswordFromReset(newPassword: string): Promise<{ success: boolean; error?: string }> {
+    if (!isSupabaseConfigured() || !supabase) {
+      return { success: false, error: 'Cloud features are not configured' };
+    }
+
+    // Validate new password
+    const passwordError = this.validatePassword(newPassword);
+    if (passwordError) {
+      return { success: false, error: passwordError };
+    }
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) {
+        console.error('[AuthService] Update password error:', error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('[AuthService] Update password error:', error);
+      return { success: false, error: 'An unexpected error occurred' };
+    }
+  }
+
   async getSession(): Promise<Session | null> {
     if (!isSupabaseConfigured() || !supabase) {
       return null;
@@ -305,14 +370,14 @@ class AuthServiceClass {
     return { success: true };
   }
 
-  onAuthStateChange(callback: (user: User | null) => void): () => void {
+  onAuthStateChange(callback: (user: User | null, event?: string) => void): () => void {
     if (!isSupabaseConfigured() || !supabase) {
       return () => {};
     }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        callback(session?.user || null);
+      (event, session) => {
+        callback(session?.user || null, event);
       }
     );
 

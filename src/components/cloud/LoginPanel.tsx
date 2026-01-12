@@ -1,13 +1,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Eye, EyeOff, Check, X, Loader2, Mail } from 'lucide-react';
+import { Eye, EyeOff, Check, X, Loader2, Mail, KeyRound } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSound } from '../../context/SoundContext';
 import { AuthService } from '../../services/supabase/AuthService';
 
-type Mode = 'login' | 'signup';
+type Mode = 'login' | 'signup' | 'forgot-password';
 
 const LoginPanel: React.FC = () => {
-  const { login, signUp, error, clearError } = useAuth();
+  const {
+    login,
+    signUp,
+    error,
+    clearError,
+    isPasswordRecoveryMode,
+    sendPasswordResetEmail,
+    updatePasswordFromReset,
+    clearPasswordRecoveryMode,
+  } = useAuth();
   const { playSound } = useSound();
 
   const [mode, setMode] = useState<Mode>('login');
@@ -22,6 +31,9 @@ const LoginPanel: React.FC = () => {
   const [signupComplete, setSignupComplete] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
+  const [resetEmailSent, setResetEmailSent] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   // Debounced username availability check
   useEffect(() => {
@@ -46,14 +58,86 @@ const LoginPanel: React.FC = () => {
     return () => clearTimeout(timeout);
   }, [username, mode]);
 
-  const handleModeSwitch = () => {
+  const handleModeSwitch = (newMode?: Mode) => {
     playSound('buttonClick');
-    setMode(mode === 'login' ? 'signup' : 'login');
+    if (newMode) {
+      setMode(newMode);
+    } else {
+      setMode(mode === 'login' ? 'signup' : 'login');
+    }
     clearError();
     setLocalError(null);
     setUsernameAvailable(null);
     setSignupComplete(false);
     setResendSuccess(false);
+    setResetEmailSent(false);
+    setNewPassword('');
+    setConfirmPassword('');
+  };
+
+  const handleForgotPassword = () => {
+    playSound('buttonClick');
+    setMode('forgot-password');
+    clearError();
+    setLocalError(null);
+    setResetEmailSent(false);
+  };
+
+  const handleSendResetEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    playSound('buttonClick');
+
+    if (!email.trim()) {
+      setLocalError('Email is required');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setLocalError('Invalid email format');
+      return;
+    }
+
+    setLocalError(null);
+    setIsSubmitting(true);
+
+    try {
+      const result = await sendPasswordResetEmail(email);
+      if (result.success) {
+        setResetEmailSent(true);
+      }
+      // Note: We show success even if email doesn't exist (security best practice)
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    playSound('buttonClick');
+
+    // Validate new password
+    const passwordError = AuthService.validatePassword(newPassword);
+    if (passwordError) {
+      setLocalError(passwordError);
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setLocalError('Passwords do not match');
+      return;
+    }
+
+    setLocalError(null);
+    setIsSubmitting(true);
+
+    try {
+      const result = await updatePasswordFromReset(newPassword);
+      if (result.success) {
+        playSound('phaseChange');
+        // User is now logged in - AuthContext will update automatically
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleResendEmail = async () => {
@@ -136,7 +220,231 @@ const LoginPanel: React.FC = () => {
     { label: 'Number', met: /[0-9]/.test(password) },
   ];
 
+  const newPasswordRequirements = [
+    { label: '8+ characters', met: newPassword.length >= 8 },
+    { label: 'Uppercase letter', met: /[A-Z]/.test(newPassword) },
+    { label: 'Lowercase letter', met: /[a-z]/.test(newPassword) },
+    { label: 'Number', met: /[0-9]/.test(newPassword) },
+  ];
+
   const displayError = localError || error;
+
+  // Show "Set New Password" form when user clicks reset link from email
+  if (isPasswordRecoveryMode) {
+    return (
+      <div className="space-y-4">
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 bg-orange-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <KeyRound size={32} className="text-white" />
+          </div>
+          <h3 className="text-xl font-semibold text-white">
+            Set New Password
+          </h3>
+          <p className="text-gray-400 text-sm mt-1">
+            Enter your new password below
+          </p>
+        </div>
+
+        <form onSubmit={handleUpdatePassword} className="space-y-4">
+          {/* New Password */}
+          <div>
+            <label className="block text-sm text-gray-300 mb-1">New Password</label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-orange-500 pr-10"
+                placeholder="Create a strong password"
+                disabled={isSubmitting}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Confirm Password */}
+          <div>
+            <label className="block text-sm text-gray-300 mb-1">Confirm Password</label>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-orange-500"
+              placeholder="Confirm your password"
+              disabled={isSubmitting}
+            />
+          </div>
+
+          {/* Password requirements */}
+          {newPassword.length > 0 && (
+            <div className="grid grid-cols-2 gap-1 text-xs">
+              {newPasswordRequirements.map((req) => (
+                <div
+                  key={req.label}
+                  className={`flex items-center ${
+                    req.met ? 'text-green-500' : 'text-gray-500'
+                  }`}
+                >
+                  {req.met ? <Check size={12} className="mr-1" /> : <X size={12} className="mr-1" />}
+                  {req.label}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Password match indicator */}
+          {confirmPassword.length > 0 && (
+            <div className={`flex items-center text-xs ${
+              newPassword === confirmPassword ? 'text-green-500' : 'text-gray-500'
+            }`}>
+              {newPassword === confirmPassword ? (
+                <Check size={12} className="mr-1" />
+              ) : (
+                <X size={12} className="mr-1" />
+              )}
+              Passwords match
+            </div>
+          )}
+
+          {/* Error message */}
+          {displayError && (
+            <div className="bg-red-900/50 border border-red-700 rounded p-2 text-red-300 text-sm">
+              {displayError}
+            </div>
+          )}
+
+          {/* Submit button */}
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full bg-orange-600 hover:bg-orange-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded transition-colors flex items-center justify-center"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 size={18} className="animate-spin mr-2" />
+                Updating password...
+              </>
+            ) : (
+              'Update Password'
+            )}
+          </button>
+        </form>
+
+        <button
+          onClick={() => {
+            clearPasswordRecoveryMode();
+            handleModeSwitch('login');
+          }}
+          className="w-full text-gray-400 hover:text-white text-sm"
+          disabled={isSubmitting}
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  // Show success message after sending reset email
+  if (resetEmailSent) {
+    return (
+      <div className="space-y-4">
+        <div className="text-center py-6">
+          <div className="w-16 h-16 bg-orange-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Mail size={32} className="text-white" />
+          </div>
+          <h3 className="text-xl font-semibold text-white mb-2">
+            Check Your Email
+          </h3>
+          <p className="text-gray-400 text-sm mb-4">
+            If an account exists for this email, we've sent password reset instructions to:
+          </p>
+          <p className="text-orange-400 font-medium mb-4">
+            {email}
+          </p>
+          <p className="text-gray-500 text-xs">
+            Click the link in the email to reset your password. If you don't see it, check your spam folder.
+          </p>
+        </div>
+
+        <button
+          onClick={() => handleModeSwitch('login')}
+          className="w-full bg-orange-600 hover:bg-orange-500 text-white font-medium py-2 px-4 rounded transition-colors"
+        >
+          Back to Sign In
+        </button>
+      </div>
+    );
+  }
+
+  // Show forgot password form
+  if (mode === 'forgot-password') {
+    return (
+      <div className="space-y-4">
+        <div className="text-center mb-6">
+          <h3 className="text-xl font-semibold text-white">
+            Reset Password
+          </h3>
+          <p className="text-gray-400 text-sm mt-1">
+            Enter your email to receive a reset link
+          </p>
+        </div>
+
+        <form onSubmit={handleSendResetEmail} className="space-y-4">
+          {/* Email */}
+          <div>
+            <label className="block text-sm text-gray-300 mb-1">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-orange-500"
+              placeholder="you@example.com"
+              disabled={isSubmitting}
+            />
+          </div>
+
+          {/* Error message */}
+          {displayError && (
+            <div className="bg-red-900/50 border border-red-700 rounded p-2 text-red-300 text-sm">
+              {displayError}
+            </div>
+          )}
+
+          {/* Submit button */}
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full bg-orange-600 hover:bg-orange-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded transition-colors flex items-center justify-center"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 size={18} className="animate-spin mr-2" />
+                Sending...
+              </>
+            ) : (
+              'Send Reset Link'
+            )}
+          </button>
+        </form>
+
+        <div className="text-center text-sm text-gray-400">
+          <button
+            onClick={() => handleModeSwitch('login')}
+            className="text-orange-400 hover:text-orange-300"
+            disabled={isSubmitting}
+          >
+            Back to Sign In
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Show email confirmation message after successful signup
   if (signupComplete) {
@@ -188,7 +496,7 @@ const LoginPanel: React.FC = () => {
         </button>
 
         <button
-          onClick={handleModeSwitch}
+          onClick={() => handleModeSwitch('login')}
           className="w-full bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded transition-colors"
         >
           Back to Sign In
@@ -326,7 +634,7 @@ const LoginPanel: React.FC = () => {
           <>
             Don&apos;t have an account?{' '}
             <button
-              onClick={handleModeSwitch}
+              onClick={() => handleModeSwitch()}
               className="text-orange-400 hover:text-orange-300"
               disabled={isSubmitting}
             >
@@ -337,7 +645,7 @@ const LoginPanel: React.FC = () => {
           <>
             Already have an account?{' '}
             <button
-              onClick={handleModeSwitch}
+              onClick={() => handleModeSwitch()}
               className="text-orange-400 hover:text-orange-300"
               disabled={isSubmitting}
             >
@@ -346,6 +654,19 @@ const LoginPanel: React.FC = () => {
           </>
         )}
       </div>
+
+      {/* Forgot password link (login mode only) */}
+      {mode === 'login' && (
+        <div className="text-center">
+          <button
+            onClick={handleForgotPassword}
+            className="text-gray-500 hover:text-gray-400 text-xs"
+            disabled={isSubmitting}
+          >
+            Forgot your password?
+          </button>
+        </div>
+      )}
     </div>
   );
 };

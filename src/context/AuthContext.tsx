@@ -9,6 +9,7 @@ interface AuthContextType {
   isLoading: boolean;
   isConfigured: boolean;
   error: string | null;
+  isPasswordRecoveryMode: boolean;
   signUp: (data: SignUpData) => Promise<AuthResult>;
   login: (data: LoginData) => Promise<AuthResult>;
   logout: () => Promise<void>;
@@ -19,6 +20,9 @@ interface AuthContextType {
   deleteCloudData: () => Promise<{ success: boolean; error?: string }>;
   deleteAccount: () => Promise<{ success: boolean; error?: string }>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  sendPasswordResetEmail: (email: string) => Promise<{ success: boolean; error?: string }>;
+  updatePasswordFromReset: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  clearPasswordRecoveryMode: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -27,6 +31,7 @@ const AuthContext = createContext<AuthContextType>({
   isLoading: true,
   isConfigured: false,
   error: null,
+  isPasswordRecoveryMode: false,
   signUp: async () => ({ success: false }),
   login: async () => ({ success: false }),
   logout: async () => {},
@@ -37,6 +42,9 @@ const AuthContext = createContext<AuthContextType>({
   deleteCloudData: async () => ({ success: false }),
   deleteAccount: async () => ({ success: false }),
   changePassword: async () => ({ success: false }),
+  sendPasswordResetEmail: async () => ({ success: false }),
+  updatePasswordFromReset: async () => ({ success: false }),
+  clearPasswordRecoveryMode: () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -46,6 +54,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isPasswordRecoveryMode, setIsPasswordRecoveryMode] = useState(false);
   const isConfigured = isSupabaseConfigured();
 
   const refreshProfile = useCallback(async () => {
@@ -73,8 +82,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     initAuth();
 
-    const unsubscribe = AuthService.onAuthStateChange(async (newUser) => {
+    const unsubscribe = AuthService.onAuthStateChange(async (newUser, event) => {
       setUser(newUser);
+
+      // Detect password recovery mode when user clicks reset link from email
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecoveryMode(true);
+      }
+
       if (newUser) {
         await refreshProfile();
       } else {
@@ -162,6 +177,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return result;
   }, []);
 
+  const sendPasswordResetEmail = useCallback(async (email: string) => {
+    setError(null);
+    const result = await AuthService.sendPasswordResetEmail(email);
+    if (!result.success && result.error) {
+      setError(result.error);
+    }
+    return result;
+  }, []);
+
+  const updatePasswordFromReset = useCallback(async (newPassword: string) => {
+    setError(null);
+    const result = await AuthService.updatePasswordFromReset(newPassword);
+    if (!result.success && result.error) {
+      setError(result.error);
+    } else if (result.success) {
+      // Clear recovery mode after successful password update
+      setIsPasswordRecoveryMode(false);
+      await refreshProfile();
+    }
+    return result;
+  }, [refreshProfile]);
+
+  const clearPasswordRecoveryMode = useCallback(() => {
+    setIsPasswordRecoveryMode(false);
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -170,6 +211,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         isConfigured,
         error,
+        isPasswordRecoveryMode,
         signUp,
         login,
         logout,
@@ -180,6 +222,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteCloudData,
         deleteAccount,
         changePassword,
+        sendPasswordResetEmail,
+        updatePasswordFromReset,
+        clearPasswordRecoveryMode,
       }}
     >
       {children}
