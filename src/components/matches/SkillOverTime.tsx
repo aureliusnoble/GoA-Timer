@@ -196,25 +196,32 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
   }, [chartData, dateRange]);
 
   // Generate segments and participation points for a player
+  // Only shows data from their Nth participation onwards (where N = minGames)
   const getPlayerChartData = useCallback((playerName: string): PlayerChartData => {
     const data = filteredChartData;
     if (data.length < 2) return { segments: [], participationPoints: [] };
 
-    // Find first and last participation
-    let firstIdx = -1;
+    // Track participation count and find the minGames-th participation
+    let participationCount = 0;
+    let startIdx = -1;  // Index where minGames-th participation occurs
     let lastIdx = -1;
+
     for (let i = 0; i < data.length; i++) {
       if (data[i][playerName + '_participated']) {
-        if (firstIdx === -1) firstIdx = i;
+        participationCount++;
+        if (participationCount === minGames && startIdx === -1) {
+          startIdx = i;  // Start rendering from Nth game
+        }
         lastIdx = i;
       }
     }
 
-    if (firstIdx === -1) return { segments: [], participationPoints: [] };
+    // If player hasn't reached minGames participations, don't render
+    if (startIdx === -1) return { segments: [], participationPoints: [] };
 
-    // Generate segments
+    // Generate segments - starting from the minGames-th participation
     const segments: LineSegment[] = [];
-    for (let i = firstIdx; i < lastIdx; i++) {
+    for (let i = startIdx; i < lastIdx; i++) {
       const current = data[i];
       const next = data[i + 1];
       const nextParticipated = next[playerName + '_participated'];
@@ -228,9 +235,16 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
       });
     }
 
-    // Generate participation points
+    // Generate participation points - only from minGames-th participation onwards
+    let count = 0;
     const participationPoints = data
-      .filter(d => d[playerName + '_participated'])
+      .filter(d => {
+        if (d[playerName + '_participated']) {
+          count++;
+          return count >= minGames;
+        }
+        return false;
+      })
       .map(d => ({
         x: d.matchNumber,
         y: d[playerName] as number,
@@ -238,7 +252,7 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
       }));
 
     return { segments, participationPoints };
-  }, [filteredChartData]);
+  }, [filteredChartData, minGames]);
 
   const handleBack = () => {
     playSound('buttonClick');

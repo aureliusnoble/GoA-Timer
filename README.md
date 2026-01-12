@@ -91,21 +91,8 @@ This app has not been officially approved by Wolff Designa (the designers of Gua
 
 # Future
 
-Add a Builds page where users can suggest builds? Users can rate these
-Add an openings section where users can suggest openings. Users can rate these.
-Add all the card data.
-Record Build during game: items and upgrades.
 
 
-Match Types
-
-- Allow match maker in view only mode
-
-
-Record Victory Types
-- Throne Victory
-- Wave Victory
-- Kills Victory
 
 Fix bug
 - Over Time (as we increase min games should crop games before that value from hero and player stats)
@@ -124,3 +111,8 @@ Card Database
 - Opening Guides
 - Build Guides
 - Voting System
+Add a Builds page where users can suggest builds? Users can rate these
+Add an openings section where users can suggest openings. Users can rate these.
+Add all the card data.
+Record Build during game: items and upgrades.
+

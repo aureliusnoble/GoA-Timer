@@ -321,14 +321,21 @@ class GlobalStatsServiceClass {
         dateRange: { firstMatch: string; lastMatch: string } | null;
       };
 
-      // Enrich with hero icons
-      const enrichedHeroes = responseData.heroes.map(hero => {
-        const heroData = allHeroes.find(h => h.id === hero.heroId);
-        return {
-          ...hero,
-          icon: heroData?.icon || `heroes/${hero.heroName.toLowerCase().replace(/\s+/g, '')}.png`,
-        };
-      });
+      // Enrich with hero icons and apply client-side minGames truncation
+      // (ensures data starts from Nth game even if server doesn't filter correctly)
+      const enrichedHeroes = responseData.heroes
+        .map(hero => {
+          const heroData = allHeroes.find(h => h.id === hero.heroId);
+          // Filter data points to only show from minGames-th game onwards
+          const filteredDataPoints = hero.dataPoints.filter(dp => dp.gamesPlayedTotal >= minGames);
+          return {
+            ...hero,
+            icon: heroData?.icon || `heroes/${hero.heroName.toLowerCase().replace(/\s+/g, '')}.png`,
+            dataPoints: filteredDataPoints,
+          };
+        })
+        // Only include heroes that have data points meeting the threshold
+        .filter(hero => hero.dataPoints.length > 0);
 
       console.log(`[GlobalStatsService] Fetched ${enrichedHeroes.length} heroes over time`);
 
