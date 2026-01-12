@@ -64,6 +64,7 @@ export interface CloudMatch {
   titan_players: number;
   atlantean_players: number;
   device_id: string | null;
+  victory_type?: 'throne' | 'wave' | 'kills' | null;
 }
 
 export interface CloudMatchPlayer {

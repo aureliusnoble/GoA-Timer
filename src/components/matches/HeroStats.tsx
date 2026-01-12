@@ -1,6 +1,6 @@
 // src/components/matches/HeroStats.tsx
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { ChevronLeft, Search, Info, Filter, ChevronDown, ChevronUp, Shield, Calendar, Globe, Users, RefreshCw, Loader2, AlertCircle, TrendingUp, Network } from 'lucide-react';
+import { ChevronLeft, Search, Info, Filter, ChevronDown, ChevronUp, Shield, Calendar, Globe, Users, RefreshCw, Loader2, AlertCircle, TrendingUp, Network, Crown, Flag, Skull } from 'lucide-react';
 import { Hero } from '../../types';
 import { useSound } from '../../context/SoundContext';
 import EnhancedTooltip from '../common/EnhancedTooltip';
@@ -11,6 +11,13 @@ import { isSupabaseConfigured } from '../../services/supabase/SupabaseClient';
 import HeroWinRateOverTime from './HeroWinRateOverTime';
 import HeroRelationshipGraph from './HeroRelationshipGraph';
 import { useDataSource } from '../../hooks/useDataSource';
+
+// Victory type stats for heroes
+interface VictoryTypeStats {
+  throne: { wins: number; total: number };
+  wave: { wins: number; total: number };
+  kills: { wins: number; total: number };
+}
 
 // Hero statistics interface
 interface HeroStats {
@@ -23,28 +30,29 @@ interface HeroStats {
   winRate: number;
   complexity: number;
   roles: string[];
-  bestTeammates: { 
-    heroId: number, 
-    heroName: string, 
-    icon: string, 
-    winRate: number, 
-    gamesPlayed: number 
+  bestTeammates: {
+    heroId: number,
+    heroName: string,
+    icon: string,
+    winRate: number,
+    gamesPlayed: number
   }[];
-  bestAgainst: { 
-    heroId: number, 
-    heroName: string, 
-    icon: string, 
-    winRate: number, 
-    gamesPlayed: number 
+  bestAgainst: {
+    heroId: number,
+    heroName: string,
+    icon: string,
+    winRate: number,
+    gamesPlayed: number
   }[];
-  worstAgainst: { 
-    heroId: number, 
-    heroName: string, 
-    icon: string, 
-    winRate: number, 
-    gamesPlayed: number 
+  worstAgainst: {
+    heroId: number,
+    heroName: string,
+    icon: string,
+    winRate: number,
+    gamesPlayed: number
   }[];
   expansion: string;
+  victoryTypeStats?: VictoryTypeStats;
 }
 
 interface HeroStatsProps {
@@ -959,7 +967,67 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
                           <span>Total: {hero.totalGames}</span>
                         </div>
                       </div>
-                      
+
+                      {/* Victory Type Distribution */}
+                      {hero.victoryTypeStats && (() => {
+                        const stats = hero.victoryTypeStats;
+                        const totalGamesRecorded = stats.throne.total + stats.wave.total + stats.kills.total;
+                        const totalWinsRecorded = stats.throne.wins + stats.wave.wins + stats.kills.wins;
+
+                        if (totalGamesRecorded === 0) return null;
+
+                        const types = [
+                          { key: 'throne', label: 'Throne', Icon: Crown, bgColor: 'bg-yellow-500', data: stats.throne },
+                          { key: 'wave', label: 'Wave', Icon: Flag, bgColor: 'bg-blue-500', data: stats.wave },
+                          { key: 'kills', label: 'Kills', Icon: Skull, bgColor: 'bg-red-500', data: stats.kills }
+                        ];
+
+                        const renderBar = (
+                          getValue: (t: typeof types[0]) => number,
+                          total: number,
+                          label: string
+                        ) => {
+                          const filtered = types.filter(t => getValue(t) > 0);
+                          if (filtered.length === 0) return null;
+
+                          return (
+                            <div className="mb-2">
+                              <div className="text-xs text-gray-500 mb-1">{label}</div>
+                              <div className="flex h-5 rounded overflow-hidden bg-gray-800">
+                                {filtered.map(type => {
+                                  const value = getValue(type);
+                                  const percentage = (value / total) * 100;
+                                  const Icon = type.Icon;
+
+                                  return (
+                                    <div
+                                      key={type.key}
+                                      className={`${type.bgColor} h-full flex items-center justify-center gap-1 text-white text-xs font-medium`}
+                                      style={{ width: `${percentage}%` }}
+                                      title={`${type.label}: ${value} (${Math.round(percentage)}%)`}
+                                    >
+                                      <Icon size={10} />
+                                      {percentage >= 25 && <span>{value}</span>}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        };
+
+                        return (
+                          <div className="mb-4">
+                            <div className="flex justify-between items-center mb-2">
+                              <div className="text-sm text-gray-400">Victory Types</div>
+                              <div className="text-xs text-gray-500">{totalGamesRecorded} of {hero.totalGames} games</div>
+                            </div>
+                            {renderBar(t => t.data.total, totalGamesRecorded, 'Games by Type')}
+                            {renderBar(t => t.data.wins, totalWinsRecorded, 'Wins by Type')}
+                          </div>
+                        );
+                      })()}
+
                       {/* Best Teammates Section */}
                       <div className="mb-4">
                         <div className="flex items-center mb-2">

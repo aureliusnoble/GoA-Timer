@@ -1,6 +1,6 @@
 // src/components/matches/PlayerStats.tsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { ChevronLeft, Search, TrendingUp, Users, Swords, Info, Trophy, Medal, Hexagon, X, HelpCircle, User, Filter, ChevronDown, ChevronUp, Calendar, Network, Crown, Flag, Skull } from 'lucide-react';
+import { ChevronLeft, Search, TrendingUp, Users, Swords, Info, Trophy, Medal, Hexagon, X, HelpCircle, User, Filter, ChevronDown, ChevronUp, Calendar, Network, Crown, Flag, Skull, Flame } from 'lucide-react';
 import { DBPlayer, DBMatch } from '../../services/DatabaseService';
 import dbService, { getDisplayRating } from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
@@ -37,6 +37,8 @@ interface PlayerWithStats extends DBPlayer {
   rank: number;
   displayRating: number;
   victoryTypeStats: VictoryTypeStats;
+  currentStreak: number;
+  bestStreak: number;
 }
 
 // Modal component for skill rating explanation
@@ -394,6 +396,39 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
           return stats;
         };
 
+        // Helper function to calculate win streaks for a player
+        const calculateStreaks = (
+          playerMatchIds: string[],
+          playerTeams: Map<string, Team>
+        ): { currentStreak: number; bestStreak: number } => {
+          // Get matches sorted by date (most recent first)
+          const matchesWithDates = playerMatchIds
+            .map(matchId => ({ matchId, match: matchMap.get(matchId) }))
+            .filter((m): m is { matchId: string; match: DBMatch } => m.match !== undefined)
+            .sort((a, b) => new Date(b.match.date).getTime() - new Date(a.match.date).getTime());
+
+          let currentStreak = 0;
+          let bestStreak = 0;
+          let tempStreak = 0;
+          let countingCurrent = true;
+
+          for (const { matchId, match } of matchesWithDates) {
+            const playerTeam = playerTeams.get(matchId);
+            const isWin = playerTeam === match.winningTeam;
+
+            if (isWin) {
+              tempStreak++;
+              if (countingCurrent) currentStreak++;
+              bestStreak = Math.max(bestStreak, tempStreak);
+            } else {
+              tempStreak = 0;
+              countingCurrent = false; // Stop counting current after first loss
+            }
+          }
+
+          return { currentStreak, bestStreak };
+        };
+
         if (dateRange.startDate && dateRange.endDate) {
           // Use filtered player stats when date range is active (view mode aware)
           const filteredResult = await getFilteredPlayerStats(
@@ -413,6 +448,8 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
             const playerMatchIds = playerMatches.map(pm => pm.matchId);
             const playerTeams = new Map<string, Team>();
             playerMatches.forEach(pm => playerTeams.set(pm.matchId, pm.team));
+
+            const streaks = calculateStreaks(playerMatchIds, playerTeams);
 
             return {
               id: stats.id,
@@ -437,7 +474,9 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
               hasCombatStats: stats.hasCombatStats,
               displayRating: stats.displayRating,
               rank: 0,
-              victoryTypeStats: calculateVictoryTypeStats(playerMatchIds, playerTeams)
+              victoryTypeStats: calculateVictoryTypeStats(playerMatchIds, playerTeams),
+              currentStreak: streaks.currentStreak,
+              bestStreak: streaks.bestStreak
             };
           });
         } else {
@@ -496,11 +535,12 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
               // Use fresh TrueSkill rating calculation (consistent with SkillOverTime)
               const displayRating = currentRatings[player.id] || getDisplayRating(player);
 
-              // Calculate victory type stats
+              // Calculate victory type stats and streaks
               const playerMatchIds = playerMatches.map(pm => pm.matchId);
               const playerTeams = new Map<string, Team>();
               playerMatches.forEach(pm => playerTeams.set(pm.matchId, pm.team));
               const victoryTypeStats = calculateVictoryTypeStats(playerMatchIds, playerTeams);
+              const streaks = calculateStreaks(playerMatchIds, playerTeams);
 
               return {
                 ...player,
@@ -516,7 +556,9 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
                 hasCombatStats,
                 displayRating,
                 rank: 0,
-                victoryTypeStats
+                victoryTypeStats,
+                currentStreak: streaks.currentStreak,
+                bestStreak: streaks.bestStreak
               };
             })
           );
@@ -1017,6 +1059,27 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
                           <span>Wins: {player.wins}</span>
                           <span>Losses: {player.losses}</span>
                           <span>Total: {player.totalGames}</span>
+                        </div>
+                      </div>
+
+                      {/* Win Streaks */}
+                      <div className="mb-4">
+                        <div className="text-sm text-gray-400 mb-2">Win Streaks</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="bg-gray-800 p-2 rounded">
+                            <div className="flex items-center text-orange-400 text-sm mb-1">
+                              <Flame size={14} className="mr-1" />
+                              <span>Current</span>
+                            </div>
+                            <div className="font-medium text-center">{player.currentStreak}</div>
+                          </div>
+                          <div className="bg-gray-800 p-2 rounded">
+                            <div className="flex items-center text-yellow-400 text-sm mb-1">
+                              <Trophy size={14} className="mr-1" />
+                              <span>Best</span>
+                            </div>
+                            <div className="font-medium text-center">{player.bestStreak}</div>
+                          </div>
                         </div>
                       </div>
 

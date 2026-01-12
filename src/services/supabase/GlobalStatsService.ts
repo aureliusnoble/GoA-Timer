@@ -2,6 +2,13 @@
 import { supabase, isSupabaseConfigured } from './SupabaseClient';
 import { heroes as allHeroes } from '../../data/heroes';
 
+// Victory type stats for heroes
+interface VictoryTypeStats {
+  throne: { wins: number; total: number };
+  wave: { wins: number; total: number };
+  kills: { wins: number; total: number };
+}
+
 // Interface matching the HeroStats component's expectations
 export interface GlobalHeroStats {
   heroId: number;
@@ -17,6 +24,7 @@ export interface GlobalHeroStats {
   bestAgainst: HeroRelationship[];
   worstAgainst: HeroRelationship[];
   expansion: string;
+  victoryTypeStats?: VictoryTypeStats;
 }
 
 export interface HeroRelationship {
@@ -36,6 +44,12 @@ interface DBHeroRelationship {
   win_rate: number;
 }
 
+interface DBVictoryTypeStats {
+  throne: { wins: number; total: number };
+  wave: { wins: number; total: number };
+  kills: { wins: number; total: number };
+}
+
 interface DBHeroStats {
   hero_id: number;
   hero_name: string;
@@ -46,6 +60,7 @@ interface DBHeroStats {
   best_teammates: DBHeroRelationship[];
   best_against: DBHeroRelationship[];
   worst_against: DBHeroRelationship[];
+  victory_type_stats?: DBVictoryTypeStats;
 }
 
 // Cache configuration
@@ -133,6 +148,20 @@ class GlobalStatsServiceClass {
       bestTeammates: (dbStats.best_teammates || []).map(r => this.transformRelationship(r)),
       bestAgainst: (dbStats.best_against || []).map(r => this.transformRelationship(r)),
       worstAgainst: (dbStats.worst_against || []).map(r => this.transformRelationship(r)),
+      victoryTypeStats: dbStats.victory_type_stats ? {
+        throne: {
+          wins: dbStats.victory_type_stats.throne?.wins || 0,
+          total: dbStats.victory_type_stats.throne?.total || 0
+        },
+        wave: {
+          wins: dbStats.victory_type_stats.wave?.wins || 0,
+          total: dbStats.victory_type_stats.wave?.total || 0
+        },
+        kills: {
+          wins: dbStats.victory_type_stats.kills?.wins || 0,
+          total: dbStats.victory_type_stats.kills?.total || 0
+        }
+      } : undefined
     };
   }
 

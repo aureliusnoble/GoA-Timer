@@ -149,6 +149,7 @@ class CloudSyncServiceClass {
             device_id: match.deviceId || deviceId,
             sync_source: 'local',
             synced_at: new Date().toISOString(),
+            victory_type: match.victoryType || null,
           }, {
             onConflict: 'owner_id,id',
           });

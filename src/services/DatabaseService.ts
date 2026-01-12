@@ -336,6 +336,11 @@ class DatabaseService {
         losses: number;
         teammates: Map<number, { wins: number; games: number }>;
         opponents: Map<number, { wins: number; games: number }>;
+        victoryTypeStats: {
+          throne: { wins: number; total: number };
+          wave: { wins: number; total: number };
+          kills: { wins: number; total: number };
+        };
       }>();
       
       // First pass: create the hero records
@@ -356,22 +361,36 @@ class DatabaseService {
             wins: 0,
             losses: 0,
             teammates: new Map(),
-            opponents: new Map()
+            opponents: new Map(),
+            victoryTypeStats: {
+              throne: { wins: 0, total: 0 },
+              wave: { wins: 0, total: 0 },
+              kills: { wins: 0, total: 0 }
+            }
           });
         }
         
         const heroRecord = heroMap.get(heroId)!;
         heroRecord.totalGames += 1;
-        
+
         const match = matchesMap.get(matchPlayer.matchId);
         if (!match) continue;
-        
+
         const won = matchPlayer.team === match.winningTeam;
-        
+
         if (won) {
           heroRecord.wins += 1;
         } else {
           heroRecord.losses += 1;
+        }
+
+        // Track victory type stats
+        const victoryType = match.victoryType as 'throne' | 'wave' | 'kills' | undefined;
+        if (victoryType && heroRecord.victoryTypeStats[victoryType]) {
+          heroRecord.victoryTypeStats[victoryType].total += 1;
+          if (won) {
+            heroRecord.victoryTypeStats[victoryType].wins += 1;
+          }
         }
       }
       

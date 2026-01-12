@@ -10,6 +10,13 @@ import { rating, rate, ordinal } from 'openskill';
 const TRUESKILL_BETA = 25/6;
 const TRUESKILL_TAU = 25/300;
 
+// Victory type stats for heroes
+interface VictoryTypeStats {
+  throne: { wins: number; total: number };
+  wave: { wins: number; total: number };
+  kills: { wins: number; total: number };
+}
+
 // Hero stats interface (matches the one in HeroStats.tsx)
 export interface HeroStatsData {
   heroId: number;
@@ -25,6 +32,7 @@ export interface HeroStatsData {
   bestAgainst: { heroId: number; heroName: string; icon: string; winRate: number; gamesPlayed: number }[];
   worstAgainst: { heroId: number; heroName: string; icon: string; winRate: number; gamesPlayed: number }[];
   expansion: string;
+  victoryTypeStats?: VictoryTypeStats;
 }
 
 /**
@@ -69,6 +77,11 @@ function calculateHeroStats(
     losses: number;
     teammates: Map<number, { wins: number; games: number }>;
     opponents: Map<number, { wins: number; games: number }>;
+    victoryTypeStats: {
+      throne: { wins: number; total: number };
+      wave: { wins: number; total: number };
+      kills: { wins: number; total: number };
+    };
   }>();
 
   // First pass: create the hero records
@@ -89,7 +102,12 @@ function calculateHeroStats(
         wins: 0,
         losses: 0,
         teammates: new Map(),
-        opponents: new Map()
+        opponents: new Map(),
+        victoryTypeStats: {
+          throne: { wins: 0, total: 0 },
+          wave: { wins: 0, total: 0 },
+          kills: { wins: 0, total: 0 }
+        }
       });
     }
 
@@ -105,6 +123,15 @@ function calculateHeroStats(
       heroRecord.wins += 1;
     } else {
       heroRecord.losses += 1;
+    }
+
+    // Track victory type stats
+    const victoryType = match.victoryType as 'throne' | 'wave' | 'kills' | undefined;
+    if (victoryType && heroRecord.victoryTypeStats[victoryType]) {
+      heroRecord.victoryTypeStats[victoryType].total += 1;
+      if (won) {
+        heroRecord.victoryTypeStats[victoryType].wins += 1;
+      }
     }
   }
 
@@ -233,7 +260,8 @@ function calculateHeroStats(
       winRate,
       bestTeammates,
       bestAgainst,
-      worstAgainst
+      worstAgainst,
+      victoryTypeStats: hero.victoryTypeStats
     };
   });
 

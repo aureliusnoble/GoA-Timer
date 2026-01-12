@@ -94,9 +94,6 @@ This app has not been officially approved by Wolff Designa (the designers of Gua
 
 
 
-Fix bug
-- Over Time (as we increase min games should crop games before that value from hero and player stats)
-
 New Draft Type
 - Novel
 -- Each player can choose from 3 options at least 1 1-2 star and at least 1 3-4 star they havent played with
