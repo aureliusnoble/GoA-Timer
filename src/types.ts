@@ -13,6 +13,38 @@ export enum GameLength {
 // Victory condition types for match recording
 export type VictoryType = 'throne' | 'wave' | 'kills';
 
+// Hero skill estimation types
+export interface GradientPoint {
+  percentile: number;
+  ate: number;
+  ciLower: number;
+  ciUpper: number;
+}
+
+export type GradientBadge = 'rewards-skill' | 'beginner-friendly' | 'balanced';
+export type WinStyleBadge = 'pusher' | 'control' | 'assassin';
+
+export interface VictoryProfileEntry {
+  type: VictoryType;
+  heroRate: number;
+  baselineRate: number;
+  impact: number;
+}
+
+export interface HeroImpactResult {
+  heroId: number;
+  heroName: string;
+  ate: number;
+  ciLower: number;
+  ciUpper: number;
+  gamesWithHero: number;
+  gradient: GradientPoint[];
+  gradientBadge: GradientBadge;
+  victoryProfile: VictoryProfileEntry[];
+  winStyleBadge: WinStyleBadge | null;
+  sufficient: boolean;
+}
+
 export enum Lane {
   Top = 'top',
   Bottom = 'bottom',
@@ -104,7 +136,8 @@ export enum DraftMode {
   AllPick = 'allpick', // New mode added
   Single = 'single',
   Random = 'random',
-  PickAndBan = 'pickandban'
+  PickAndBan = 'pickandban',
+  Novel = 'novel'
 }
 
 // New interface for pick and ban sequence

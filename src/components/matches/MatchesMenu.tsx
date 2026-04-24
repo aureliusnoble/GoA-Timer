@@ -11,7 +11,7 @@ import { useSound } from '../../context/SoundContext';
 import { useViewMode } from '../../context/ViewModeContext';
 // LEGACY: P2P Connection Context - kept for potential future use
 // import { useConnection } from '../../context/ConnectionContext';
-export type MatchesView = 'menu' | 'player-stats' | 'detailed-player-stats' | 'hero-stats' | 'match-history' | 'match-maker' | 'record-match' | 'hero-info' | 'skill-over-time';
+export type MatchesView = 'menu' | 'player-stats' | 'detailed-player-stats' | 'hero-stats' | 'detailed-hero-stats' | 'match-history' | 'match-maker' | 'record-match' | 'hero-info' | 'skill-over-time';
 interface MatchesMenuProps {
   onBack: () => void;
   onNavigate: (view: MatchesView) => void;
