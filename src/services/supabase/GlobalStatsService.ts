@@ -1,6 +1,7 @@
 // src/services/supabase/GlobalStatsService.ts
 import { supabase, isSupabaseConfigured } from './SupabaseClient';
 import { heroes as allHeroes } from '../../data/heroes';
+import { HeroImpactResult } from '../../types';
 
 // Victory type stats for heroes
 interface VictoryTypeStats {
@@ -75,6 +76,10 @@ interface CacheEntry {
 
 class GlobalStatsServiceClass {
   private cache: CacheEntry | null = null;
+  private heroSkillCache: {
+    data: HeroImpactResult[];
+    timestamp: number;
+  } | null = null;
 
   /**
    * Check if the cache is valid for the given parameters
@@ -111,6 +116,7 @@ class GlobalStatsServiceClass {
    */
   clearCache(): void {
     this.cache = null;
+    this.heroSkillCache = null;
     console.log('[GlobalStatsService] Cache cleared');
   }
 
@@ -226,6 +232,66 @@ class GlobalStatsServiceClass {
 
     } catch (err) {
       console.error('[GlobalStatsService] Unexpected error:', err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'An unexpected error occurred',
+      };
+    }
+  }
+
+  /**
+   * Fetch global hero skill statistics from Supabase
+   * Returns cached data if available and not expired
+   */
+  async getGlobalHeroSkillStats(
+    forceRefresh: boolean = false
+  ): Promise<{ success: boolean; data?: HeroImpactResult[]; error?: string }> {
+    if (!isSupabaseConfigured() || !supabase) {
+      return { success: false, error: 'Cloud features are not configured.' };
+    }
+
+    if (
+      !forceRefresh &&
+      this.heroSkillCache &&
+      Date.now() - this.heroSkillCache.timestamp < CACHE_TTL_MS
+    ) {
+      return { success: true, data: this.heroSkillCache.data };
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('get_global_hero_skill_stats');
+
+      if (error) {
+        return { success: false, error: `Failed to fetch global hero skill stats: ${error.message}` };
+      }
+
+      const transformed: HeroImpactResult[] = (data || []).map((row: any) => ({
+        heroId: row.hero_id,
+        heroName: row.hero_name,
+        ate: row.ate,
+        ciLower: row.ci_lower,
+        ciUpper: row.ci_upper,
+        gamesWithHero: row.games_with_hero,
+        gradient: (row.gradient || []).map((g: any) => ({
+          percentile: g.percentile,
+          ate: g.ate,
+          ciLower: g.ci_lower,
+          ciUpper: g.ci_upper,
+        })),
+        gradientBadge: row.gradient_badge,
+        victoryProfile: (row.victory_profile || []).map((v: any) => ({
+          type: v.type,
+          heroRate: v.hero_rate,
+          baselineRate: v.baseline_rate,
+          impact: v.impact,
+        })),
+        winStyleBadge: row.win_style_badge,
+        sufficient: row.sufficient,
+      }));
+
+      this.heroSkillCache = { data: transformed, timestamp: Date.now() };
+      return { success: true, data: transformed };
+    } catch (err) {
       return {
         success: false,
         error: err instanceof Error ? err.message : 'An unexpected error occurred',
