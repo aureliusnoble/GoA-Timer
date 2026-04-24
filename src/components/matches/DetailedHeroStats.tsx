@@ -6,6 +6,11 @@ import { useDataSource } from '../../hooks/useDataSource';
 import { heroes as allHeroData } from '../../data/heroes';
 import { HeroImpactResult, Hero, VictoryType, Team } from '../../types';
 import ForestPlot from './ForestPlot';
+import { SkillGradientTab } from './DetailedHeroStats/SkillGradientTab';
+import { VictoryProfileTab } from './DetailedHeroStats/VictoryProfileTab';
+import { RelationshipsTab } from './DetailedHeroStats/RelationshipsTab';
+import WinRateTab from './DetailedHeroStats/WinRateTab';
+import { MatchHistoryTab } from './DetailedHeroStats/MatchHistoryTab';
 
 interface DetailedHeroStatsProps {
   heroId: number;
@@ -49,6 +54,9 @@ const DetailedHeroStats: React.FC<DetailedHeroStatsProps> = ({ heroId, onBack })
     wins: number;
     losses: number;
     winRate: number;
+    bestTeammates: { heroId: number; heroName: string; icon: string; winRate: number; gamesPlayed: number }[];
+    bestAgainst: { heroId: number; heroName: string; icon: string; winRate: number; gamesPlayed: number }[];
+    worstAgainst: { heroId: number; heroName: string; icon: string; winRate: number; gamesPlayed: number }[];
   } | null>(null);
   const [impact, setImpact] = useState<HeroImpactResult | null>(null);
   const [heroMatches, setHeroMatches] = useState<HeroMatch[]>([]);
@@ -74,6 +82,9 @@ const DetailedHeroStats: React.FC<DetailedHeroStatsProps> = ({ heroId, onBack })
             wins: stat.wins,
             losses: stat.losses,
             winRate: stat.winRate,
+            bestTeammates: stat.bestTeammates || [],
+            bestAgainst: stat.bestAgainst || [],
+            worstAgainst: stat.worstAgainst || [],
           });
         }
 
@@ -290,34 +301,35 @@ const DetailedHeroStats: React.FC<DetailedHeroStatsProps> = ({ heroId, onBack })
       )}
 
       {activeTab === 'win-rate' && (
-        <div className="bg-gray-700 rounded-lg p-4 text-sm text-gray-400 italic">
-          Coming soon
-        </div>
+        <WinRateTab heroName={heroData.name} matches={heroMatches} />
       )}
 
-      {activeTab === 'relationships' && (
-        <div className="bg-gray-700 rounded-lg p-4 text-sm text-gray-400 italic">
-          Coming soon
-        </div>
+      {activeTab === 'relationships' && heroStats && (
+        <RelationshipsTab
+          bestTeammates={heroStats.bestTeammates}
+          bestAgainst={heroStats.bestAgainst}
+          worstAgainst={heroStats.worstAgainst}
+        />
       )}
 
-      {activeTab === 'skill-gradient' && (
-        <div className="bg-gray-700 rounded-lg p-4 text-sm text-gray-400 italic">
-          Coming soon
-        </div>
+      {activeTab === 'skill-gradient' && impact && (
+        <SkillGradientTab
+          gradient={impact.gradient}
+          gradientBadge={impact.gradientBadge}
+          heroName={heroData.name}
+        />
       )}
 
-      {activeTab === 'victory-profile' && (
-        <div className="bg-gray-700 rounded-lg p-4 text-sm text-gray-400 italic">
-          Coming soon
-        </div>
+      {activeTab === 'victory-profile' && impact && (
+        <VictoryProfileTab
+          victoryProfile={impact.victoryProfile}
+          winStyleBadge={impact.winStyleBadge}
+          heroName={heroData.name}
+        />
       )}
 
       {activeTab === 'match-history' && (
-        <div className="bg-gray-700 rounded-lg p-4">
-          <p className="text-sm text-gray-400 italic mb-2">Coming soon</p>
-          <p className="text-xs text-gray-500">{heroMatches.length} matches recorded</p>
-        </div>
+        <MatchHistoryTab matches={heroMatches} heroName={heroData.name} />
       )}
     </div>
   );
