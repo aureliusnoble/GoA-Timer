@@ -270,6 +270,33 @@ class DatabaseService {
   }
 
   /**
+   * Create a new player with default ratings
+   */
+  async createPlayer(name: string): Promise<DBPlayer> {
+    if (!this.db) await this.initialize();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const defaultRating = rating();
+    const newPlayer: DBPlayer = {
+      id: name,
+      name: name,
+      totalGames: 0,
+      wins: 0,
+      losses: 0,
+      elo: INITIAL_ELO,
+      mu: defaultRating.mu,
+      sigma: defaultRating.sigma,
+      ordinal: ordinal(defaultRating),
+      lastPlayed: new Date(),
+      dateCreated: new Date(),
+      deviceId: this.getDeviceId(),
+      level: 1,
+    };
+    await this.savePlayer(newPlayer);
+    return newPlayer;
+  }
+
+  /**
    * Get all players
    */
   async getAllPlayers(): Promise<DBPlayer[]> {

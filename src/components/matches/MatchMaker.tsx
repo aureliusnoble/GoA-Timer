@@ -1,6 +1,6 @@
 // src/components/matches/MatchMaker.tsx
-import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Users, Shuffle, Award, Info, Plus, ArrowRight, ArrowLeft, RefreshCw, Play, Trophy, Clock, ChevronUp, ChevronDown, Sparkles, Clock3, TrendingUp, Sliders } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ChevronLeft, Users, Shuffle, Award, Info, Plus, ArrowRight, ArrowLeft, RefreshCw, Play, Trophy, Clock, ChevronUp, ChevronDown, Sparkles, Clock3, TrendingUp, Sliders, UserPlus } from 'lucide-react';
 import { DBPlayer } from '../../services/DatabaseService';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
@@ -160,6 +160,12 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     avgDaysSinceTeamed: number;
   } | null>(null);
 
+  // New player creation state
+  const sessionCreatedIdsRef = useRef<Set<string>>(new Set());
+  const [isAddingPlayer, setIsAddingPlayer] = useState(false);
+  const [newPlayerName, setNewPlayerName] = useState('');
+  const [newPlayerError, setNewPlayerError] = useState<string | null>(null);
+
   // Custom match maker state
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [customStats, setCustomStats] = useState<{
@@ -182,8 +188,10 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
         // Get all players (works in both normal and view mode)
         const players = await getAllPlayers();
 
-        // Filter out players with no match history
-        const playersWithMatches = players.filter(player => player.totalGames > 0);
+        // Filter out players with no match history (except those created this session)
+        const playersWithMatches = players.filter(
+          player => player.totalGames > 0 || sessionCreatedIdsRef.current.has(player.id)
+        );
 
         // Sort by name
         playersWithMatches.sort((a, b) => a.name.localeCompare(b.name));
@@ -254,7 +262,37 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
       setSelectedPlayers([...selectedPlayers, player]);
     }
   };
-  
+
+  const handleCreatePlayer = async () => {
+    const name = newPlayerName.trim();
+    if (!name) return;
+
+    if (!/^[a-zA-Z0-9 .-]+$/.test(name)) {
+      setNewPlayerError('Only letters, numbers, spaces, periods, and hyphens');
+      return;
+    }
+
+    try {
+      const existingPlayer = await dbService.getPlayer(name);
+      if (existingPlayer) {
+        setNewPlayerError('Player already exists');
+        return;
+      }
+
+      const newPlayer = await dbService.createPlayer(name);
+      sessionCreatedIdsRef.current.add(newPlayer.id);
+      setAllPlayers(prev => [...prev, newPlayer].sort((a, b) => a.name.localeCompare(b.name)));
+      setSelectedPlayers(prev => [...prev, newPlayer]);
+      setIsAddingPlayer(false);
+      setNewPlayerName('');
+      setNewPlayerError(null);
+      playSound('phaseChange');
+    } catch (error) {
+      console.error('Error creating player:', error);
+      setNewPlayerError('Failed to create player');
+    }
+  };
+
   // Helper: Find optimal team assignment that minimizes average difference
   // Uses exhaustive search - O(C(n, n/2)) which is fast for typical game sizes (4-12 players)
   const findOptimalTeams = (
@@ -1224,6 +1262,18 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     }
   };
   
+  // Static color class mappings (dynamic interpolation like `border-${color}-500` gets purged by Tailwind)
+  const colorStyles: Record<string, { icon: string; active: string; hover: string }> = {
+    blue:   { icon: 'text-blue-400',   active: 'border-blue-500 bg-blue-900/40 ring-2 ring-blue-500',       hover: 'hover:border-blue-500 hover:bg-blue-900/20' },
+    green:  { icon: 'text-green-400',  active: 'border-green-500 bg-green-900/40 ring-2 ring-green-500',    hover: 'hover:border-green-500 hover:bg-green-900/20' },
+    amber:  { icon: 'text-amber-400',  active: 'border-amber-500 bg-amber-900/40 ring-2 ring-amber-500',    hover: 'hover:border-amber-500 hover:bg-amber-900/20' },
+    indigo: { icon: 'text-indigo-400', active: 'border-indigo-500 bg-indigo-900/40 ring-2 ring-indigo-500', hover: 'hover:border-indigo-500 hover:bg-indigo-900/20' },
+    rose:   { icon: 'text-rose-400',   active: 'border-rose-500 bg-rose-900/40 ring-2 ring-rose-500',       hover: 'hover:border-rose-500 hover:bg-rose-900/20' },
+    purple: { icon: 'text-purple-400', active: 'border-purple-500 bg-purple-900/40 ring-2 ring-purple-500', hover: 'hover:border-purple-500 hover:bg-purple-900/20' },
+    cyan:   { icon: 'text-cyan-400',   active: 'border-cyan-500 bg-cyan-900/40 ring-2 ring-cyan-500',       hover: 'hover:border-cyan-500 hover:bg-cyan-900/20' },
+    gray:   { icon: 'text-gray-400',   active: 'border-gray-500 bg-gray-900/40 ring-2 ring-gray-500',       hover: 'hover:border-gray-500 hover:bg-gray-900/20' },
+  };
+
   // Balance option card component for the new card-based UI
   const BalanceOptionCard: React.FC<{
     title: string;
@@ -1233,34 +1283,37 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
     onClick: () => void;
     disabled: boolean;
     isActive?: boolean;
-  }> = ({ title, description, icon, colorClass, onClick, disabled, isActive }) => (
-    <button
-      onClick={() => {
-        if (!disabled) {
-          playSound('buttonClick');
-          onClick();
-        }
-      }}
-      disabled={disabled}
-      className={`p-4 rounded-lg border-2 text-left transition-all w-full ${
-        disabled
-          ? 'opacity-50 cursor-not-allowed border-gray-600 bg-gray-700/30'
-          : isActive
-            ? `border-${colorClass}-500 bg-${colorClass}-900/40 ring-2 ring-${colorClass}-500`
-            : `border-gray-600 hover:border-${colorClass}-500 hover:bg-${colorClass}-900/20 bg-gray-700/50`
-      }`}
-    >
-      <div className="flex items-start gap-3">
-        <div className={`text-${colorClass}-400 flex-shrink-0 mt-0.5`}>
-          {icon}
+  }> = ({ title, description, icon, colorClass, onClick, disabled, isActive }) => {
+    const colors = colorStyles[colorClass] || colorStyles.gray;
+    return (
+      <button
+        onClick={() => {
+          if (!disabled) {
+            playSound('buttonClick');
+            onClick();
+          }
+        }}
+        disabled={disabled}
+        className={`p-4 rounded-lg border-2 text-left transition-all w-full ${
+          disabled
+            ? 'opacity-50 cursor-not-allowed border-gray-600 bg-gray-700/30'
+            : isActive
+              ? colors.active
+              : `border-gray-600 ${colors.hover} bg-gray-700/50`
+        }`}
+      >
+        <div className="flex items-start gap-3">
+          <div className={`${colors.icon} flex-shrink-0 mt-0.5`}>
+            {icon}
+          </div>
+          <div className="min-w-0">
+            <h4 className="font-semibold text-white">{title}</h4>
+            <p className="text-sm text-gray-300 mt-1">{description}</p>
+          </div>
         </div>
-        <div className="min-w-0">
-          <h4 className="font-semibold text-white">{title}</h4>
-          <p className="text-sm text-gray-300 mt-1">{description}</p>
-        </div>
-      </div>
-    </button>
-  );
+      </button>
+    );
+  };
 
   // Balance options configuration
   const balanceOptions = [
@@ -1388,11 +1441,11 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
               )}
             </div>
             
-            {allPlayers.length > 0 ? (
+            {(allPlayers.length > 0 || !isViewMode) ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                 {allPlayers.map((player) => {
                   const isSelected = selectedPlayers.some(p => p.id === player.id);
-                  
+
                   return (
                     <div
                       key={player.id}
@@ -1410,7 +1463,7 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                           W: {player.wins} L: {player.losses}
                         </div>
                       </div>
-                      
+
                       {isSelected && (
                         <div className="absolute -top-2 -right-2 bg-blue-500 rounded-full p-1">
                           <Plus size={14} className="transform rotate-45" />
@@ -1419,6 +1472,57 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                     </div>
                   );
                 })}
+
+                {/* Add New Player Card */}
+                {!isViewMode && (
+                  isAddingPlayer ? (
+                    <div className="p-3 rounded-lg bg-gray-700 border-2 border-blue-500 flex flex-col items-center justify-center">
+                      <input
+                        type="text"
+                        value={newPlayerName}
+                        onChange={(e) => {
+                          if (/^[a-zA-Z0-9 .-]*$/.test(e.target.value)) {
+                            setNewPlayerName(e.target.value);
+                            setNewPlayerError(null);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleCreatePlayer();
+                          if (e.key === 'Escape') {
+                            setIsAddingPlayer(false);
+                            setNewPlayerName('');
+                            setNewPlayerError(null);
+                          }
+                        }}
+                        onBlur={() => {
+                          if (!newPlayerName.trim()) {
+                            setIsAddingPlayer(false);
+                            setNewPlayerName('');
+                            setNewPlayerError(null);
+                          }
+                        }}
+                        placeholder="Player name"
+                        autoFocus
+                        className="bg-transparent border-b border-gray-500 text-center text-sm outline-none focus:border-blue-400 w-full px-1 py-1 mb-1"
+                      />
+                      {newPlayerError && (
+                        <div className="text-red-400 text-xs mt-1">{newPlayerError}</div>
+                      )}
+                      <div className="text-xs text-gray-500 mt-1">Enter to add</div>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => {
+                        playSound('buttonClick');
+                        setIsAddingPlayer(true);
+                      }}
+                      className="p-3 rounded-lg cursor-pointer transition-all bg-gray-700/50 border-2 border-dashed border-gray-600 hover:border-gray-500 hover:bg-gray-700 flex flex-col items-center justify-center"
+                    >
+                      <UserPlus size={24} className="text-gray-400 mb-1" />
+                      <div className="text-sm text-gray-400">Add Player</div>
+                    </div>
+                  )
+                )}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center h-32 text-center">
@@ -1445,7 +1549,13 @@ const MatchMaker: React.FC<MatchMakerProps> = ({ onBack, onUseTeams }) => {
                   colorClass={option.colorClass}
                   onClick={option.onClick}
                   disabled={selectedPlayers.length < 4 || isBalancing || (option.disabledInManual && manualMode)}
-                  isActive={option.id === 'manual' && manualMode}
+                  isActive={
+                    option.id === 'manual'
+                      ? manualMode
+                      : option.id === 'custom'
+                        ? customStats !== null
+                        : lastBalanceMode === option.id
+                  }
                 />
               ))}
             </div>
