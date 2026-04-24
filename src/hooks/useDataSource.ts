@@ -2,7 +2,8 @@ import { useCallback, useMemo } from 'react';
 import { useViewMode } from '../context/ViewModeContext';
 import { dbService, DBPlayer, DBMatch, DBMatchPlayer } from '../services/DatabaseService';
 import { CloudPlayer, CloudMatch, CloudMatchPlayer } from '../services/supabase/ShareService';
-import { Team, GameLength } from '../types';
+import { Team, GameLength, HeroImpactResult } from '../types';
+import { computeHeroImpact } from '../services/HeroSkillService';
 import { heroes as allHeroesData } from '../data/heroes';
 import { rating, rate, ordinal } from 'openskill';
 
@@ -675,6 +676,14 @@ export function useDataSource() {
     const allMatches = await getAllMatches();
     return calculateHeroStats(allMatchPlayers, allMatches, minGamesForRelationships, startDate, endDate);
   }, [getAllMatchPlayers, getAllMatches]);
+
+  // Get hero impact (view mode aware)
+  const getHeroImpact = useCallback(async (): Promise<HeroImpactResult[]> => {
+    const allMatchPlayers = await getAllMatchPlayers();
+    const allMatches = await getAllMatches();
+    const allPlayers = await getAllPlayers();
+    return computeHeroImpact(allMatches, allMatchPlayers, allPlayers);
+  }, [getAllMatchPlayers, getAllMatches, getAllPlayers]);
 
   // Get player relationship network (view mode aware)
   const getPlayerRelationshipNetwork = useCallback(async (
@@ -1491,6 +1500,7 @@ export function useDataSource() {
     getPlayerMatches,
     getPlayerStats,
     getHeroStats,
+    getHeroImpact,
     getPlayerRelationshipNetwork,
     getHistoricalRatings,
     getHistoricalRatingsForPeriod,
