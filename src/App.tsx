@@ -35,6 +35,7 @@ import {
   PlayerStats
 } from './types';
 import { getAllExpansions, filterHeroesByExpansions } from './data/heroes';
+import dbService from './services/DatabaseService';
 import SkillOverTime from './components/matches/SkillOverTime';
 // Import match statistics components
 import MatchesMenu, { MatchesView } from './components/matches/MatchesMenu';
@@ -43,6 +44,7 @@ import DetailedPlayerStats from './components/matches/DetailedPlayerStats';
 import MatchHistory from './components/matches/MatchHistory';
 import MatchMaker from './components/matches/MatchMaker';
 import HeroStats from './components/matches/HeroStats';
+import DetailedHeroStats from './components/matches/DetailedHeroStats';
 import RecordMatch from './components/matches/RecordMatch';
 import HeroInfo from './components/matches/HeroInfo';
 
@@ -475,6 +477,7 @@ function AppContent() {
   const [showMatchStatistics, setShowMatchStatistics] = useState<boolean>(false);
   const [currentMatchView, setCurrentMatchView] = useState<MatchesView>('menu');
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const [selectedHeroId, setSelectedHeroId] = useState<number | null>(null);
 
   // Auto-navigate to match statistics in view mode
   useEffect(() => {
@@ -796,6 +799,8 @@ const addPlayer = (team: Team) => {
         return availableHeroCount >= playerCount + 2;
       case DraftMode.PickAndBan:
         return availableHeroCount >= playerCount * 2;
+      case DraftMode.Novel:
+        return availableHeroCount >= playerCount * 3;
       default:
         return false;
     }
@@ -874,8 +879,113 @@ const addPlayer = (team: Team) => {
     setShowCoinAnimation(true);
   };
 
+  // Novel Draft: assign heroes one at a time, always picking for the most constrained player
+  const assignNovelHeroes = async (
+    players: Player[],
+    heroPool: Hero[]
+  ): Promise<{ playerId: number; heroOptions: Hero[] }[]> => {
+    type Slot = 'T1' | 'T2' | 'T3';
+    const slotComplexityRange: Record<Slot, [number, number]> = {
+      T1: [1, 2],
+      T2: [3, 4],
+      T3: [2, 4],
+    };
+
+    const playerPlayCounts = new Map<number, Map<number, number>>();
+    await Promise.all(
+      players.map(async (p) => {
+        const counts = await dbService.getPlayerHeroCounts(p.name);
+        playerPlayCounts.set(p.id, counts);
+      })
+    );
+
+    const remainingPool = [...heroPool];
+    const assignments = new Map<number, Hero[]>();
+    const remainingSlots = new Map<number, Slot[]>();
+    for (const p of players) {
+      assignments.set(p.id, []);
+      remainingSlots.set(p.id, ['T1', 'T2', 'T3']);
+    }
+
+    const getPlayCount = (playerId: number, heroId: number): number =>
+      playerPlayCounts.get(playerId)?.get(heroId) || 0;
+
+    const totalNeeded = players.length * 3;
+    let assigned = 0;
+
+    while (assigned < totalNeeded && remainingPool.length > 0) {
+      const candidates = players.filter(p => assignments.get(p.id)!.length < 3);
+      if (candidates.length === 0) break;
+
+      // Compute live constraint score: count of unplayed heroes in remaining pool
+      let bestPlayer: Player | null = null;
+      let bestScore = Infinity;
+      let bestAssigned = Infinity;
+      for (const p of candidates) {
+        const score = remainingPool.filter(h => getPlayCount(p.id, h.id) === 0).length;
+        const numAssigned = assignments.get(p.id)!.length;
+        if (
+          score < bestScore ||
+          (score === bestScore && numAssigned < bestAssigned)
+        ) {
+          bestScore = score;
+          bestAssigned = numAssigned;
+          bestPlayer = p;
+        }
+      }
+      if (!bestPlayer) break;
+
+      const playerId = bestPlayer.id;
+      const slots = remainingSlots.get(playerId)!;
+
+      let picked: Hero | null = null;
+      let pickedSlotIdx = -1;
+
+      // Sort entire pool by novelty first (unplayed → least-played), randomize ties
+      const sortedByNovelty = [...remainingPool].sort((a, b) => {
+        const diff = getPlayCount(playerId, a.id) - getPlayCount(playerId, b.id);
+        return diff !== 0 ? diff : Math.random() - 0.5;
+      });
+
+      // Try to find a hero that is both most novel AND fits an unfilled tier
+      for (const hero of sortedByNovelty) {
+        const slotIdx = slots.findIndex(slot => {
+          const [minC, maxC] = slotComplexityRange[slot];
+          return hero.complexity >= minC && hero.complexity <= maxC;
+        });
+        if (slotIdx !== -1) {
+          picked = hero;
+          pickedSlotIdx = slotIdx;
+          break;
+        }
+      }
+
+      // If no hero fits any remaining tier, take the most novel hero regardless of tier
+      if (!picked && sortedByNovelty.length > 0) {
+        picked = sortedByNovelty[0];
+        if (slots.length > 0) pickedSlotIdx = 0;
+      }
+
+      if (pickedSlotIdx !== -1 && slots.length > 0) {
+        slots.splice(pickedSlotIdx, 1);
+      }
+
+      if (!picked) break;
+
+      assignments.get(playerId)!.push(picked);
+      const poolIdx = remainingPool.findIndex(h => h.id === picked!.id);
+      if (poolIdx !== -1) remainingPool.splice(poolIdx, 1);
+      assigned++;
+    }
+
+    return players.map(p => ({
+      playerId: p.id,
+      heroOptions: assignments.get(p.id) || [],
+    }));
+  };
+
   // Handle draft mode selection
-  const handleSelectDraftMode = (mode: DraftMode) => {
+  const handleSelectDraftMode = async (mode: DraftMode) => {
     let initialDraftingState: DraftingState;
     const totalPlayerCount = localPlayers.length;
     
@@ -975,7 +1085,23 @@ const addPlayer = (team: Team) => {
           isComplete: false
         };
         break;
-        
+
+      case DraftMode.Novel: {
+        const novelAssignedHeroes = await assignNovelHeroes(localPlayers, deepShuffledHeroes);
+        initialDraftingState = {
+          mode,
+          currentTeam: firstTeam,
+          availableHeroes: [],
+          assignedHeroes: novelAssignedHeroes,
+          selectedHeroes: [],
+          bannedHeroes: [],
+          currentStep: 0,
+          pickBanSequence: [],
+          isComplete: false
+        };
+        break;
+      }
+
       default:
         // This shouldn't happen
         initialDraftingState = {
@@ -1013,8 +1139,8 @@ const addPlayer = (team: Team) => {
     // Update available heroes (remove selected hero)
     const newAvailableHeroes = draftingState.availableHeroes.filter(h => h.id !== hero.id);
     
-    // Update assigned heroes (remove this assignment if in Single mode)
-    const newAssignedHeroes = draftingState.mode === DraftMode.Single 
+    // Update assigned heroes (remove this assignment if in Single/Novel mode)
+    const newAssignedHeroes = (draftingState.mode === DraftMode.Single || draftingState.mode === DraftMode.Novel)
       ? draftingState.assignedHeroes.map(assignment => {
           if (assignment.playerId === playerId) {
             return {
@@ -1050,7 +1176,7 @@ const addPlayer = (team: Team) => {
     }
     
     // Handle next team selection based on draft mode
-    if (draftingState.mode === DraftMode.Single || draftingState.mode === DraftMode.AllPick || draftingState.mode === DraftMode.Random) {
+    if (draftingState.mode === DraftMode.Single || draftingState.mode === DraftMode.AllPick || draftingState.mode === DraftMode.Random || draftingState.mode === DraftMode.Novel) {
       // UPDATED: Check if a team has all heroes picked
       const titansComplete = titansPicked >= titansPlayers.length;
       const atlanteansComplete = atlanteansPicked >= atlanteansPlayers.length;
@@ -1203,7 +1329,7 @@ const addPlayer = (team: Team) => {
   };
 
   // NEW: Create initial state for a draft mode
-  const createInitialStateForDraftMode = (mode: DraftMode): DraftingState => {
+  const createInitialStateForDraftMode = async (mode: DraftMode): Promise<DraftingState> => {
     const totalPlayerCount = localPlayers.length;
     const availableHeroesForDraft = [...filteredHeroes];
     const firstTeam = gameState.coinSide;
@@ -1273,7 +1399,7 @@ const addPlayer = (team: Team) => {
         
       case DraftMode.PickAndBan:
         const pickBanSequence = generatePickBanSequence(totalPlayerCount);
-        
+
         return {
           mode,
           currentTeam: firstTeam,
@@ -1285,7 +1411,22 @@ const addPlayer = (team: Team) => {
           pickBanSequence,
           isComplete: false
         };
-        
+
+      case DraftMode.Novel: {
+        const novelAssigned = await assignNovelHeroes(localPlayers, deepShuffledHeroes);
+        return {
+          mode,
+          currentTeam: firstTeam,
+          availableHeroes: [],
+          assignedHeroes: novelAssigned,
+          selectedHeroes: [],
+          bannedHeroes: [],
+          currentStep: 0,
+          pickBanSequence: [],
+          isComplete: false
+        };
+      }
+
       default:
         return {
           mode: DraftMode.None,
@@ -1302,12 +1443,12 @@ const addPlayer = (team: Team) => {
   };
 
   // NEW: Handle reset draft
-  const handleResetDraft = () => {
+  const handleResetDraft = async () => {
     // Ask for confirmation before resetting
     playSound('buttonClick');
-    
+
     // Create a fresh initial state with the same draft mode
-    const freshState = createInitialStateForDraftMode(draftingState.mode);
+    const freshState = await createInitialStateForDraftMode(draftingState.mode);
     
     // Reset drafting state and history
     setDraftingState(freshState);
@@ -1808,8 +1949,21 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
   />
 )}
     {currentMatchView === 'hero-stats' && (
-      <HeroStats 
+      <HeroStats
         onBack={() => handleMatchStatisticsNavigate('menu')}
+        onViewHeroDetails={(heroId: number) => {
+          setSelectedHeroId(heroId);
+          handleMatchStatisticsNavigate('detailed-hero-stats');
+        }}
+      />
+    )}
+    {currentMatchView === 'detailed-hero-stats' && selectedHeroId !== null && (
+      <DetailedHeroStats
+        heroId={selectedHeroId}
+        onBack={() => {
+          setSelectedHeroId(null);
+          handleMatchStatisticsNavigate('hero-stats');
+        }}
       />
     )}
     {currentMatchView === 'match-history' && (
@@ -1881,7 +2035,8 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
                 [DraftMode.AllPick]: canUseDraftMode(DraftMode.AllPick),
                 [DraftMode.Single]: canUseDraftMode(DraftMode.Single),
                 [DraftMode.Random]: canUseDraftMode(DraftMode.Random),
-                [DraftMode.PickAndBan]: canUseDraftMode(DraftMode.PickAndBan)
+                [DraftMode.PickAndBan]: canUseDraftMode(DraftMode.PickAndBan),
+                [DraftMode.Novel]: canUseDraftMode(DraftMode.Novel)
               }}
               heroCount={filteredHeroes.length}
               handicapTeam={handicapTeam}

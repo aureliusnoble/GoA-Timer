@@ -11,6 +11,8 @@ import { isSupabaseConfigured } from '../../services/supabase/SupabaseClient';
 import HeroWinRateOverTime from './HeroWinRateOverTime';
 import HeroRelationshipGraph from './HeroRelationshipGraph';
 import { useDataSource } from '../../hooks/useDataSource';
+import ForestPlot from './ForestPlot';
+import { HeroImpactResult } from '../../types';
 
 // Victory type stats for heroes
 interface VictoryTypeStats {
@@ -57,11 +59,12 @@ interface HeroStats {
 
 interface HeroStatsProps {
   onBack: () => void;
+  onViewHeroDetails?: (heroId: number) => void;
 }
 
-const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
+const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
   const { playSound } = useSound();
-  const { isViewMode, isViewModeLoading, getHeroStats } = useDataSource();
+  const { isViewMode, isViewModeLoading, getHeroStats, getHeroImpact } = useDataSource();
   const [heroStats, setHeroStats] = useState<HeroStats[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -91,6 +94,10 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
 
   // Relationship graph view state
   const [showRelationshipGraph, setShowRelationshipGraph] = useState(false);
+
+  // Hero impact state
+  const [heroImpact, setHeroImpact] = useState<Map<number, HeroImpactResult>>(new Map());
+  const [impactLoading, setImpactLoading] = useState(false);
 
   // Check if cloud features are available
   const cloudAvailable = isSupabaseConfigured();
@@ -165,6 +172,25 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
       loadHeroStats();
     }
   }, [statsMode, minGamesRelationship, dateRange.startDate, dateRange.endDate, isViewModeLoading, getHeroStats]);
+
+  // Load hero impact for local mode
+  useEffect(() => {
+    if (isViewModeLoading || statsMode !== 'local') return;
+    const loadHeroImpact = async () => {
+      setImpactLoading(true);
+      try {
+        const results = await getHeroImpact();
+        const map = new Map<number, HeroImpactResult>();
+        for (const r of results) map.set(r.heroId, r);
+        setHeroImpact(map);
+      } catch (error) {
+        console.error('Error computing hero impact:', error);
+      } finally {
+        setImpactLoading(false);
+      }
+    };
+    loadHeroImpact();
+  }, [statsMode, isViewModeLoading, getHeroImpact]);
 
   // Load global stats when switching to global mode (initial load)
   useEffect(() => {
@@ -919,11 +945,18 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
                 return (
                   <div key={hero.heroId} className="bg-gray-700 rounded-lg overflow-hidden shadow-md">
                     {/* Hero Header */}
-                    <div 
+                    <div
                       className="px-5 py-4 bg-gray-800 flex items-center cursor-pointer"
                       onMouseEnter={(e) => handleHeroMouseEnter(getHeroById(hero.heroId)!, e)}
                       onMouseLeave={handleHeroMouseLeave}
-                      onClick={(e) => handleHeroClick(getHeroById(hero.heroId)!, e)}
+                      onClick={(e) => {
+                        if (onViewHeroDetails) {
+                          playSound('buttonClick');
+                          onViewHeroDetails(hero.heroId);
+                        } else {
+                          handleHeroClick(getHeroById(hero.heroId)!, e);
+                        }
+                      }}
                     >
                       <div className="w-16 h-16 bg-gray-900 rounded-full overflow-hidden mr-4 flex-shrink-0">
                         <img 
@@ -967,6 +1000,50 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack }) => {
                           <span>Total: {hero.totalGames}</span>
                         </div>
                       </div>
+
+                      {/* Hero Impact */}
+                      {(() => {
+                        const impact = heroImpact.get(hero.heroId);
+                        if (impactLoading) {
+                          return (
+                            <div className="mb-4">
+                              <div className="text-sm text-gray-400 mb-2">Hero Impact</div>
+                              <div className="h-5 bg-gray-800 rounded-full animate-pulse" />
+                            </div>
+                          );
+                        }
+                        if (!impact) return null;
+                        return (
+                          <div className="mb-4">
+                            <div className="flex justify-between items-center mb-2">
+                              <div className="text-sm text-gray-400">Hero Impact</div>
+                              <div className="flex items-center gap-2">
+                                {!impact.sufficient && (
+                                  <span className="text-xs px-2 py-0.5 bg-gray-600 text-gray-300 rounded-full">EARLY</span>
+                                )}
+                                <span className={`font-medium ${
+                                  impact.ciLower > 0 ? 'text-green-400' :
+                                  impact.ciUpper < 0 ? 'text-yellow-400' : 'text-gray-400'
+                                }`}>
+                                  {impact.ate >= 0 ? '+' : ''}{(impact.ate * 100).toFixed(1)}%
+                                </span>
+                              </div>
+                            </div>
+                            <ForestPlot ate={impact.ate} ciLower={impact.ciLower} ciUpper={impact.ciUpper} sufficient={impact.sufficient} />
+                            {impact.gradientBadge !== 'balanced' && (
+                              <div className="mt-2">
+                                <span className={`text-xs px-2 py-1 rounded-full ${
+                                  impact.gradientBadge === 'rewards-skill'
+                                    ? 'bg-purple-900/50 text-purple-300'
+                                    : 'bg-green-900/50 text-green-300'
+                                }`}>
+                                  {impact.gradientBadge === 'rewards-skill' ? 'Rewards Skill' : 'Beginner Friendly'}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {/* Victory Type Distribution */}
                       {hero.victoryTypeStats && (() => {
