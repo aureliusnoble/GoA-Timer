@@ -102,7 +102,6 @@ New Draft Type
 - Select Num Players + 4 heroes at random
 - Each team chooses from these and pass them round.
 
-Win Streaks (Best and current)
 
 Card Database
 - Opening Guides
@@ -113,3 +112,20 @@ Add an openings section where users can suggest openings. Users can rate these.
 Add all the card data.
 Record Build during game: items and upgrades.
 
+Tournament
+- Round Robin
+- Brackets
+- Seeding
+- Team size
+- Draft Type (even if they dont want to use the full timer should be able to use the drafting)
+- Add new players for tournament
+
+When a tournament is active
+- Track and share results
+- i.e. log a game as a specific tournament game with recording functionality/when playing a game through the main timer app
+- Way of viewing past tournaments or in progress tournaments matches.
+
+
+measuring
+-good hero for different skill levels?
+- hero effect on victory condition (when the team wins)

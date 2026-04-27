@@ -8,6 +8,7 @@ dist
 
 # Claude Code / AI tooling
 .claude/
+claude/
 .superpowers/
 CLAUDE.md
 Issues.md
