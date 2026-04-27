@@ -69,9 +69,17 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
     return saved ? parseInt(saved, 10) : null; // null = All Time
   })();
 
-  // Read recalculateTrueSkill from context or localStorage
   const recalculateTrueSkill = playerStatsFilters?.recalculateTrueSkill ??
     (localStorage.getItem('playerStats_recalculateTrueSkill') === 'true');
+
+  const gameLengthFilter = playerStatsFilters?.gameLengthFilter ?? (() => {
+    const saved = localStorage.getItem('playerStats_gameLengthFilter');
+    return (saved === 'quick' || saved === 'long') ? saved : 'all' as const;
+  })();
+  const playerCountFilter = playerStatsFilters?.playerCountFilter ?? (() => {
+    const saved = localStorage.getItem('playerStats_playerCountFilter');
+    return saved ? parseInt(saved, 10) : null;
+  })();
 
   // Calculate date range based on recencyMonths
   const dateRange = useMemo(() => {
@@ -102,7 +110,7 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
           allPlayers
         ] = await Promise.all([
           getPlayer(playerId),
-          getPlayerStats(playerId),
+          getPlayerStats(playerId, gameLengthFilter, playerCountFilter),
           getCurrentTrueSkillRatings(),
           getAllPlayers()
         ]);
@@ -239,7 +247,7 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
     if (playerId && !isViewModeLoading) {
       loadPlayerDetails();
     }
-  }, [playerId, dateRange.startDate, dateRange.endDate, isViewModeLoading, getPlayer, getPlayerStats, getCurrentTrueSkillRatings, getAllPlayers, getAllMatches]);
+  }, [playerId, dateRange.startDate, dateRange.endDate, gameLengthFilter, playerCountFilter, isViewModeLoading, getPlayer, getPlayerStats, getCurrentTrueSkillRatings, getAllPlayers, getAllMatches]);
 
   const handleBack = () => {
     playSound('buttonClick');

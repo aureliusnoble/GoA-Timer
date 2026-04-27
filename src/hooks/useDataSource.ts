@@ -3,9 +3,20 @@ import { useViewMode } from '../context/ViewModeContext';
 import { dbService, DBPlayer, DBMatch, DBMatchPlayer } from '../services/DatabaseService';
 import { CloudPlayer, CloudMatch, CloudMatchPlayer } from '../services/supabase/ShareService';
 import { Team, GameLength, HeroImpactResult } from '../types';
-import { computeHeroImpact } from '../services/HeroSkillService';
+import { computeHeroImpactAsync } from '../services/HeroSkillService';
 import { heroes as allHeroesData } from '../data/heroes';
 import { rating, rate, ordinal } from 'openskill';
+import { filterMatches, MatchFilterOptions } from '../shared/utils/matchFilters';
+
+const LOCAL_IMPACT_CACHE_TTL = 5 * 60 * 1000;
+let localImpactCache: {
+  data: HeroImpactResult[];
+  timestamp: number;
+  key: string;
+} | null = null;
+
+export type { MatchFilterOptions } from '../shared/utils/matchFilters';
+export { filterMatches } from '../shared/utils/matchFilters';
 
 // TrueSkill constants (must match DatabaseService)
 const TRUESKILL_BETA = 25/6;
@@ -44,19 +55,11 @@ function calculateHeroStats(
   allMatchPlayers: DBMatchPlayer[],
   allMatches: DBMatch[],
   minGamesForRelationships: number = 1,
-  startDate?: Date,
-  endDate?: Date
+  filterOptions?: MatchFilterOptions
 ): HeroStatsData[] {
-  // Filter matches by date range if specified
-  let filteredMatches = allMatches;
-  if (startDate || endDate) {
-    filteredMatches = allMatches.filter(match => {
-      const matchDate = new Date(match.date);
-      if (startDate && matchDate < startDate) return false;
-      if (endDate && matchDate > endDate) return false;
-      return true;
-    });
-  }
+  const filteredMatches = filterOptions
+    ? filterMatches(allMatches, filterOptions)
+    : allMatches;
 
   // Create a set of valid match IDs for filtering match players
   const validMatchIds = new Set(filteredMatches.map(m => m.id));
@@ -298,22 +301,14 @@ function calculatePlayerRelationships(
   allPlayers: DBPlayer[],
   playerIds: string[],
   minGames: number = 1,
-  startDate?: Date,
-  endDate?: Date
+  filterOptions?: MatchFilterOptions
 ): PlayerRelationship[] {
   // Create a map for player name lookup
   const playerNameMap = new Map(allPlayers.map(p => [p.id, p.name]));
 
-  // Filter matches by date range if specified
-  let filteredMatches = allMatches;
-  if (startDate || endDate) {
-    filteredMatches = allMatches.filter(match => {
-      const matchDate = new Date(match.date);
-      if (startDate && matchDate < startDate) return false;
-      if (endDate && matchDate > endDate) return false;
-      return true;
-    });
-  }
+  const filteredMatches = filterOptions
+    ? filterMatches(allMatches, filterOptions)
+    : allMatches;
 
   if (filteredMatches.length === 0) {
     return [];
@@ -670,32 +665,58 @@ export function useDataSource() {
   const getHeroStats = useCallback(async (
     minGamesForRelationships: number = 1,
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
+    gameLengthFilter?: 'all' | 'quick' | 'long',
+    playerCountFilter?: number | null
   ): Promise<HeroStatsData[]> => {
     const allMatchPlayers = await getAllMatchPlayers();
     const allMatches = await getAllMatches();
-    return calculateHeroStats(allMatchPlayers, allMatches, minGamesForRelationships, startDate, endDate);
+    return calculateHeroStats(allMatchPlayers, allMatches, minGamesForRelationships, {
+      startDate, endDate, gameLengthFilter, playerCountFilter
+    });
   }, [getAllMatchPlayers, getAllMatches]);
 
-  // Get hero impact (view mode aware)
-  const getHeroImpact = useCallback(async (): Promise<HeroImpactResult[]> => {
-    const allMatchPlayers = await getAllMatchPlayers();
-    const allMatches = await getAllMatches();
+  // Get hero impact (view mode aware, cached)
+  const getHeroImpact = useCallback(async (
+    gameLengthFilter?: 'all' | 'quick' | 'long',
+    playerCountFilter?: number | null
+  ): Promise<HeroImpactResult[]> => {
+    const cacheKey = `${isViewMode ? 'view' : 'local'}_${gameLengthFilter ?? 'all'}_${playerCountFilter ?? 'any'}`;
+    if (
+      localImpactCache &&
+      localImpactCache.key === cacheKey &&
+      Date.now() - localImpactCache.timestamp < LOCAL_IMPACT_CACHE_TTL
+    ) {
+      return localImpactCache.data;
+    }
+
+    const allMatchPlayersRaw = await getAllMatchPlayers();
+    const allMatchesRaw = await getAllMatches();
     const allPlayers = await getAllPlayers();
-    return computeHeroImpact(allMatches, allMatchPlayers, allPlayers);
-  }, [getAllMatchPlayers, getAllMatches, getAllPlayers]);
+    const filteredMatches = filterMatches(allMatchesRaw, { gameLengthFilter, playerCountFilter });
+    const validMatchIds = new Set(filteredMatches.map(m => m.id));
+    const filteredMatchPlayers = allMatchPlayersRaw.filter(mp => validMatchIds.has(mp.matchId));
+    const results = await computeHeroImpactAsync(filteredMatches, filteredMatchPlayers, allPlayers);
+
+    localImpactCache = { data: results, timestamp: Date.now(), key: cacheKey };
+    return results;
+  }, [getAllMatchPlayers, getAllMatches, getAllPlayers, isViewMode]);
 
   // Get player relationship network (view mode aware)
   const getPlayerRelationshipNetwork = useCallback(async (
     playerIds: string[],
     minGames: number = 1,
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
+    gameLengthFilter?: 'all' | 'quick' | 'long',
+    playerCountFilter?: number | null
   ): Promise<PlayerRelationship[]> => {
     const allMatchPlayers = await getAllMatchPlayers();
     const allMatches = await getAllMatches();
     const allPlayers = await getAllPlayers();
-    return calculatePlayerRelationships(allMatchPlayers, allMatches, allPlayers, playerIds, minGames, startDate, endDate);
+    return calculatePlayerRelationships(allMatchPlayers, allMatches, allPlayers, playerIds, minGames, {
+      startDate, endDate, gameLengthFilter, playerCountFilter
+    });
   }, [getAllMatchPlayers, getAllMatches, getAllPlayers]);
 
   // Get historical ratings (view mode aware)
@@ -731,7 +752,11 @@ export function useDataSource() {
 
   // Get player stats for a specific player (view mode aware)
   // Returns the same structure as dbService.getPlayerStats
-  const getPlayerStats = useCallback(async (playerId: string): Promise<{
+  const getPlayerStats = useCallback(async (
+    playerId: string,
+    gameLengthFilter?: 'all' | 'quick' | 'long',
+    playerCountFilter?: number | null
+  ): Promise<{
     matchesPlayed: Array<{
       matchId: string;
       heroId: number;
@@ -748,11 +773,13 @@ export function useDataSource() {
       level?: number;
     }>;
   }> => {
-    const allMatches = await getAllMatches();
+    const allMatchesRaw = await getAllMatches();
     const allMatchPlayers = await getAllMatchPlayers();
+    const allMatches = filterMatches(allMatchesRaw, { gameLengthFilter, playerCountFilter });
+    const validMatchIds = new Set(allMatches.map(m => m.id));
 
     // Find all match records for this player
-    const playerMatchRecords = allMatchPlayers.filter(mp => mp.playerId === playerId);
+    const playerMatchRecords = allMatchPlayers.filter(mp => mp.playerId === playerId && validMatchIds.has(mp.matchId));
 
     // Build matches played array
     const matchesPlayed = playerMatchRecords.map(mp => {
@@ -783,21 +810,16 @@ export function useDataSource() {
   const getHistoricalRatingsForPeriod = useCallback(async (
     startDate?: Date,
     endDate?: Date,
-    recalculateTrueSkill: boolean = false
+    recalculateTrueSkill: boolean = false,
+    gameLengthFilter?: 'all' | 'quick' | 'long',
+    playerCountFilter?: number | null
   ): Promise<RatingSnapshot[]> => {
     const allMatches = await getAllMatches();
     const allPlayers = await getAllPlayers();
 
-    // Filter matches by date range if specified
-    let filteredMatches = allMatches;
-    if (startDate || endDate) {
-      filteredMatches = allMatches.filter(match => {
-        const matchDate = new Date(match.date);
-        if (startDate && matchDate < startDate) return false;
-        if (endDate && matchDate > endDate) return false;
-        return true;
-      });
-    }
+    const filteredMatches = filterMatches(allMatches, {
+      startDate, endDate, gameLengthFilter, playerCountFilter
+    });
 
     if (filteredMatches.length === 0) {
       return [];
@@ -961,7 +983,9 @@ export function useDataSource() {
     heroIds?: number[],
     minGames: number = 3,
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
+    gameLengthFilter?: 'all' | 'quick' | 'long',
+    playerCountFilter?: number | null
   ): Promise<{
     heroes: Array<{
       heroId: number;
@@ -981,20 +1005,12 @@ export function useDataSource() {
   }> => {
     // In view mode, calculate from local data
     if (isViewMode && localMatches && localMatchPlayers) {
-      let allMatches = [...localMatches];
+      let allMatches = filterMatches([...localMatches], {
+        startDate, endDate, gameLengthFilter, playerCountFilter
+      });
 
       // Sort matches by date chronologically
       allMatches.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-      // Filter matches by date range if specified
-      if (startDate || endDate) {
-        allMatches = allMatches.filter(match => {
-          const matchDate = new Date(match.date);
-          if (startDate && matchDate < startDate) return false;
-          if (endDate && matchDate > endDate) return false;
-          return true;
-        });
-      }
 
       if (allMatches.length === 0) {
         return { heroes: [], dateRange: null };
@@ -1137,7 +1153,7 @@ export function useDataSource() {
     }
 
     // Not in view mode - use database service
-    return dbService.getHeroWinRateOverTime(heroIds, minGames, startDate, endDate);
+    return dbService.getHeroWinRateOverTime(heroIds, minGames, startDate, endDate, gameLengthFilter, playerCountFilter);
   }, [isViewMode, localMatches, localMatchPlayers]);
 
   // Get hero relationship network (view mode aware)
@@ -1145,7 +1161,9 @@ export function useDataSource() {
     heroIds: number[],
     minGames: number = 1,
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
+    gameLengthFilter?: 'all' | 'quick' | 'long',
+    playerCountFilter?: number | null
   ): Promise<{
     heroId: number;
     relatedHeroId: number;
@@ -1156,17 +1174,9 @@ export function useDataSource() {
   }[]> => {
     // In view mode, calculate from local data
     if (isViewMode && localMatches && localMatchPlayers) {
-      let allMatches = [...localMatches];
-
-      // Filter matches by date range if specified
-      if (startDate || endDate) {
-        allMatches = allMatches.filter(match => {
-          const matchDate = new Date(match.date);
-          if (startDate && matchDate < startDate) return false;
-          if (endDate && matchDate > endDate) return false;
-          return true;
-        });
-      }
+      const allMatches = filterMatches([...localMatches], {
+        startDate, endDate, gameLengthFilter, playerCountFilter
+      });
 
       if (allMatches.length === 0) {
         return [];
@@ -1251,14 +1261,16 @@ export function useDataSource() {
     }
 
     // Not in view mode - use database service
-    return dbService.getHeroRelationshipNetwork(heroIds, minGames, startDate, endDate);
+    return dbService.getHeroRelationshipNetwork(heroIds, minGames, startDate, endDate, gameLengthFilter, playerCountFilter);
   }, [isViewMode, localMatches, localMatchPlayers]);
 
   // Get filtered player stats (view mode aware)
   const getFilteredPlayerStats = useCallback(async (
     startDate?: Date,
     endDate?: Date,
-    recalculateTrueSkill: boolean = false
+    recalculateTrueSkill: boolean = false,
+    gameLengthFilter?: 'all' | 'quick' | 'long',
+    playerCountFilter?: number | null
   ): Promise<{
     players: FilteredPlayerStats[];
     dateRange: { start: Date; end: Date } | null;
@@ -1276,15 +1288,10 @@ export function useDataSource() {
       };
     }
 
-    // Filter matches by date range if specified
-    if (startDate || endDate) {
-      allMatches = allMatches.filter(match => {
-        const matchDate = new Date(match.date);
-        if (startDate && matchDate < startDate) return false;
-        if (endDate && matchDate > endDate) return false;
-        return true;
-      });
-    }
+    // Apply all match filters (date range, game length, player count)
+    allMatches = filterMatches(allMatches, {
+      startDate, endDate, gameLengthFilter, playerCountFilter
+    });
 
     // Create a set of valid match IDs
     const validMatchIds = new Set(allMatches.map(m => m.id));

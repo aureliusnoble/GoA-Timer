@@ -6,6 +6,8 @@ export interface PlayerStatsFilters {
   minGamesRelationship: number;
   recalculateTrueSkill: boolean;
   dateRange: { startDate?: Date; endDate?: Date };
+  gameLengthFilter: 'all' | 'quick' | 'long';
+  playerCountFilter: number | null;
 }
 
 interface StatsFilterContextValue {

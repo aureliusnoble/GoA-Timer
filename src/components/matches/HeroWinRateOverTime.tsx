@@ -12,6 +12,8 @@ interface HeroWinRateOverTimeProps {
   initialStatsMode?: 'local' | 'global';
   inheritedMinGames?: number;
   inheritedDateRange?: { startDate?: Date; endDate?: Date };
+  inheritedGameLengthFilter?: 'all' | 'quick' | 'long';
+  inheritedPlayerCountFilter?: number | null;
 }
 
 interface HeroTimeSeries {
@@ -38,7 +40,9 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
   onBack,
   initialStatsMode = 'local',
   inheritedMinGames,
-  inheritedDateRange
+  inheritedDateRange,
+  inheritedGameLengthFilter = 'all',
+  inheritedPlayerCountFilter = null
 }) => {
   const { playSound } = useSound();
   const { isViewModeLoading, getHeroWinRateOverTime } = useDataSource();
@@ -74,8 +78,11 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
     return { start: null, end: null };
   }, [inheritedDateRange]);
 
-  // Check if using inherited date filter
-  const usingInheritedDateFilter = !!(inheritedDateRange?.startDate && inheritedDateRange?.endDate);
+  const usingInheritedFilters = !!(
+    (inheritedDateRange?.startDate && inheritedDateRange?.endDate) ||
+    (inheritedGameLengthFilter && inheritedGameLengthFilter !== 'all') ||
+    inheritedPlayerCountFilter != null
+  );
 
   // Detect mobile viewport
   useEffect(() => {
@@ -102,7 +109,7 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
           const startDate = dateRange.start ? new Date(dateRange.start) : undefined;
           const endDate = dateRange.end ? new Date(dateRange.end + 'T23:59:59') : undefined;
 
-          const data = await getHeroWinRateOverTime(undefined, minGames, startDate, endDate);
+          const data = await getHeroWinRateOverTime(undefined, minGames, startDate, endDate, inheritedGameLengthFilter, inheritedPlayerCountFilter);
           setHeroData(data);
 
           // Auto-select top 5 heroes if none selected
@@ -135,7 +142,9 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
             undefined,
             minGames,
             startDate,
-            endDate
+            endDate,
+            inheritedGameLengthFilter === 'all' ? null : inheritedGameLengthFilter,
+            inheritedPlayerCountFilter
           );
 
           if (result.success && result.data) {
@@ -168,7 +177,7 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
     };
 
     loadData();
-  }, [statsMode, minGames, dateRange.start, dateRange.end, isViewModeLoading, getHeroWinRateOverTime]);
+  }, [statsMode, minGames, dateRange.start, dateRange.end, inheritedGameLengthFilter, inheritedPlayerCountFilter, isViewModeLoading, getHeroWinRateOverTime]);
 
   const handleBack = useCallback(() => {
     playSound('buttonClick');
@@ -363,11 +372,16 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
       )}
 
       {/* Inherited Filters Banner */}
-      {usingInheritedDateFilter && (
+      {usingInheritedFilters && (
         <div className="mb-4 p-3 bg-purple-900/30 border border-purple-700/50 rounded-lg flex items-center flex-wrap gap-2 no-screenshot">
           <Filter size={18} className="mr-2 text-purple-400" />
           <span className="text-sm text-purple-200">
-            Using date filter from Hero Stats: {inheritedDateRange?.startDate?.toLocaleDateString()} - {inheritedDateRange?.endDate?.toLocaleDateString()}
+            Using filters from Hero Stats:
+            {inheritedGameLengthFilter && inheritedGameLengthFilter !== 'all' && ` ${inheritedGameLengthFilter === 'quick' ? 'Short' : 'Long'} games`}
+            {inheritedPlayerCountFilter != null && ` | ${inheritedPlayerCountFilter} players`}
+            {inheritedDateRange?.startDate && inheritedDateRange?.endDate &&
+              ` | ${inheritedDateRange.startDate.toLocaleDateString()} - ${inheritedDateRange.endDate.toLocaleDateString()}`
+            }
           </span>
         </div>
       )}

@@ -3,6 +3,7 @@ import { Team, GameLength, VictoryType } from '../types';
 import { rating, rate, ordinal } from 'openskill';
 import NormalDistribution from 'normal-distribution';
 import { CloudSyncService } from './supabase/CloudSyncService';
+import { filterMatches } from '../shared/utils/matchFilters';
 
 // Database configuration
 const DB_NAME = 'GuardsOfAtlantisStats';
@@ -327,21 +328,15 @@ class DatabaseService {
   async getHeroStats(
     minGamesForRelationships: number = 1,
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
+    gameLengthFilter?: 'all' | 'quick' | 'long',
+    playerCountFilter?: number | null
   ): Promise<any[]> {
     try {
       const allMatchPlayersRaw = await this.getAllMatchPlayers();
-      let allMatches = await this.getAllMatches();
-
-      // Filter matches by date range if specified
-      if (startDate || endDate) {
-        allMatches = allMatches.filter(match => {
-          const matchDate = new Date(match.date);
-          if (startDate && matchDate < startDate) return false;
-          if (endDate && matchDate > endDate) return false;
-          return true;
-        });
-      }
+      let allMatches = filterMatches(await this.getAllMatches(), {
+        startDate, endDate, gameLengthFilter, playerCountFilter
+      });
 
       // Create a set of valid match IDs for filtering match players
       const validMatchIds = new Set(allMatches.map(m => m.id));
@@ -578,7 +573,9 @@ class DatabaseService {
     heroIds?: number[],
     minGames: number = 3,
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
+    gameLengthFilter?: 'all' | 'quick' | 'long',
+    playerCountFilter?: number | null
   ): Promise<{
     heroes: Array<{
       heroId: number;
@@ -598,20 +595,12 @@ class DatabaseService {
   }> {
     try {
       const allMatchPlayersRaw = await this.getAllMatchPlayers();
-      let allMatches = await this.getAllMatches();
+      let allMatches = filterMatches(await this.getAllMatches(), {
+        startDate, endDate, gameLengthFilter, playerCountFilter
+      });
 
       // Sort matches by date chronologically
       allMatches.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-      // Filter matches by date range if specified
-      if (startDate || endDate) {
-        allMatches = allMatches.filter(match => {
-          const matchDate = new Date(match.date);
-          if (startDate && matchDate < startDate) return false;
-          if (endDate && matchDate > endDate) return false;
-          return true;
-        });
-      }
 
       if (allMatches.length === 0) {
         return { heroes: [], dateRange: null };
@@ -1683,6 +1672,18 @@ class DatabaseService {
     CloudSyncService.triggerAutoUpload();
 
     return match.id;
+  }
+
+  /**
+   * Get hero play counts for a player (heroId → number of times played)
+   */
+  async getPlayerHeroCounts(playerId: string): Promise<Map<number, number>> {
+    const matches = await this.getPlayerMatches(playerId);
+    const counts = new Map<number, number>();
+    for (const match of matches) {
+      counts.set(match.heroId, (counts.get(match.heroId) || 0) + 1);
+    }
+    return counts;
   }
 
   /**
@@ -2802,7 +2803,9 @@ class DatabaseService {
     heroIds: number[],
     minGames: number = 1,
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
+    gameLengthFilter?: 'all' | 'quick' | 'long',
+    playerCountFilter?: number | null
   ): Promise<{
     heroId: number;
     relatedHeroId: number;
@@ -2813,17 +2816,9 @@ class DatabaseService {
   }[]> {
     try {
       const allMatchPlayersRaw = await this.getAllMatchPlayers();
-      let allMatches = await this.getAllMatches();
-
-      // Filter matches by date range if specified
-      if (startDate || endDate) {
-        allMatches = allMatches.filter(match => {
-          const matchDate = new Date(match.date);
-          if (startDate && matchDate < startDate) return false;
-          if (endDate && matchDate > endDate) return false;
-          return true;
-        });
-      }
+      const allMatches = filterMatches(await this.getAllMatches(), {
+        startDate, endDate, gameLengthFilter, playerCountFilter
+      });
 
       if (allMatches.length === 0) {
         return [];

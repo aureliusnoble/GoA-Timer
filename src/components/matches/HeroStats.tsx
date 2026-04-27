@@ -1,6 +1,6 @@
 // src/components/matches/HeroStats.tsx
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { ChevronLeft, Search, Info, Filter, ChevronDown, ChevronUp, Shield, Calendar, Globe, Users, RefreshCw, Loader2, AlertCircle, TrendingUp, Network, Crown, Flag, Skull } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, Info, Filter, ChevronDown, ChevronUp, Shield, Calendar, Globe, Users, RefreshCw, Loader2, AlertCircle, TrendingUp, Network, Crown, Flag, Skull } from 'lucide-react';
 import { Hero } from '../../types';
 import { useSound } from '../../context/SoundContext';
 import EnhancedTooltip from '../common/EnhancedTooltip';
@@ -59,10 +59,11 @@ interface HeroStats {
 
 interface HeroStatsProps {
   onBack: () => void;
-  onViewHeroDetails?: (heroId: number) => void;
+  onViewHeroDetails?: (heroId: number, statsMode?: 'local' | 'global') => void;
+  initialStatsMode?: 'local' | 'global';
 }
 
-const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
+const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails, initialStatsMode = 'local' }) => {
   const { playSound } = useSound();
   const { isViewMode, isViewModeLoading, getHeroStats, getHeroImpact } = useDataSource();
   const [heroStats, setHeroStats] = useState<HeroStats[]>([]);
@@ -81,9 +82,17 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
     const saved = localStorage.getItem('heroStats_recencyMonths');
     return saved ? parseInt(saved, 10) : null; // null = All Time
   });
+  const [gameLengthFilter, setGameLengthFilter] = useState<'all' | 'quick' | 'long'>(() => {
+    const saved = localStorage.getItem('heroStats_gameLengthFilter');
+    return (saved === 'quick' || saved === 'long') ? saved : 'all';
+  });
+  const [playerCountFilter, setPlayerCountFilter] = useState<number | null>(() => {
+    const saved = localStorage.getItem('heroStats_playerCountFilter');
+    return saved ? parseInt(saved, 10) : null;
+  });
 
   // Global stats mode state
-  const [statsMode, setStatsMode] = useState<'local' | 'global'>('local');
+  const [statsMode, setStatsMode] = useState<'local' | 'global'>(initialStatsMode);
   const [globalHeroStats, setGlobalHeroStats] = useState<GlobalHeroStats[]>([]);
   const [globalStatsLoading, setGlobalStatsLoading] = useState(false);
   const [globalStatsError, setGlobalStatsError] = useState<string | null>(null);
@@ -97,7 +106,7 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
 
   // Hero impact state
   const [heroImpact, setHeroImpact] = useState<Map<number, HeroImpactResult>>(new Map());
-  const [impactLoading, setImpactLoading] = useState(false);
+  const [, setImpactLoading] = useState(false);
 
   // Check if cloud features are available
   const cloudAvailable = isSupabaseConfigured();
@@ -129,7 +138,7 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
     setGlobalStatsError(null);
     try {
       const result = await GlobalStatsService.getGlobalHeroStats(
-        1, // minGamesHero
+        1,
         minGamesRelationship,
         forceRefresh
       );
@@ -160,7 +169,9 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
           const stats = await getHeroStats(
             minGamesRelationship,
             dateRange.startDate,
-            dateRange.endDate
+            dateRange.endDate,
+            gameLengthFilter,
+            playerCountFilter
           );
           setHeroStats(stats);
         } catch (error) {
@@ -171,15 +182,23 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
       };
       loadHeroStats();
     }
-  }, [statsMode, minGamesRelationship, dateRange.startDate, dateRange.endDate, isViewModeLoading, getHeroStats]);
+  }, [statsMode, minGamesRelationship, dateRange.startDate, dateRange.endDate, gameLengthFilter, playerCountFilter, isViewModeLoading, getHeroStats]);
 
-  // Load hero impact for local mode
+  // Load hero impact — local computation for local mode, global RPC for global mode
   useEffect(() => {
-    if (isViewModeLoading || statsMode !== 'local') return;
+    if (isViewModeLoading) return;
     const loadHeroImpact = async () => {
       setImpactLoading(true);
       try {
-        const results = await getHeroImpact();
+        let results: HeroImpactResult[] = [];
+        if (statsMode === 'global') {
+          const resp = await GlobalStatsService.getGlobalHeroSkillStats();
+          if (resp.success && resp.data) {
+            results = resp.data;
+          }
+        } else {
+          results = await getHeroImpact(gameLengthFilter, playerCountFilter);
+        }
         const map = new Map<number, HeroImpactResult>();
         for (const r of results) map.set(r.heroId, r);
         setHeroImpact(map);
@@ -190,7 +209,7 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
       }
     };
     loadHeroImpact();
-  }, [statsMode, isViewModeLoading, getHeroImpact]);
+  }, [statsMode, gameLengthFilter, playerCountFilter, isViewModeLoading, getHeroImpact]);
 
   // Load global stats when switching to global mode (initial load)
   useEffect(() => {
@@ -235,6 +254,20 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
     }
   }, [recencyMonths]);
 
+  // Persist gameLengthFilter to localStorage
+  useEffect(() => {
+    localStorage.setItem('heroStats_gameLengthFilter', gameLengthFilter);
+  }, [gameLengthFilter]);
+
+  // Persist playerCountFilter to localStorage
+  useEffect(() => {
+    if (playerCountFilter === null) {
+      localStorage.removeItem('heroStats_playerCountFilter');
+    } else {
+      localStorage.setItem('heroStats_playerCountFilter', playerCountFilter.toString());
+    }
+  }, [playerCountFilter]);
+
   // Handle back navigation with sound
   const handleBack = () => {
     playSound('buttonClick');
@@ -269,6 +302,8 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
     setFilterRole('all');
     setMinGamesRelationship(1);
     setRecencyMonths(null);
+    setGameLengthFilter('all');
+    setPlayerCountFilter(null);
     setShowFilterMenu(false);
   };
 
@@ -308,8 +343,26 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
   };
 
   // Get active hero stats based on current mode
+  // In global mode, show all heroes from static data immediately while stats load
   const activeHeroStats = useMemo(() => {
-    return statsMode === 'local' ? heroStats : globalHeroStats;
+    if (statsMode === 'local') return heroStats;
+    if (globalHeroStats.length > 0) return globalHeroStats;
+    return allHeroes.map(h => ({
+      heroId: h.id,
+      heroName: h.name,
+      icon: h.icon,
+      totalGames: 0,
+      wins: 0,
+      losses: 0,
+      winRate: 0,
+      complexity: h.complexity,
+      roles: h.roles,
+      expansion: h.expansion,
+      bestTeammates: [],
+      bestAgainst: [],
+      worstAgainst: [],
+      victoryTypeStats: undefined,
+    }));
   }, [statsMode, heroStats, globalHeroStats]);
 
   // Extract all available roles from heroes
@@ -369,6 +422,14 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
         case 'complexity':
           comparison = a.complexity - b.complexity;
           break;
+        case 'impact': {
+          const aImpact = heroImpact.get(a.heroId);
+          const bImpact = heroImpact.get(b.heroId);
+          const aAte = aImpact ? aImpact.ate : -999;
+          const bAte = bImpact ? bImpact.ate : -999;
+          comparison = aAte - bAte;
+          break;
+        }
         default:
           comparison = 0;
       }
@@ -528,6 +589,8 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
         initialStatsMode={statsMode}
         inheritedMinGames={minGamesRelationship}
         inheritedDateRange={dateRange.startDate ? { startDate: dateRange.startDate, endDate: dateRange.endDate } : undefined}
+        inheritedGameLengthFilter={gameLengthFilter}
+        inheritedPlayerCountFilter={playerCountFilter}
       />
     );
   }
@@ -540,6 +603,8 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
         initialStatsMode={statsMode}
         inheritedMinGames={minGamesRelationship}
         inheritedDateRange={dateRange.startDate ? { startDate: dateRange.startDate, endDate: dateRange.endDate } : undefined}
+        inheritedGameLengthFilter={gameLengthFilter}
+        inheritedPlayerCountFilter={playerCountFilter}
       />
     );
   }
@@ -738,13 +803,25 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
             <button
               onClick={() => handleSort('complexity')}
               className={`px-3 py-1 rounded ${
-                sortBy === 'complexity' 
-                  ? 'bg-blue-600 hover:bg-blue-500' 
+                sortBy === 'complexity'
+                  ? 'bg-blue-600 hover:bg-blue-500'
                   : 'bg-gray-600 hover:bg-gray-500'
               }`}
             >
               Complexity {sortBy === 'complexity' && (sortOrder === 'asc' ? '↑' : '↓')}
             </button>
+            {heroImpact.size > 0 && (
+              <button
+                onClick={() => handleSort('impact')}
+                className={`px-3 py-1 rounded ${
+                  sortBy === 'impact'
+                    ? 'bg-blue-600 hover:bg-blue-500'
+                    : 'bg-gray-600 hover:bg-gray-500'
+                }`}
+              >
+                Impact {sortBy === 'impact' && (sortOrder === 'asc' ? '↑' : '↓')}
+              </button>
+            )}
             <button
               onClick={() => handleSort('name')}
               className={`px-3 py-1 rounded ${
@@ -765,9 +842,9 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
             >
               <Filter size={18} className="mr-2" />
               <span>Filters</span>
-              {(filterExpansion !== 'all' || filterRole !== 'all' || minGamesRelationship !== 1 || recencyMonths !== null) && (
+              {(filterExpansion !== 'all' || filterRole !== 'all' || minGamesRelationship !== 1 || recencyMonths !== null || gameLengthFilter !== 'all' || playerCountFilter !== null) && (
                 <span className="ml-2 bg-blue-600 text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  {(filterExpansion !== 'all' ? 1 : 0) + (filterRole !== 'all' ? 1 : 0) + (minGamesRelationship !== 1 ? 1 : 0) + (recencyMonths !== null ? 1 : 0)}
+                  {(filterExpansion !== 'all' ? 1 : 0) + (filterRole !== 'all' ? 1 : 0) + (minGamesRelationship !== 1 ? 1 : 0) + (recencyMonths !== null ? 1 : 0) + (gameLengthFilter !== 'all' ? 1 : 0) + (playerCountFilter !== null ? 1 : 0)}
                 </span>
               )}
               {showFilterMenu ? (
@@ -830,6 +907,70 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
                     </label>
                   </div>
                 </div>
+
+                {/* Game Length Filter (local only — global data is aggregated) */}
+                {statsMode === 'local' && (
+                  <div className="mb-4">
+                    <label className="block text-sm text-gray-400 mb-2">Game Length</label>
+                    <div className="space-y-2">
+                      {([['all', 'All'], ['quick', 'Short (Quick)'], ['long', 'Long']] as const).map(([value, label]) => (
+                        <label key={value} className="flex items-center cursor-pointer">
+                          <input
+                            type="radio"
+                            name="heroGameLengthFilter"
+                            checked={gameLengthFilter === value}
+                            onChange={() => setGameLengthFilter(value)}
+                            className="mr-2 accent-blue-500"
+                          />
+                          <span className="text-sm">{label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Player Count Filter (local only — global data is aggregated) */}
+                {statsMode === 'local' && (
+                  <div className="mb-4">
+                    <label className="block text-sm text-gray-400 mb-1">Player Count</label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          if (playerCountFilter === null) setPlayerCountFilter(10);
+                          else if (playerCountFilter > 4) setPlayerCountFilter(playerCountFilter - 1);
+                        }}
+                        disabled={playerCountFilter !== null && playerCountFilter <= 4}
+                        className="w-10 h-10 flex items-center justify-center bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-xl font-bold"
+                      >
+                        −
+                      </button>
+                      <div className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-center font-medium">
+                        {playerCountFilter === null ? 'All' : playerCountFilter}
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (playerCountFilter === null) setPlayerCountFilter(4);
+                          else if (playerCountFilter < 10) setPlayerCountFilter(playerCountFilter + 1);
+                        }}
+                        disabled={playerCountFilter !== null && playerCountFilter >= 10}
+                        className="w-10 h-10 flex items-center justify-center bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-xl font-bold"
+                      >
+                        +
+                      </button>
+                    </div>
+                    {playerCountFilter !== null && (
+                      <button
+                        onClick={() => setPlayerCountFilter(null)}
+                        className="text-xs text-blue-400 hover:text-blue-300 mt-1"
+                      >
+                        Reset to All
+                      </button>
+                    )}
+                    <p className="text-xs text-gray-500 mt-1">
+                      Total players in the match (both teams)
+                    </p>
+                  </div>
+                )}
 
                 {/* Expansion Filter */}
                 <div className="mb-4">
@@ -927,8 +1068,8 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
         </div>
       )}
 
-      {/* Loading State */}
-      {(statsMode === 'local' ? loading : (globalStatsLoading && globalHeroStats.length === 0)) ? (
+      {/* Loading State (local only — global shows placeholder cards immediately) */}
+      {(statsMode === 'local' && loading) ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
         </div>
@@ -952,7 +1093,7 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
                       onClick={(e) => {
                         if (onViewHeroDetails) {
                           playSound('buttonClick');
-                          onViewHeroDetails(hero.heroId);
+                          onViewHeroDetails(hero.heroId, statsMode);
                         } else {
                           handleHeroClick(getHeroById(hero.heroId)!, e);
                         }
@@ -980,6 +1121,7 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
                     {/* Hero Stats */}
                     <div className="p-4">
                       {/* Win/Loss Stats */}
+                      {hero.totalGames > 0 ? (
                       <div className="mb-4">
                         <div className="flex justify-between items-center mb-2">
                           <div className="text-sm text-gray-400 flex items-center">
@@ -989,8 +1131,8 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
                           <div className="font-medium">{hero.winRate.toFixed(1)}%</div>
                         </div>
                         <div className="h-2 bg-red-600 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-green-500" 
+                          <div
+                            className="h-full bg-green-500"
                             style={{ width: `${hero.winRate}%` }}
                           ></div>
                         </div>
@@ -1000,11 +1142,18 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
                           <span>Total: {hero.totalGames}</span>
                         </div>
                       </div>
+                      ) : (
+                      <div className="mb-4 space-y-2 animate-pulse">
+                        <div className="h-4 bg-gray-600 rounded w-24" />
+                        <div className="h-2 bg-gray-600 rounded-full" />
+                        <div className="h-3 bg-gray-600 rounded w-32" />
+                      </div>
+                      )}
 
                       {/* Hero Impact */}
                       {(() => {
                         const impact = heroImpact.get(hero.heroId);
-                        if (impactLoading) {
+                        if (!impact && hero.totalGames > 0 && heroImpact.size === 0) {
                           return (
                             <div className="mb-4">
                               <div className="text-sm text-gray-400 mb-2">Hero Impact</div>
@@ -1030,8 +1179,8 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
                               </div>
                             </div>
                             <ForestPlot ate={impact.ate} ciLower={impact.ciLower} ciUpper={impact.ciUpper} sufficient={impact.sufficient} />
-                            {impact.gradientBadge !== 'balanced' && (
-                              <div className="mt-2">
+                            <div className="mt-2 h-6">
+                              {impact.gradientBadge !== 'balanced' && (
                                 <span className={`text-xs px-2 py-1 rounded-full ${
                                   impact.gradientBadge === 'rewards-skill'
                                     ? 'bg-purple-900/50 text-purple-300'
@@ -1039,8 +1188,8 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
                                 }`}>
                                   {impact.gradientBadge === 'rewards-skill' ? 'Rewards Skill' : 'Beginner Friendly'}
                                 </span>
-                              </div>
-                            )}
+                              )}
+                            </div>
                           </div>
                         );
                       })()}
@@ -1142,15 +1291,15 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
                       </div>
                       
                       {/* Worst Against Section */}
-                      <div>
+                      <div className="mb-4">
                         <div className="flex items-center mb-2">
                           <h4 className="font-semibold text-sm">Countered By</h4>
                           <Info size={14} className="ml-1 text-gray-500 cursor-help" />
                         </div>
-                        
+
                         {hero.worstAgainst.length > 0 ? (
                           <div className="grid grid-cols-3 gap-2">
-                            {hero.worstAgainst.map(opponent => 
+                            {hero.worstAgainst.map(opponent =>
                               renderHeroIcon(opponent)
                             )}
                           </div>
@@ -1158,6 +1307,20 @@ const HeroStats: React.FC<HeroStatsProps> = ({ onBack, onViewHeroDetails }) => {
                           <div className="text-sm text-gray-500 italic">No data available</div>
                         )}
                       </div>
+
+                      {/* View Details Button */}
+                      {onViewHeroDetails && hero.totalGames > 0 && (
+                        <button
+                          onClick={() => {
+                            playSound('buttonClick');
+                            onViewHeroDetails(hero.heroId, statsMode);
+                          }}
+                          className="w-full mt-2 px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg text-sm text-gray-200 flex items-center justify-center transition-colors"
+                        >
+                          View Detailed Stats
+                          <ChevronRight size={16} className="ml-1" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );

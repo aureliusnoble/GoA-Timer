@@ -315,6 +315,14 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
   const [recalculateTrueSkill, setRecalculateTrueSkill] = useState<boolean>(() => {
     return localStorage.getItem('playerStats_recalculateTrueSkill') === 'true';
   });
+  const [gameLengthFilter, setGameLengthFilter] = useState<'all' | 'quick' | 'long'>(() => {
+    const saved = localStorage.getItem('playerStats_gameLengthFilter');
+    return (saved === 'quick' || saved === 'long') ? saved : 'all';
+  });
+  const [playerCountFilter, setPlayerCountFilter] = useState<number | null>(() => {
+    const saved = localStorage.getItem('playerStats_playerCountFilter');
+    return saved ? parseInt(saved, 10) : null;
+  });
   const [showRelationshipGraph, setShowRelationshipGraph] = useState<boolean>(false);
 
   // Persist minGamesRelationship to localStorage
@@ -336,6 +344,20 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
     localStorage.setItem('playerStats_recalculateTrueSkill', recalculateTrueSkill.toString());
   }, [recalculateTrueSkill]);
 
+  // Persist gameLengthFilter to localStorage
+  useEffect(() => {
+    localStorage.setItem('playerStats_gameLengthFilter', gameLengthFilter);
+  }, [gameLengthFilter]);
+
+  // Persist playerCountFilter to localStorage
+  useEffect(() => {
+    if (playerCountFilter === null) {
+      localStorage.removeItem('playerStats_playerCountFilter');
+    } else {
+      localStorage.setItem('playerStats_playerCountFilter', playerCountFilter.toString());
+    }
+  }, [playerCountFilter]);
+
   // Calculate date range based on recencyMonths
   const dateRange = useMemo(() => {
     if (recencyMonths === null) {
@@ -353,9 +375,11 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
       recencyMonths,
       minGamesRelationship,
       recalculateTrueSkill,
-      dateRange
+      dateRange,
+      gameLengthFilter,
+      playerCountFilter
     });
-  }, [recencyMonths, minGamesRelationship, recalculateTrueSkill, dateRange, setPlayerStatsFilters]);
+  }, [recencyMonths, minGamesRelationship, recalculateTrueSkill, dateRange, gameLengthFilter, playerCountFilter, setPlayerStatsFilters]);
 
   // Load player data on component mount and when filters change
   useEffect(() => {
@@ -429,12 +453,14 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
           return { currentStreak, bestStreak };
         };
 
-        if (dateRange.startDate && dateRange.endDate) {
-          // Use filtered player stats when date range is active (view mode aware)
+        const hasMatchFilters = gameLengthFilter !== 'all' || playerCountFilter !== null;
+        if ((dateRange.startDate && dateRange.endDate) || hasMatchFilters) {
           const filteredResult = await getFilteredPlayerStats(
             dateRange.startDate,
             dateRange.endDate,
-            recalculateTrueSkill
+            recalculateTrueSkill,
+            gameLengthFilter,
+            playerCountFilter
           );
 
           // Get all match players for victory type calculation
@@ -598,7 +624,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
     // Don't load data while view mode is still being determined
     if (isViewModeLoading) return;
     loadPlayers();
-  }, [isViewModeLoading, dateRange.startDate, dateRange.endDate, recalculateTrueSkill, isViewMode, getAllPlayers, getAllMatchPlayers, getAllMatches, getFilteredPlayerStats]);
+  }, [isViewModeLoading, dateRange.startDate, dateRange.endDate, recalculateTrueSkill, gameLengthFilter, playerCountFilter, isViewMode, getAllPlayers, getAllMatchPlayers, getAllMatches, getFilteredPlayerStats]);
   
   const handleBack = () => {
     playSound('buttonClick');
@@ -731,6 +757,8 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
         inheritedMinGames={minGamesRelationship}
         inheritedDateRange={dateRange.startDate ? { startDate: dateRange.startDate, endDate: dateRange.endDate } : undefined}
         recalculateTrueSkill={recalculateTrueSkill}
+        inheritedGameLengthFilter={gameLengthFilter}
+        inheritedPlayerCountFilter={playerCountFilter}
       />
     );
   }
@@ -855,9 +883,9 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
             >
               <Filter size={18} className="mr-2" />
               <span>Filters</span>
-              {(minGamesRelationship !== 3 || recencyMonths !== null) && (
+              {(minGamesRelationship !== 3 || recencyMonths !== null || gameLengthFilter !== 'all' || playerCountFilter !== null) && (
                 <span className="ml-2 bg-blue-600 text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  {(minGamesRelationship !== 3 ? 1 : 0) + (recencyMonths !== null ? 1 : 0)}
+                  {(minGamesRelationship !== 3 ? 1 : 0) + (recencyMonths !== null ? 1 : 0) + (gameLengthFilter !== 'all' ? 1 : 0) + (playerCountFilter !== null ? 1 : 0)}
                 </span>
               )}
               {showFilterMenu ? (
@@ -935,6 +963,66 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
                   </div>
                 )}
 
+                {/* Game Length Filter */}
+                <div className="mb-4">
+                  <label className="block text-sm text-gray-400 mb-2">Game Length</label>
+                  <div className="space-y-2">
+                    {([['all', 'All'], ['quick', 'Short (Quick)'], ['long', 'Long']] as const).map(([value, label]) => (
+                      <label key={value} className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="playerGameLengthFilter"
+                          checked={gameLengthFilter === value}
+                          onChange={() => setGameLengthFilter(value)}
+                          className="mr-2 accent-blue-500"
+                        />
+                        <span className="text-sm">{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Player Count Filter */}
+                <div className="mb-4">
+                  <label className="block text-sm text-gray-400 mb-1">Player Count</label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        if (playerCountFilter === null) setPlayerCountFilter(10);
+                        else if (playerCountFilter > 4) setPlayerCountFilter(playerCountFilter - 1);
+                      }}
+                      disabled={playerCountFilter !== null && playerCountFilter <= 4}
+                      className="w-10 h-10 flex items-center justify-center bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-xl font-bold"
+                    >
+                      −
+                    </button>
+                    <div className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-center font-medium">
+                      {playerCountFilter === null ? 'All' : playerCountFilter}
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (playerCountFilter === null) setPlayerCountFilter(4);
+                        else if (playerCountFilter < 10) setPlayerCountFilter(playerCountFilter + 1);
+                      }}
+                      disabled={playerCountFilter !== null && playerCountFilter >= 10}
+                      className="w-10 h-10 flex items-center justify-center bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-xl font-bold"
+                    >
+                      +
+                    </button>
+                  </div>
+                  {playerCountFilter !== null && (
+                    <button
+                      onClick={() => setPlayerCountFilter(null)}
+                      className="text-xs text-blue-400 hover:text-blue-300 mt-1"
+                    >
+                      Reset to All
+                    </button>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    Total players in the match (both teams)
+                  </p>
+                </div>
+
                 {/* Min Games for Relationships */}
                 <div className="mb-4">
                   <label className="block text-sm text-gray-400 mb-1">Min games for relationships</label>
@@ -969,6 +1057,8 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
                     setMinGamesRelationship(3);
                     setRecencyMonths(null);
                     setRecalculateTrueSkill(false);
+                    setGameLengthFilter('all');
+                    setPlayerCountFilter(null);
                     setShowFilterMenu(false);
                   }}
                   className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg"

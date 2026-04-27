@@ -14,6 +14,8 @@ interface HeroRelationshipGraphProps {
   initialStatsMode?: 'local' | 'global';
   inheritedMinGames?: number;
   inheritedDateRange?: { startDate?: Date; endDate?: Date };
+  inheritedGameLengthFilter?: 'all' | 'quick' | 'long';
+  inheritedPlayerCountFilter?: number | null;
 }
 
 // Edge types
@@ -64,7 +66,7 @@ const edgeLabels: Record<EdgeType, string> = {
   opponent_lost: 'Lost to'
 };
 
-const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, initialStatsMode = 'local', inheritedMinGames = 1, inheritedDateRange }) => {
+const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, initialStatsMode = 'local', inheritedMinGames = 1, inheritedDateRange, inheritedGameLengthFilter = 'all', inheritedPlayerCountFilter = null }) => {
   const { playSound } = useSound();
   const { isViewModeLoading, getHeroRelationshipNetwork } = useDataSource();
   const [loading, setLoading] = useState(false);
@@ -95,7 +97,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
   }, [inheritedDateRange]);
 
   // Check if using inherited filters
-  const usingInheritedFilters = !!(inheritedMinGames > 1 || (inheritedDateRange?.startDate && inheritedDateRange?.endDate));
+  const usingInheritedFilters = !!(inheritedMinGames > 1 || (inheritedDateRange?.startDate && inheritedDateRange?.endDate) || (inheritedGameLengthFilter && inheritedGameLengthFilter !== 'all') || inheritedPlayerCountFilter != null);
 
   // Heroes with recorded relationships (filtered list)
   const [availableHeroes, setAvailableHeroes] = useState<typeof allHeroes>([]);
@@ -189,22 +191,24 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
         let heroIdsWithData = new Set<number>();
 
         if (statsMode === 'local') {
-          // Get all relationships from local data with date filtering (view mode aware)
           const relationships = await getHeroRelationshipNetwork(
             allHeroIds,
             minGames,
             dateRange.startDate,
-            dateRange.endDate
+            dateRange.endDate,
+            inheritedGameLengthFilter,
+            inheritedPlayerCountFilter
           );
           relationships.forEach(rel => {
             heroIdsWithData.add(rel.heroId);
             heroIdsWithData.add(rel.relatedHeroId);
           });
         } else {
-          // Get from global data (no date filtering available for global stats)
           const result = await GlobalStatsService.getHeroRelationshipNetwork(
             allHeroIds,
-            minGames
+            minGames,
+            inheritedGameLengthFilter === 'all' ? null : inheritedGameLengthFilter,
+            inheritedPlayerCountFilter
           );
           if (result.success && result.data) {
             result.data.forEach(rel => {
@@ -227,7 +231,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
     };
 
     loadAvailableHeroes();
-  }, [statsMode, minGames, dateRange.startDate, dateRange.endDate, isViewModeLoading, getHeroRelationshipNetwork]);
+  }, [statsMode, minGames, dateRange.startDate, dateRange.endDate, inheritedGameLengthFilter, inheritedPlayerCountFilter, isViewModeLoading, getHeroRelationshipNetwork]);
 
   // Preload hero images
   useEffect(() => {
@@ -363,7 +367,9 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
             heroIds,
             minGames,
             dateRange.startDate,
-            dateRange.endDate
+            dateRange.endDate,
+            inheritedGameLengthFilter,
+            inheritedPlayerCountFilter
           );
           const data = buildGraphData(heroIds, relationships);
           setGraphData(data);
@@ -373,13 +379,14 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
           setLoading(false);
         }
       } else {
-        // Global mode (no date filtering available for global stats)
         setGlobalLoading(true);
         setGlobalError(null);
         try {
           const result = await GlobalStatsService.getHeroRelationshipNetwork(
             heroIds,
-            minGames
+            minGames,
+            inheritedGameLengthFilter === 'all' ? null : inheritedGameLengthFilter,
+            inheritedPlayerCountFilter
           );
           if (result.success && result.data) {
             const data = buildGraphData(heroIds, result.data);
@@ -397,7 +404,7 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
     };
 
     loadData();
-  }, [selectedHeroes, statsMode, minGames, dateRange.startDate, dateRange.endDate, isViewModeLoading, getHeroRelationshipNetwork]);
+  }, [selectedHeroes, statsMode, minGames, dateRange.startDate, dateRange.endDate, inheritedGameLengthFilter, inheritedPlayerCountFilter, isViewModeLoading, getHeroRelationshipNetwork]);
 
   // Build graph data from relationships - preserves existing node positions
   const buildGraphData = useCallback((
@@ -822,10 +829,11 @@ const HeroRelationshipGraph: React.FC<HeroRelationshipGraphProps> = ({ onBack, i
           <Filter size={18} className="mr-2 text-purple-400" />
           <span className="text-sm text-purple-200">
             Using filters from Hero Stats:
-            {inheritedMinGames > 1 && ` Min ${inheritedMinGames} games per relationship`}
-            {inheritedMinGames > 1 && inheritedDateRange?.startDate && ' | '}
+            {inheritedMinGames > 1 && ` Min ${inheritedMinGames} games`}
+            {inheritedGameLengthFilter && inheritedGameLengthFilter !== 'all' && ` | ${inheritedGameLengthFilter === 'quick' ? 'Short' : 'Long'} games`}
+            {inheritedPlayerCountFilter != null && ` | ${inheritedPlayerCountFilter} players`}
             {inheritedDateRange?.startDate && inheritedDateRange?.endDate &&
-              `${inheritedDateRange.startDate.toLocaleDateString()} - ${inheritedDateRange.endDate.toLocaleDateString()}`
+              ` | ${inheritedDateRange.startDate.toLocaleDateString()} - ${inheritedDateRange.endDate.toLocaleDateString()}`
             }
           </span>
         </div>

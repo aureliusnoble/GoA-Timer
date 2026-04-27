@@ -65,10 +65,14 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
     return { start: null, end: null };
   }, [playerStatsFilters?.dateRange]);
 
-  // Check if using inherited filters
-  const usingInheritedFilters = !!(playerStatsFilters?.dateRange?.startDate && playerStatsFilters?.dateRange?.endDate);
-
-  // Get recalculateTrueSkill from context
+  // Get filter values from context
+  const inheritedGameLengthFilter = playerStatsFilters?.gameLengthFilter ?? 'all';
+  const inheritedPlayerCountFilter = playerStatsFilters?.playerCountFilter ?? null;
+  const usingInheritedFilters = !!(
+    (playerStatsFilters?.dateRange?.startDate && playerStatsFilters?.dateRange?.endDate) ||
+    (inheritedGameLengthFilter && inheritedGameLengthFilter !== 'all') ||
+    inheritedPlayerCountFilter != null
+  );
   const recalculateTrueSkill = playerStatsFilters?.recalculateTrueSkill ?? false;
 
   // Detect mobile viewport
@@ -95,14 +99,12 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
         const endDate = dateRange.end ? new Date(dateRange.end + 'T23:59:59') : undefined;
 
         let history;
-        if (recalculateTrueSkill && (startDate || endDate)) {
-          // Use recalculated ratings for the filtered period
-          history = await getHistoricalRatingsForPeriod(startDate, endDate, true);
-        } else if (startDate || endDate) {
-          // Just filter by date without recalculating
-          history = await getHistoricalRatingsForPeriod(startDate, endDate, false);
+        const hasMatchFilters = inheritedGameLengthFilter !== 'all' || inheritedPlayerCountFilter != null;
+        if (recalculateTrueSkill && (startDate || endDate || hasMatchFilters)) {
+          history = await getHistoricalRatingsForPeriod(startDate, endDate, true, inheritedGameLengthFilter, inheritedPlayerCountFilter);
+        } else if (startDate || endDate || hasMatchFilters) {
+          history = await getHistoricalRatingsForPeriod(startDate, endDate, false, inheritedGameLengthFilter, inheritedPlayerCountFilter);
         } else {
-          // No date filter - use regular historical ratings
           history = await getHistoricalRatings();
         }
 
@@ -181,7 +183,7 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
     };
 
     loadRatingHistory();
-  }, [isViewModeLoading, getHistoricalRatings, getHistoricalRatingsForPeriod, getCurrentTrueSkillRatings, getAllPlayers, dateRange.start, dateRange.end, recalculateTrueSkill]);
+  }, [isViewModeLoading, getHistoricalRatings, getHistoricalRatingsForPeriod, getCurrentTrueSkillRatings, getAllPlayers, dateRange.start, dateRange.end, recalculateTrueSkill, inheritedGameLengthFilter, inheritedPlayerCountFilter]);
 
   // Filter chart data by date range
   const filteredChartData = useMemo(() => {
@@ -371,6 +373,8 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
           <span className="text-sm text-purple-200">
             Using filters from Player Stats
             {playerStatsFilters?.recencyMonths && `: Last ${playerStatsFilters.recencyMonths} months`}
+            {inheritedGameLengthFilter !== 'all' && ` | ${inheritedGameLengthFilter === 'quick' ? 'Short' : 'Long'} games`}
+            {inheritedPlayerCountFilter != null && ` | ${inheritedPlayerCountFilter} players`}
             {recalculateTrueSkill && ' (TrueSkill recalculated)'}
           </span>
         </div>

@@ -12,6 +12,8 @@ interface PlayerRelationshipGraphProps {
   inheritedMinGames?: number;
   inheritedDateRange?: { startDate?: Date; endDate?: Date };
   recalculateTrueSkill?: boolean;
+  inheritedGameLengthFilter?: 'all' | 'quick' | 'long';
+  inheritedPlayerCountFilter?: number | null;
 }
 
 // Edge types
@@ -126,7 +128,9 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
   onBack,
   inheritedMinGames = 1,
   inheritedDateRange,
-  recalculateTrueSkill = false
+  recalculateTrueSkill = false,
+  inheritedGameLengthFilter = 'all',
+  inheritedPlayerCountFilter = null
 }) => {
   const { playSound } = useSound();
   const { isViewModeLoading, getAllPlayers, getPlayerRelationshipNetwork, getPlayerDisplayRating, getFilteredPlayerStats } = useDataSource();
@@ -146,7 +150,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
 
   // Inherited filter state
   const [usingInheritedFilters, setUsingInheritedFilters] = useState<boolean>(
-    !!(inheritedMinGames > 1 || (inheritedDateRange?.startDate && inheritedDateRange?.endDate))
+    !!(inheritedMinGames > 1 || (inheritedDateRange?.startDate && inheritedDateRange?.endDate) || (inheritedGameLengthFilter && inheritedGameLengthFilter !== 'all') || inheritedPlayerCountFilter != null)
   );
   const [dateRange, setDateRange] = useState<{ start: string | null; end: string | null }>(() => {
     if (inheritedDateRange?.startDate && inheritedDateRange?.endDate) {
@@ -246,7 +250,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
         // Get relationships to filter to only players with data
         const startDate = dateRange.start ? new Date(dateRange.start) : undefined;
         const endDate = dateRange.end ? new Date(dateRange.end + 'T23:59:59') : undefined;
-        const relationships = await getPlayerRelationshipNetwork(allPlayerIds, minGames, startDate, endDate);
+        const relationships = await getPlayerRelationshipNetwork(allPlayerIds, minGames, startDate, endDate, inheritedGameLengthFilter, inheritedPlayerCountFilter);
         const playerIdsWithData = new Set<string>();
         relationships.forEach(rel => {
           playerIdsWithData.add(rel.playerId);
@@ -256,8 +260,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
         // Get ratings - either recalculated or current
         let playerRatings: Record<string, number> = {};
         if (recalculateTrueSkill && startDate) {
-          // Use recalculated TrueSkill ratings for the filtered period
-          const filteredStats = await getFilteredPlayerStats(startDate, endDate, true);
+          const filteredStats = await getFilteredPlayerStats(startDate, endDate, true, inheritedGameLengthFilter, inheritedPlayerCountFilter);
           playerRatings = filteredStats.players.reduce((acc, p) => {
             acc[p.id] = p.displayRating;
             return acc;
@@ -299,7 +302,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
     };
 
     loadAvailablePlayers();
-  }, [isViewModeLoading, getAllPlayers, getPlayerRelationshipNetwork, getPlayerDisplayRating, getFilteredPlayerStats, minGames, dateRange, recalculateTrueSkill]);
+  }, [isViewModeLoading, getAllPlayers, getPlayerRelationshipNetwork, getPlayerDisplayRating, getFilteredPlayerStats, minGames, dateRange, recalculateTrueSkill, inheritedGameLengthFilter, inheritedPlayerCountFilter]);
 
   // Configure forces after graph ref is available
   useEffect(() => {
@@ -401,7 +404,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
       try {
         const startDate = dateRange.start ? new Date(dateRange.start) : undefined;
         const endDate = dateRange.end ? new Date(dateRange.end + 'T23:59:59') : undefined;
-        const relationships = await getPlayerRelationshipNetwork(playerIds, minGames, startDate, endDate);
+        const relationships = await getPlayerRelationshipNetwork(playerIds, minGames, startDate, endDate, inheritedGameLengthFilter, inheritedPlayerCountFilter);
         const data = buildGraphData(playerIds, relationships);
         setGraphData(data);
       } catch (error) {
@@ -412,7 +415,7 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
     };
 
     loadData();
-  }, [selectedPlayers, getPlayerRelationshipNetwork, minGames, dateRange]);
+  }, [selectedPlayers, getPlayerRelationshipNetwork, minGames, dateRange, inheritedGameLengthFilter, inheritedPlayerCountFilter]);
 
   // Build graph data from relationships - preserves existing node positions
   const buildGraphData = useCallback((
@@ -751,9 +754,10 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
             <Filter size={18} className="mr-2 text-purple-400" />
             <span className="text-sm text-purple-200">
               Using filters from Player Stats:
-              {inheritedMinGames > 1 && ` Min ${inheritedMinGames} games per relationship`}
-              {inheritedMinGames > 1 && dateRange.start && ' | '}
-              {dateRange.start && dateRange.end && `${dateRange.start} to ${dateRange.end}`}
+              {inheritedMinGames > 1 && ` Min ${inheritedMinGames} games`}
+              {inheritedGameLengthFilter && inheritedGameLengthFilter !== 'all' && ` | ${inheritedGameLengthFilter === 'quick' ? 'Short' : 'Long'} games`}
+              {inheritedPlayerCountFilter != null && ` | ${inheritedPlayerCountFilter} players`}
+              {dateRange.start && dateRange.end && ` | ${dateRange.start} to ${dateRange.end}`}
               {recalculateTrueSkill && ' | TrueSkill recalculated'}
             </span>
           </div>

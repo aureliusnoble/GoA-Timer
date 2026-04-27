@@ -1,10 +1,10 @@
 import React from 'react';
 
 interface ForestPlotProps {
-  ate: number;        // -1 to 1 scale (e.g., 0.032 = +3.2%)
-  ciLower: number;    // lower bound of 95% CI
-  ciUpper: number;    // upper bound of 95% CI
-  sufficient: boolean; // enough data?
+  ate: number;
+  ciLower: number;
+  ciUpper: number;
+  sufficient: boolean;
   size?: 'small' | 'large';
 }
 
@@ -15,50 +15,36 @@ const ForestPlot: React.FC<ForestPlotProps> = ({
   sufficient,
   size = 'small'
 }) => {
-  // Scale constants: [-10%, 10%] → [0%, 100%]
-  const SCALE_MIN = -0.10;
-  const SCALE_MAX = 0.10;
+  const SCALE_MIN = -0.50;
+  const SCALE_MAX = 0.50;
 
-  // Convert value from [-0.10, 0.10] to [0, 100] for CSS positioning
   const toPercent = (value: number): number => {
     const clamped = Math.max(SCALE_MIN, Math.min(SCALE_MAX, value));
     return ((clamped - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * 100;
   };
 
-  // Determine dot color based on CI and sufficient data
-  const getDotColor = (): string => {
-    if (!sufficient) return '#6b7280'; // grey
-    if (ciLower > 0) return '#4ade80'; // green - CI entirely positive
-    if (ciUpper < 0) return '#fbbf24'; // amber - CI entirely negative
-    return '#6b7280'; // grey - CI crosses zero
+  const getColor = (): { r: number; g: number; b: number } => {
+    if (!sufficient) return { r: 107, g: 114, b: 128 };
+    if (ciLower > 0) return { r: 74, g: 222, b: 128 };
+    if (ciUpper < 0) return { r: 251, g: 191, b: 36 };
+    return { r: 107, g: 114, b: 128 };
   };
 
-  // Get CI band color with 25% opacity
-  const getCIBandColor = (color: string): string => {
-    // Convert hex to rgba with 25% opacity
-    const hex = color.replace('#', '');
-    const r = parseInt(hex.substring(0, 2), 16);
-    const g = parseInt(hex.substring(2, 4), 16);
-    const b = parseInt(hex.substring(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, 0.25)`;
-  };
+  const ciWidth = ciUpper - ciLower;
+  const maxReasonableWidth = SCALE_MAX - SCALE_MIN;
+  const confidence = Math.max(0, 1 - ciWidth / maxReasonableWidth);
+  const barOpacity = 0.15 + confidence * 0.55;
 
-  const dotColor = getDotColor();
-  const ciBandColor = getCIBandColor(dotColor);
-
-  // Calculate positions
+  const color = getColor();
   const atePercent = toPercent(ate);
   const ciLeftPercent = toPercent(ciLower);
   const ciRightPercent = toPercent(ciUpper);
   const zeroPercent = toPercent(0);
 
-  // Size variants
   const isSmall = size === 'small';
   const trackHeight = isSmall ? 'h-5' : 'h-8';
   const dotSize = isSmall ? 10 : 14;
-  const dotSizePx = `${dotSize}px`;
 
-  // Format percentage for labels
   const formatPercent = (value: number): string => {
     const pct = Math.round(value * 100);
     return pct >= 0 ? `+${pct}%` : `${pct}%`;
@@ -66,17 +52,16 @@ const ForestPlot: React.FC<ForestPlotProps> = ({
 
   return (
     <div className="w-full">
-      {/* Track Container */}
       <div className="relative mb-1">
-        {/* Background track */}
         <div className={`${trackHeight} bg-gray-800 rounded w-full relative`}>
-          {/* CI Band */}
+          {/* CI Bar */}
           <div
             className="absolute h-full rounded"
             style={{
               left: `${ciLeftPercent}%`,
               right: `${100 - ciRightPercent}%`,
-              backgroundColor: ciBandColor,
+              backgroundColor: `rgba(${color.r}, ${color.g}, ${color.b}, ${barOpacity})`,
+              border: `1px solid rgba(${color.r}, ${color.g}, ${color.b}, ${barOpacity + 0.15})`,
             }}
           />
 
@@ -88,12 +73,13 @@ const ForestPlot: React.FC<ForestPlotProps> = ({
 
           {/* ATE Dot */}
           <div
-            className="absolute border-2 border-gray-900 rounded-full transform -translate-x-1/2 -translate-y-1/2 top-1/2"
+            className="absolute rounded-full transform -translate-x-1/2 -translate-y-1/2 top-1/2"
             style={{
               left: `${atePercent}%`,
-              width: dotSizePx,
-              height: dotSizePx,
-              backgroundColor: dotColor,
+              width: `${dotSize}px`,
+              height: `${dotSize}px`,
+              backgroundColor: `rgb(${color.r}, ${color.g}, ${color.b})`,
+              boxShadow: `0 0 4px rgba(${color.r}, ${color.g}, ${color.b}, 0.6)`,
             }}
           />
         </div>
@@ -102,65 +88,38 @@ const ForestPlot: React.FC<ForestPlotProps> = ({
       {/* Scale Labels */}
       <div className="relative w-full" style={{ height: '20px' }}>
         {isSmall ? (
-          // Small variant: -10%, 0, +10%
           <>
-            <div
-              className="absolute text-xs text-gray-400 transform -translate-x-1/2"
-              style={{ left: '0%', top: '0px' }}
-            >
-              -10%
+            <div className="absolute text-xs text-gray-500" style={{ left: '0%', transform: 'translateX(0)' }}>
+              -50%
             </div>
-            <div
-              className="absolute text-xs text-gray-400 transform -translate-x-1/2"
-              style={{ left: '50%', top: '0px' }}
-            >
+            <div className="absolute text-xs text-gray-400 transform -translate-x-1/2" style={{ left: '50%' }}>
               0
             </div>
-            <div
-              className="absolute text-xs text-gray-400 transform -translate-x-1/2"
-              style={{ left: '100%', top: '0px' }}
-            >
-              +10%
+            <div className="absolute text-xs text-gray-500" style={{ right: '0%' }}>
+              +50%
             </div>
           </>
         ) : (
-          // Large variant: -10%, -5%, 0, +5%, +10%
           <>
-            <div
-              className="absolute text-xs text-gray-400 transform -translate-x-1/2"
-              style={{ left: '0%', top: '0px' }}
-            >
-              -10%
+            <div className="absolute text-xs text-gray-500" style={{ left: '0%', transform: 'translateX(0)' }}>
+              -50%
             </div>
-            <div
-              className="absolute text-xs text-gray-400 transform -translate-x-1/2"
-              style={{ left: '25%', top: '0px' }}
-            >
-              -5%
+            <div className="absolute text-xs text-gray-500 transform -translate-x-1/2" style={{ left: '25%' }}>
+              -25%
             </div>
-            <div
-              className="absolute text-xs text-gray-400 transform -translate-x-1/2"
-              style={{ left: '50%', top: '0px' }}
-            >
+            <div className="absolute text-xs text-gray-400 transform -translate-x-1/2" style={{ left: '50%' }}>
               0
             </div>
-            <div
-              className="absolute text-xs text-gray-400 transform -translate-x-1/2"
-              style={{ left: '75%', top: '0px' }}
-            >
-              +5%
+            <div className="absolute text-xs text-gray-500 transform -translate-x-1/2" style={{ left: '75%' }}>
+              +25%
             </div>
-            <div
-              className="absolute text-xs text-gray-400 transform -translate-x-1/2"
-              style={{ left: '100%', top: '0px' }}
-            >
-              +10%
+            <div className="absolute text-xs text-gray-500" style={{ right: '0%' }}>
+              +50%
             </div>
           </>
         )}
       </div>
 
-      {/* Value Display (optional) */}
       {sufficient && (
         <div className="mt-2 text-center text-xs text-gray-400">
           ATE: {formatPercent(ate)} (95% CI: {formatPercent(ciLower)} to {formatPercent(ciUpper)})
