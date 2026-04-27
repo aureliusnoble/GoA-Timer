@@ -1938,9 +1938,11 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
       )}
 
       {/* Main content area */}
+      <Suspense fallback={<FullScreenSpinner />}>
       {showMatchStatistics ? (
   // Match Statistics View
   <StatsFilterProvider>
+    <Suspense fallback={<ViewSpinner />}>
     {currentMatchView === 'menu' && (
       <MatchesMenu 
         onBack={handleBackFromMatchStatistics}
@@ -2049,6 +2051,7 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
         }}
       />
     )}
+    </Suspense>
   </StatsFilterProvider>
 ) : !gameStarted ? (
         <div className="game-setup-container">
@@ -2142,11 +2145,13 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
           onSavePlayerStats={handleSavePlayerStats}
         />
       )}
+      </Suspense>
 
       {/* Victory Screen */}
+      <Suspense fallback={<FullScreenSpinner />}>
       {showVictoryScreen && victorTeam && (
-        <VictoryScreen 
-          winningTeam={victorTeam} 
+        <VictoryScreen
+          winningTeam={victorTeam}
           onReturnToSetup={resetToSetup}
           players={localPlayers}
           gameLength={gameLength}
@@ -2154,6 +2159,7 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
           onUpdatePlayerStats={handleSavePlayerStats}
         />
       )}
+      </Suspense>
 
       {/* CollapsibleFeedback component */}
       <CollapsibleFeedback feedbackUrl="https://forms.gle/dsjjDSbqhTn3hATt6" />
@@ -2162,7 +2168,9 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
       <SoundToggle />
 
       {/* Cloud Sync Sidebar - hidden in view mode */}
-      {!isViewMode && <CloudSidebar />}
+      <Suspense fallback={null}>
+        {!isViewMode && <CloudSidebar />}
+      </Suspense>
 
       {/* Feature Announcements */}
       <FeatureAnnouncement
