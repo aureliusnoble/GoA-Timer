@@ -1935,15 +1935,17 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
       )}
 
       {/* Coin flip animation */}
+      <Suspense fallback={<FullScreenSpinner />}>
       {showCoinAnimation && (
-        <CoinToss 
-          result={gameState.coinSide} 
+        <CoinToss
+          result={gameState.coinSide}
           onComplete={() => {
             setShowCoinAnimation(false);
             setShowDraftModeSelection(true);
-          }} 
+          }}
         />
       )}
+      </Suspense>
 
       {/* Main content area */}
       <Suspense fallback={<FullScreenSpinner />}>
