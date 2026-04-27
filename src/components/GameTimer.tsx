@@ -236,10 +236,10 @@ const GameTimer: React.FC<GameTimerProps> = ({
 
   return (
     <div className="game-timer">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6">
         {/* Titans Life Counter */}
-        <div className="bg-blue-900/50 rounded-lg p-4 text-center">
-          <h3 className="text-xl font-bold mb-2">Titans Lives</h3>
+        <div className="bg-blue-900/50 rounded-lg p-3 sm:p-4 text-center">
+          <h3 className="text-base sm:text-xl font-bold mb-1 sm:mb-2">Titans Lives</h3>
           <div className="flex justify-center items-center gap-4">
             <button 
               className="bg-blue-700 hover:bg-blue-600 rounded-full w-10 h-10 flex items-center justify-center text-2xl font-bold"
@@ -267,7 +267,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
         </div>
         
         {/* Game State */}
-        <div className="bg-gray-800 rounded-lg p-4 text-center">
+        <div className="bg-gray-800 rounded-lg p-3 sm:p-4 text-center">
           <div className="flex justify-between mb-4">
             {/* Round counter with +/- buttons */}
             <div className="flex flex-col items-center">
@@ -467,8 +467,8 @@ const GameTimer: React.FC<GameTimerProps> = ({
         </div>
         
         {/* Atlanteans Life Counter */}
-        <div className="bg-red-900/50 rounded-lg p-4 text-center">
-          <h3 className="text-xl font-bold mb-2">Atlanteans Lives</h3>
+        <div className="bg-red-900/50 rounded-lg p-3 sm:p-4 text-center">
+          <h3 className="text-base sm:text-xl font-bold mb-1 sm:mb-2">Atlanteans Lives</h3>
           <div className="flex justify-center items-center gap-4">
             <button 
               className="bg-red-700 hover:bg-red-600 rounded-full w-10 h-10 flex items-center justify-center text-2xl font-bold"
@@ -497,13 +497,13 @@ const GameTimer: React.FC<GameTimerProps> = ({
       </div>
       
       {/* Timer Section - Updated to handle disabled timers */}
-      <div className="bg-gray-800 rounded-lg p-6">
+      <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
         {gameState.currentPhase === 'strategy' ? (
           <div className="text-center">
-            <h2 className="text-2xl font-bold mb-4">Strategy Phase - Turn {gameState.turn}</h2>
-            
+            <h2 className="text-lg sm:text-2xl font-bold mb-3 sm:mb-4">Strategy Phase - Turn {gameState.turn}</h2>
+
             {/* Timer display - show infinity symbol if timer is disabled */}
-            <div className={`text-6xl font-bold mb-6 flex justify-center items-center ${
+            <div className={`text-5xl sm:text-6xl font-bold mb-4 sm:mb-6 flex justify-center items-center ${
               strategyTimerEnabled && strategyTimeRemaining <= 10 ? 'text-red-500 animate-pulse' : ''
             }`}>
               {strategyTimerEnabled ? (
@@ -512,66 +512,66 @@ const GameTimer: React.FC<GameTimerProps> = ({
                 <Infinity size={64} className="text-gray-300" />
               )}
             </div>
-            
-            <div className="flex justify-center gap-4">
+
+            <div className="flex flex-wrap justify-center gap-2 sm:gap-4">
               {/* Only show pause/resume buttons if timer is enabled */}
               {strategyTimerEnabled && (
                 strategyTimerActive ? (
-                  <button 
-                    className="bg-amber-600 hover:bg-amber-500 px-6 py-3 rounded-lg text-white font-medium"
+                  <button
+                    className="bg-amber-600 hover:bg-amber-500 px-4 py-2 sm:px-6 sm:py-3 rounded-lg text-white font-medium text-sm sm:text-base"
                     onClick={handlePauseStrategyTimer}
                   >
                     Pause
                   </button>
                 ) : (
-                  <button 
-                    className="bg-green-600 hover:bg-green-500 px-6 py-3 rounded-lg text-white font-medium"
+                  <button
+                    className="bg-green-600 hover:bg-green-500 px-4 py-2 sm:px-6 sm:py-3 rounded-lg text-white font-medium text-sm sm:text-base"
                     onClick={handleStartStrategyTimer}
                   >
                     Resume
                   </button>
                 )
               )}
-              
+
               {/* Only show reset button if timer is enabled */}
               {strategyTimerEnabled && (
-                <button 
-                  className="bg-gray-600 hover:bg-gray-500 px-6 py-3 rounded-lg text-white font-medium flex items-center"
+                <button
+                  className="bg-gray-600 hover:bg-gray-500 px-4 py-2 sm:px-6 sm:py-3 rounded-lg text-white font-medium flex items-center text-sm sm:text-base"
                   onClick={handleResetStrategyTimer}
                 >
-                  <RotateCcw size={18} className="mr-2" />
-                  Reset Timer
+                  <RotateCcw size={16} className="mr-1 sm:mr-2" />
+                  Reset
                 </button>
               )}
-              
+
               {/* Always show End Strategy Phase button */}
-              <button 
-                className="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-lg text-white font-medium"
+              <button
+                className="bg-blue-600 hover:bg-blue-500 px-4 py-2 sm:px-6 sm:py-3 rounded-lg text-white font-medium text-sm sm:text-base"
                 onClick={handleEndStrategyPhase}
               >
-                End Strategy Phase
+                End Strategy
               </button>
             </div>
           </div>
         ) : gameState.currentPhase === 'move' ? (
           <div className="text-center">
-            <h2 className="text-2xl font-bold mb-4">Action Phase</h2>
-            
+            <h2 className="text-lg sm:text-2xl font-bold mb-3 sm:mb-4">Action Phase</h2>
+
             {activePlayer && activePlayer.hero ? (
               <>
                 <div className="mb-4">
-                  <div 
-                    className={`inline-block py-2 px-4 rounded-lg text-white font-medium ${
+                  <div
+                    className={`inline-block py-1 px-3 sm:py-2 sm:px-4 rounded-lg text-white text-sm sm:text-base font-medium ${
                       activePlayer.team === Team.Titans ? 'bg-blue-700' : 'bg-red-700'
                     }`}
                   >
                     {activePlayer.team === Team.Titans ? 'Titans' : 'Atlanteans'}
                   </div>
                   <div className="flex items-center justify-center mt-2">
-                    <div className="w-16 h-16 bg-gray-300 rounded-full overflow-hidden mr-3">
-                      <img 
-                        src={activePlayer.hero.icon} 
-                        alt={activePlayer.hero.name} 
+                    <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gray-300 rounded-full overflow-hidden mr-3">
+                      <img
+                        src={activePlayer.hero.icon}
+                        alt={activePlayer.hero.name}
                         className="w-full h-full object-cover"
                         onError={(e) => {
                           const target = e.target as HTMLImageElement;
@@ -580,22 +580,21 @@ const GameTimer: React.FC<GameTimerProps> = ({
                       />
                     </div>
                     <div>
-                      <div className="flex items-center text-2xl font-bold">
+                      <div className="flex items-center text-lg sm:text-2xl font-bold">
                         {activePlayer.hero.name}
-                        {/* Display player level with shield icon if available */}
                         {activePlayer.stats?.level && (
                           <span className="ml-2 flex items-center" title="Player Level">
-                            <Shield size={18} className={`${activePlayer.team === Team.Titans ? 'text-blue-300' : 'text-red-300'} mr-1`} />
+                            <Shield size={16} className={`${activePlayer.team === Team.Titans ? 'text-blue-300' : 'text-red-300'} mr-1`} />
                             {activePlayer.stats.level}
                           </span>
                         )}
                       </div>
-                      <div className="text-lg text-gray-300">{activePlayer.name}</div>
+                      <div className="text-base sm:text-lg text-gray-300">{activePlayer.name}</div>
                     </div>
                   </div>
-                  
+
                   {/* Only show timer when a player is selected */}
-                  <div className={`text-6xl font-bold my-6 flex justify-center items-center ${
+                  <div className={`text-5xl sm:text-6xl font-bold my-4 sm:my-6 flex justify-center items-center ${
                     moveTimerEnabled && moveTimeRemaining <= 10 ? 'text-red-500 animate-pulse' : ''
                   }`}>
                     {moveTimerEnabled ? (
@@ -604,51 +603,51 @@ const GameTimer: React.FC<GameTimerProps> = ({
                       <Infinity size={64} className="text-gray-300" />
                     )}
                   </div>
-                  
-                  <div className="flex justify-center gap-4">
+
+                  <div className="flex flex-wrap justify-center gap-2 sm:gap-4">
                     {/* Only show pause/resume buttons if timer is enabled */}
                     {moveTimerEnabled && (
                       moveTimerActive ? (
-                        <button 
-                          className="bg-amber-600 hover:bg-amber-500 px-6 py-3 rounded-lg text-white font-medium"
+                        <button
+                          className="bg-amber-600 hover:bg-amber-500 px-4 py-2 sm:px-6 sm:py-3 rounded-lg text-white font-medium text-sm sm:text-base"
                           onClick={handlePauseMoveTimer}
                         >
                           Pause
                         </button>
                       ) : (
-                        <button 
-                          className="bg-green-600 hover:bg-green-500 px-6 py-3 rounded-lg text-white font-medium"
+                        <button
+                          className="bg-green-600 hover:bg-green-500 px-4 py-2 sm:px-6 sm:py-3 rounded-lg text-white font-medium text-sm sm:text-base"
                           onClick={handleStartMoveTimer}
                         >
                           Resume
                         </button>
                       )
                     )}
-                    
+
                     {/* Only show reset button if timer is enabled */}
                     {moveTimerEnabled && (
-                      <button 
-                        className="bg-gray-600 hover:bg-gray-500 px-6 py-3 rounded-lg text-white font-medium flex items-center"
+                      <button
+                        className="bg-gray-600 hover:bg-gray-500 px-4 py-2 sm:px-6 sm:py-3 rounded-lg text-white font-medium flex items-center text-sm sm:text-base"
                         onClick={handleResetMoveTimer}
                       >
-                        <RotateCcw size={18} className="mr-2" />
-                        Reset Timer
+                        <RotateCcw size={16} className="mr-1 sm:mr-2" />
+                        Reset
                       </button>
                     )}
-                    
+
                     {/* Always show Complete Turn button */}
-                    <button 
-                      className="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-lg text-white font-medium flex items-center"
+                    <button
+                      className="bg-blue-600 hover:bg-blue-500 px-4 py-2 sm:px-6 sm:py-3 rounded-lg text-white font-medium flex items-center text-sm sm:text-base"
                       onClick={handleCompletePlayerTurn}
                     >
-                      <Check size={18} className="mr-2" />
-                      Complete Turn
+                      <Check size={16} className="mr-1 sm:mr-2" />
+                      Complete
                     </button>
                   </div>
                 </div>
               </>
             ) : (
-              <div className="py-6 text-xl text-amber-300">
+              <div className="py-4 sm:py-6 text-lg sm:text-xl text-amber-300">
                 Select a player to start their action timer
               </div>
             )}
@@ -717,21 +716,19 @@ const GameTimer: React.FC<GameTimerProps> = ({
     return (
       <div
         key={player.id}
-        className={`p-5 rounded-lg transition-all relative shadow-md ${
-          // Different styles based on player status
+        className={`p-3 sm:p-5 rounded-lg transition-all relative shadow-md ${
           isActive
             ? player.team === Team.Titans
               ? 'bg-blue-700 ring-4 ring-white'
               : 'bg-red-700 ring-4 ring-white'
             : hasCompleted
-            ? 'bg-gray-700/90 opacity-60' // Greyed out for completed players
+            ? 'bg-gray-700/90 opacity-60'
             : player.team === Team.Titans
             ? 'bg-blue-900/70 hover:bg-blue-800'
             : 'bg-red-900/70 hover:bg-red-800'
         } ${isSelectable ? 'cursor-pointer transform hover:scale-[1.02] hover:shadow-lg' : ''}`}
         onClick={() => {
           if (isSelectable) {
-            // Play selection sound when selecting a player
             playSound('heroSelect');
             onSelectPlayer(index);
           }
@@ -739,10 +736,10 @@ const GameTimer: React.FC<GameTimerProps> = ({
       >
         <div className="flex items-start">
           {player.hero && (
-            <div className="w-24 h-24 bg-gray-300 rounded-full overflow-hidden mr-4 flex-shrink-0 border-2 border-gray-600">
-              <img 
-                src={player.hero.icon} 
-                alt={player.hero.name} 
+            <div className="w-14 h-14 sm:w-24 sm:h-24 bg-gray-300 rounded-full overflow-hidden mr-3 sm:mr-4 flex-shrink-0 border-2 border-gray-600">
+              <img
+                src={player.hero.icon}
+                alt={player.hero.name}
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
@@ -751,16 +748,15 @@ const GameTimer: React.FC<GameTimerProps> = ({
               />
             </div>
           )}
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <div className="flex justify-between items-start">
-              <div className="text-xl font-bold mb-1 flex items-center">
+              <div className="text-base sm:text-xl font-bold mb-1 flex items-center truncate">
                 {player.hero?.name || 'Unknown Hero'}
-                {/* Add player level with shield icon if available */}
                 {player.stats?.level && (
                   <span className="ml-2 flex items-center" title={`Level ${player.stats.level}`}>
-                    <Shield 
-                      size={16} 
-                      className={`${player.team === Team.Titans ? 'text-blue-300' : 'text-red-300'} mr-1`} 
+                    <Shield
+                      size={14}
+                      className={`${player.team === Team.Titans ? 'text-blue-300' : 'text-red-300'} mr-1`}
                     />
                     {player.stats.level}
                   </span>
@@ -781,17 +777,17 @@ const GameTimer: React.FC<GameTimerProps> = ({
               )}
             </div>
             
-            <div className="text-lg font-medium text-gray-100 mb-2">{player.name || `Player ${player.id}`}</div>
-            
+            <div className="text-sm sm:text-lg font-medium text-gray-100 mb-1 sm:mb-2 truncate">{player.name || `Player ${player.id}`}</div>
+
             {player.lane && (
-              <div className="text-base text-gray-300 mb-2">
+              <div className="text-xs sm:text-base text-gray-300 mb-1 sm:mb-2">
                 {player.lane === Lane.Top ? 'Top Lane' : 'Bottom Lane'}
               </div>
             )}
-            
+
             {/* Only show stats if they've been logged and at least one stat exists */}
             {playerHasStats && hasAnyPlayerLoggedStats() && (
-              <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-base bg-black/20 p-2 rounded">
+              <div className="mt-1 sm:mt-2 grid grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-1 sm:gap-y-2 text-xs sm:text-base bg-black/20 p-1.5 sm:p-2 rounded">
                 {/* Only show kills stat if at least one player has kills */}
                 {hasAnyPlayerLoggedStat('totalKills') && (
                   <span className="flex items-center" title="Kills">
