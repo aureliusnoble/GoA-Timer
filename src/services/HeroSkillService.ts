@@ -432,15 +432,31 @@ export function computeSkillGradient(
 }
 
 /**
- * Assign a gradient badge based on first and last gradient point ATEs.
- * > +0.02 → 'rewards-skill', < -0.02 → 'beginner-friendly', else 'balanced'.
+ * Assign a gradient badge by checking whether the gradient trend is statistically
+ * distinguishable from flat. Requires the CIs at the endpoints to not overlap
+ * AND the absolute delta to exceed 5pp.
  */
 export function assignGradientBadge(gradient: GradientPoint[]): GradientBadge {
-  if (gradient.length < 2) return 'balanced';
-  const delta = gradient[gradient.length - 1].ate - gradient[0].ate;
-  if (delta > 0.02) return 'rewards-skill';
-  if (delta < -0.02) return 'beginner-friendly';
-  return 'balanced';
+  if (gradient.length < 3) return 'balanced';
+
+  // Use a linear regression across all gradient points to get a robust slope,
+  // rather than relying on just the noisy endpoints.
+  const n = gradient.length;
+  let sumX = 0, sumY = 0, sumXX = 0, sumXY = 0;
+  for (const pt of gradient) {
+    sumX += pt.percentile;
+    sumY += pt.ate;
+    sumXX += pt.percentile * pt.percentile;
+    sumXY += pt.percentile * pt.ate;
+  }
+  const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+
+  // Total fitted delta across the gradient range (10th to 90th percentile = 80pp span)
+  const fittedDelta = slope * 80;
+
+  if (Math.abs(fittedDelta) < 0.05) return 'balanced';
+  if (fittedDelta > 0) return 'rewards-skill';
+  return 'beginner-friendly';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -502,61 +518,73 @@ export function computeVictoryProfile(
  *
  * Heroes with fewer than 10 games are marked `sufficient: false`.
  */
-export function computeHeroImpact(
-  matches: DBMatch[],
-  matchPlayers: DBMatchPlayer[],
-  players: DBPlayer[],
-): HeroImpactResult[] {
-  const observations = buildTeamObservations(matches, matchPlayers, players);
+function computeOneHero(
+  heroId: number,
+  heroName: string,
+  observations: TeamObservation[],
+): HeroImpactResult {
+  const gamesWithHero = observations.filter(o => o.heroIds.includes(heroId)).length;
+  const sufficient = gamesWithHero >= 10;
+  const ate = computeAteForHero(heroId, observations) ?? 0;
+  const ci = sufficient ? bootstrapAte(heroId, observations) : null;
+  const gradient = sufficient ? computeSkillGradient(heroId, observations) : [];
+  const { profile: victoryProfile, badge: winStyleBadge } = computeVictoryProfile(heroId, observations);
 
-  // Collect all hero IDs and their names from match players
+  return {
+    heroId,
+    heroName,
+    ate,
+    ciLower: ci ? ci[0] : ate,
+    ciUpper: ci ? ci[1] : ate,
+    gamesWithHero,
+    gradient,
+    gradientBadge: assignGradientBadge(gradient),
+    victoryProfile,
+    winStyleBadge,
+    sufficient,
+  };
+}
+
+function collectHeroMeta(matchPlayers: DBMatchPlayer[]): Map<number, string> {
   const heroMeta = new Map<number, string>();
   for (const mp of matchPlayers) {
     if (!heroMeta.has(mp.heroId)) {
       heroMeta.set(mp.heroId, mp.heroName);
     }
   }
+  return heroMeta;
+}
 
+export function computeHeroImpact(
+  matches: DBMatch[],
+  matchPlayers: DBMatchPlayer[],
+  players: DBPlayer[],
+): HeroImpactResult[] {
+  const observations = buildTeamObservations(matches, matchPlayers, players);
+  const heroMeta = collectHeroMeta(matchPlayers);
   const results: HeroImpactResult[] = [];
-
   for (const [heroId, heroName] of heroMeta.entries()) {
-    // Count games this hero appeared in (as unique match appearances per team)
-    const gamesWithHero = observations.filter(o => o.heroIds.includes(heroId)).length;
-
-    const sufficient = gamesWithHero >= 10;
-
-    // ATE
-    const ate = computeAteForHero(heroId, observations) ?? 0;
-
-    // Bootstrap CIs
-    const ci = sufficient ? bootstrapAte(heroId, observations) : null;
-    const ciLower = ci ? ci[0] : ate;
-    const ciUpper = ci ? ci[1] : ate;
-
-    // Skill gradient
-    const gradient = sufficient ? computeSkillGradient(heroId, observations) : [];
-    const gradientBadge: GradientBadge = assignGradientBadge(gradient);
-
-    // Victory profile
-    const { profile: victoryProfile, badge: winStyleBadge } = computeVictoryProfile(
-      heroId,
-      observations,
-    );
-
-    results.push({
-      heroId,
-      heroName,
-      ate,
-      ciLower,
-      ciUpper,
-      gamesWithHero,
-      gradient,
-      gradientBadge,
-      victoryProfile,
-      winStyleBadge,
-      sufficient,
-    });
+    results.push(computeOneHero(heroId, heroName, observations));
   }
+  return results;
+}
 
+/** Async variant that yields to the main thread between heroes. */
+export async function computeHeroImpactAsync(
+  matches: DBMatch[],
+  matchPlayers: DBMatchPlayer[],
+  players: DBPlayer[],
+): Promise<HeroImpactResult[]> {
+  const observations = buildTeamObservations(matches, matchPlayers, players);
+  const heroMeta = collectHeroMeta(matchPlayers);
+  const results: HeroImpactResult[] = [];
+  let count = 0;
+  for (const [heroId, heroName] of heroMeta.entries()) {
+    results.push(computeOneHero(heroId, heroName, observations));
+    count++;
+    if (count % 3 === 0) {
+      await new Promise(r => setTimeout(r, 0));
+    }
+  }
   return results;
 }

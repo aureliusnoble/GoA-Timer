@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   ResponsiveContainer, ComposedChart, Line, XAxis, YAxis,
-  ReferenceLine, Tooltip, CartesianGrid, Area,
+  ReferenceLine, CartesianGrid, Area,
 } from 'recharts';
 import { GradientPoint, GradientBadge } from '../../../types';
 import { Info } from 'lucide-react';
@@ -24,7 +24,6 @@ export const SkillGradientTab: React.FC<SkillGradientTabProps> = ({
   gradient,
   heroName,
 }) => {
-  // Show "Not enough data" message if gradient is empty
   if (!gradient || gradient.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -33,21 +32,17 @@ export const SkillGradientTab: React.FC<SkillGradientTabProps> = ({
     );
   }
 
-  // Transform gradient data for Recharts
   const chartData = gradient.map((point) => ({
     percentile: percentileLabels[point.percentile] || `${point.percentile}th`,
-    ate: point.ate * 100, // Convert to percentage
-    ciUpper: point.ciUpper * 100,
+    ate: point.ate * 100,
     ciLower: point.ciLower * 100,
-    rawPercentile: point.percentile,
+    ciBand: (point.ciUpper - point.ciLower) * 100,
   }));
 
-  // Get min and max for Y-axis
   const allValues = gradient.flatMap((p) => [p.ate * 100, p.ciUpper * 100, p.ciLower * 100]);
   const minValue = Math.min(...allValues, 0);
   const maxValue = Math.max(...allValues, 0);
 
-  // Calculate insight text
   const firstAte = gradient[0].ate * 100;
   const lastAte = gradient[gradient.length - 1].ate * 100;
 
@@ -63,7 +58,6 @@ export const SkillGradientTab: React.FC<SkillGradientTabProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Chart */}
       <div className="bg-gray-700 rounded-lg p-6">
         <ResponsiveContainer width="100%" height={400}>
           <ComposedChart
@@ -72,7 +66,6 @@ export const SkillGradientTab: React.FC<SkillGradientTabProps> = ({
           >
             <CartesianGrid stroke="#374151" strokeDasharray="5 5" />
 
-            {/* X-Axis */}
             <XAxis
               dataKey="percentile"
               stroke="#9ca3af"
@@ -86,7 +79,6 @@ export const SkillGradientTab: React.FC<SkillGradientTabProps> = ({
               }}
             />
 
-            {/* Y-Axis */}
             <YAxis
               stroke="#9ca3af"
               tick={{ fontSize: 12, fill: '#d1d5db' }}
@@ -94,7 +86,6 @@ export const SkillGradientTab: React.FC<SkillGradientTabProps> = ({
               domain={[Math.floor(minValue / 10) * 10, Math.ceil(maxValue / 10) * 10]}
             />
 
-            {/* Reference line at y=0 */}
             <ReferenceLine
               y={0}
               stroke="#9ca3af"
@@ -107,21 +98,22 @@ export const SkillGradientTab: React.FC<SkillGradientTabProps> = ({
               }}
             />
 
-            {/* Confidence band - mask using dark fill for ciLower */}
+            {/* CI band: invisible base (ciLower) + visible band stacked on top */}
             <Area
               type="monotone"
-              dataKey="ciUpper"
-              fill="#c084fc"
+              dataKey="ciLower"
+              stackId="ci"
+              fill="transparent"
               stroke="none"
-              fillOpacity={0.12}
               isAnimationActive={false}
             />
             <Area
               type="monotone"
-              dataKey="ciLower"
-              fill="#1f2937"
+              dataKey="ciBand"
+              stackId="ci"
+              fill="#c084fc"
               stroke="none"
-              fillOpacity={1}
+              fillOpacity={0.2}
               isAnimationActive={false}
             />
 
@@ -134,43 +126,27 @@ export const SkillGradientTab: React.FC<SkillGradientTabProps> = ({
               dot={{ fill: '#c084fc', r: 4 }}
               isAnimationActive={false}
             />
-
-            {/* Tooltip */}
-            <Tooltip
-              contentStyle={{
-                backgroundColor: '#1f2937',
-                border: '1px solid #374151',
-                borderRadius: '6px',
-              }}
-              labelStyle={{ color: '#d1d5db' }}
-              formatter={(value: number) => [
-                `${value > 0 ? '+' : ''}${value.toFixed(1)}%`,
-                '',
-              ]}
-            />
           </ComposedChart>
         </ResponsiveContainer>
 
-        {/* Axis labels below chart */}
         <div className="flex justify-between mt-4 px-4 text-sm text-gray-400">
-          <span>← Weaker teams</span>
-          <span>Stronger teams →</span>
+          <span>&larr; Weaker teams</span>
+          <span>Stronger teams &rarr;</span>
         </div>
       </div>
 
-      {/* Insight Text */}
       <div className="bg-gray-700 rounded-lg p-4">
         <p className="text-gray-300 text-sm">
           <span className="font-semibold">{performanceText}.</span> {impactText}
         </p>
       </div>
 
-      {/* Interpretation Note */}
       <div className="bg-gray-700 rounded-lg p-4 flex gap-3">
         <Info className="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" />
         <p className="text-gray-400 text-sm">
-          Team skill = average rating of all players in the team. Skills that reward
-          stronger teams may excel in competitive environments.
+          The shaded band shows the 95% confidence interval. Team skill is the average
+          rating of all players in the team. Heroes that reward stronger teams may excel
+          in competitive environments.
         </p>
       </div>
     </div>

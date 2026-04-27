@@ -104,7 +104,7 @@ export const VictoryProfileTab: React.FC<VictoryProfileTabProps> = ({
                 </div>
                 <div className="w-full h-2 bg-gray-600 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gray-600 rounded-full"
+                    className="h-full bg-gray-400 rounded-full"
                     style={{ width: `${averagePercentage}%` }}
                   />
                 </div>
