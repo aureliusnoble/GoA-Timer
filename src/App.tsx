@@ -1,15 +1,11 @@
-import { useState, useEffect, useReducer, useRef } from 'react';
+import { useState, useEffect, useReducer, useRef, lazy, Suspense } from 'react';
 import './App.css';
 import GameSetup from './components/GameSetup';
 import GameTimer from './components/GameTimer';
-import DraftingSystem from './components/DraftingSystem';
-import CoinToss from './components/CoinToss';
-import DraftModeSelection from './components/DraftModeSelection';
 import CollapsibleFeedback from './components/common/CollapsibleFeedback';
 import SoundToggle from './components/common/SoundToggle';
 import FeatureAnnouncement from './components/common/FeatureAnnouncement';
 import AudioInitializer from './components/common/AudioInitializer';
-import VictoryScreen from './components/VictoryScreen';
 import ResumeGamePrompt from './components/common/ResumeGamePrompt';
 import { gameStorageService } from './services/GameStorageService';
 import migrationService from './services/MigrationService';
@@ -18,36 +14,57 @@ import { ConnectionProvider } from './context/ConnectionContext';
 import { AuthProvider } from './context/AuthContext';
 import { ViewModeProvider, useViewMode } from './context/ViewModeContext';
 import { StatsFilterProvider } from './context/StatsFilterContext';
-import CloudSidebar from './components/cloud/CloudSidebar';
 import ViewModeBanner from './components/common/ViewModeBanner';
 import { PlayerRoundStats } from './components/EndOfRoundAssistant';
-import { 
-  Hero, 
-  GameState, 
-  Player, 
-  Team, 
-  GameLength, 
-  Lane, 
-  LaneState, 
+import {
+  Hero,
+  GameState,
+  Player,
+  Team,
+  GameLength,
+  Lane,
+  LaneState,
   DraftMode,
   DraftingState,
   PickBanStep,
   PlayerStats
 } from './types';
 import { getAllExpansions, filterHeroesByExpansions } from './data/heroes';
-import dbService from './services/DatabaseService';
-import SkillOverTime from './components/matches/SkillOverTime';
-// Import match statistics components
-import MatchesMenu, { MatchesView } from './components/matches/MatchesMenu';
-import PlayerStatsScreen from './components/matches/PlayerStats';
-import DetailedPlayerStats from './components/matches/DetailedPlayerStats';
-import MatchHistory from './components/matches/MatchHistory';
-import MatchMaker from './components/matches/MatchMaker';
-import HeroStats from './components/matches/HeroStats';
-import DetailedHeroStats from './components/matches/DetailedHeroStats';
-import RecordMatch from './components/matches/RecordMatch';
-import HeroInfo from './components/matches/HeroInfo';
+import { GlobalStatsService } from './services/supabase/GlobalStatsService';
+import type { MatchesView } from './components/matches/MatchesMenu';
 
+// Lazy-loaded: Tier 1 (secondary screens)
+const DraftingSystem = lazy(() => import('./components/DraftingSystem'));
+const CoinToss = lazy(() => import('./components/CoinToss'));
+const DraftModeSelection = lazy(() => import('./components/DraftModeSelection'));
+const VictoryScreen = lazy(() => import('./components/VictoryScreen'));
+const CloudSidebar = lazy(() => import('./components/cloud/CloudSidebar'));
+
+// Lazy-loaded: Tier 2 (per-view match statistics)
+const MatchesMenu = lazy(() => import('./components/matches/MatchesMenu'));
+const PlayerStatsScreen = lazy(() => import('./components/matches/PlayerStats'));
+const DetailedPlayerStats = lazy(() => import('./components/matches/DetailedPlayerStats'));
+const MatchHistory = lazy(() => import('./components/matches/MatchHistory'));
+const MatchMaker = lazy(() => import('./components/matches/MatchMaker'));
+const HeroStats = lazy(() => import('./components/matches/HeroStats'));
+const DetailedHeroStats = lazy(() => import('./components/matches/DetailedHeroStats'));
+const RecordMatch = lazy(() => import('./components/matches/RecordMatch'));
+const HeroInfo = lazy(() => import('./components/matches/HeroInfo'));
+const SkillOverTime = lazy(() => import('./components/matches/SkillOverTime'));
+
+
+// Loading fallbacks
+const FullScreenSpinner = () => (
+  <div className="flex items-center justify-center min-h-[200px]">
+    <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+  </div>
+);
+
+const ViewSpinner = () => (
+  <div className="flex items-center justify-center py-12">
+    <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+  </div>
+);
 
 // Modified interface for lane state return type
 interface LaneStateResult {
@@ -478,6 +495,7 @@ function AppContent() {
   const [currentMatchView, setCurrentMatchView] = useState<MatchesView>('menu');
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [selectedHeroId, setSelectedHeroId] = useState<number | null>(null);
+  const [heroStatsMode, setHeroStatsMode] = useState<'local' | 'global'>('local');
 
   // Auto-navigate to match statistics in view mode
   useEffect(() => {
@@ -586,6 +604,11 @@ function AppContent() {
       initializeApp();
     }
   }, [gameStarted, isDraftingMode]);
+
+  // Pre-fetch global match data (network only, no computation) so it's ready when needed
+  useEffect(() => {
+    GlobalStatsService.prefetchGlobalMatchData();
+  }, []);
 
   // Save selected expansions to localStorage when they change
   useEffect(() => {
@@ -1951,8 +1974,10 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
     {currentMatchView === 'hero-stats' && (
       <HeroStats
         onBack={() => handleMatchStatisticsNavigate('menu')}
-        onViewHeroDetails={(heroId: number) => {
+        initialStatsMode={heroStatsMode}
+        onViewHeroDetails={(heroId: number, statsMode?: 'local' | 'global') => {
           setSelectedHeroId(heroId);
+          setHeroStatsMode(statsMode || 'local');
           handleMatchStatisticsNavigate('detailed-hero-stats');
         }}
       />
@@ -1960,6 +1985,7 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
     {currentMatchView === 'detailed-hero-stats' && selectedHeroId !== null && (
       <DetailedHeroStats
         heroId={selectedHeroId}
+        statsMode={heroStatsMode}
         onBack={() => {
           setSelectedHeroId(null);
           handleMatchStatisticsNavigate('hero-stats');
