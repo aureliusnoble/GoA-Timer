@@ -605,9 +605,16 @@ function AppContent() {
     }
   }, [gameStarted, isDraftingMode]);
 
-  // Pre-fetch global match data (network only, no computation) so it's ready when needed
+  // Pre-fetch global match data after initial render is complete
   useEffect(() => {
-    GlobalStatsService.prefetchGlobalMatchData();
+    const prefetch = () => GlobalStatsService.prefetchGlobalMatchData();
+    if ('requestIdleCallback' in window) {
+      const id = requestIdleCallback(prefetch);
+      return () => cancelIdleCallback(id);
+    } else {
+      const id = setTimeout(prefetch, 2000);
+      return () => clearTimeout(id);
+    }
   }, []);
 
   // Save selected expansions to localStorage when they change
@@ -914,6 +921,7 @@ const addPlayer = (team: Team) => {
       T3: [2, 4],
     };
 
+    const { default: dbService } = await import('./services/DatabaseService');
     const playerPlayCounts = new Map<number, Map<number, number>>();
     await Promise.all(
       players.map(async (p) => {
