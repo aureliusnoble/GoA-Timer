@@ -35,7 +35,9 @@ const DraftModeSelection: React.FC<DraftModeSelectionProps> = ({
     [DraftMode.Random]: 
       `Randomly select ${playerCount + 2} heroes from the pool. Teams alternate picks from this pool.`,
     [DraftMode.PickAndBan]:
-      'Full drafting experience with pick and ban phases. The draft sequence varies based on the number of players.'
+      'Full drafting experience with pick and ban phases. The draft sequence varies based on the number of players.',
+    [DraftMode.Novel]:
+      'Each player gets 3 heroes they haven\'t played before, with a mix of complexities.'
   };
 
   // Hero requirements for each mode
@@ -43,7 +45,8 @@ const DraftModeSelection: React.FC<DraftModeSelectionProps> = ({
     [DraftMode.AllPick]: playerCount,
     [DraftMode.Single]: playerCount * 3,
     [DraftMode.Random]: playerCount + 2,
-    [DraftMode.PickAndBan]: playerCount * 2
+    [DraftMode.PickAndBan]: playerCount * 2,
+    [DraftMode.Novel]: playerCount * 3
   };
 
   // Additional details or tips for each mode
@@ -51,7 +54,8 @@ const DraftModeSelection: React.FC<DraftModeSelectionProps> = ({
     [DraftMode.AllPick]: "Default draft",
     [DraftMode.Single]: "Forces players to try new heroes",
     [DraftMode.Random]: "Good for balanced hero selection",
-    [DraftMode.PickAndBan]: "Best for competitive play"
+    [DraftMode.PickAndBan]: "Best for competitive play",
+    [DraftMode.Novel]: "Maximises variety from match history"
   };
   
   // Handle mode selection with sound
@@ -134,7 +138,30 @@ const DraftModeSelection: React.FC<DraftModeSelectionProps> = ({
             </div>
           )}
         </div>
-        
+
+        {/* Novel Draft Option */}
+        <div
+          className={`relative ${
+            availableDraftModes[DraftMode.Novel]
+              ? 'bg-gray-700 hover:bg-gray-600 cursor-pointer'
+              : 'bg-gray-800 opacity-50 cursor-not-allowed'
+          } p-5 rounded-lg transition-colors`}
+          onClick={() => handleSelectMode(DraftMode.Novel)}
+        >
+          <h3 className="text-xl font-semibold mb-3">Novel Draft</h3>
+          <p className="text-gray-300 mb-4">{modeDescriptions[DraftMode.Novel]}</p>
+          <div className="bg-blue-900/30 p-2 rounded text-sm">
+            {modeDetails[DraftMode.Novel]}
+          </div>
+
+          {!availableDraftModes[DraftMode.Novel] && (
+            <div className="absolute top-2 right-2 text-yellow-400 flex items-center">
+              <AlertCircle size={16} className="mr-1" />
+              <span className="text-xs">Requires {modeRequirements[DraftMode.Novel]} heroes</span>
+            </div>
+          )}
+        </div>
+
         {/* Random Draft Option */}
         <div 
           className={`relative ${

@@ -428,7 +428,9 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
   const renderSingleDraftUI = () => {
     return (
       <div>
-        <h3 className="text-xl font-bold mb-4">Single Draft</h3>
+        <h3 className="text-xl font-bold mb-4">
+          {draftingState.mode === DraftMode.Novel ? 'Novel Draft' : 'Single Draft'}
+        </h3>
         
         <div className="mb-6">
           {allPlayersHaveSelectedHeroes ? (
@@ -954,6 +956,7 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
       case DraftMode.AllPick:
         return renderAllPickUI();
       case DraftMode.Single:
+      case DraftMode.Novel:
         return renderSingleDraftUI();
       case DraftMode.Random:
         return renderRandomDraftUI();
@@ -1023,8 +1026,9 @@ const DraftingSystem: React.FC<DraftingSystemProps> = ({
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
           <h2 className="text-2xl font-bold mb-3 sm:mb-0">
             {draftingState.mode === DraftMode.AllPick ? 'All Pick' :
-             draftingState.mode === DraftMode.Single ? 'Single Draft' : 
-             draftingState.mode === DraftMode.Random ? 'Random Draft' : 
+             draftingState.mode === DraftMode.Single ? 'Single Draft' :
+             draftingState.mode === DraftMode.Novel ? 'Novel Draft' :
+             draftingState.mode === DraftMode.Random ? 'Random Draft' :
              'Pick and Ban Draft'}
           </h2>
           
