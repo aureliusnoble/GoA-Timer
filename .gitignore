@@ -1,10 +1,22 @@
 node_modules/
 dist
-claude/
-CLAUDE.md
-Issues.md
 
 # Environment files
 .env
 .env.local
 .env.*.local
+
+# Claude Code / AI tooling
+.claude/
+.superpowers/
+CLAUDE.md
+Issues.md
+docs/superpowers/
+
+# Planning and reference docs
+HeroSkill.md
+Research_Paper_final_version.pdf
+analysis/
+
+# Supabase temp files
+supabase/.temp/
