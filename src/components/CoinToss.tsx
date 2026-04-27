@@ -34,12 +34,20 @@ const CoinToss: React.FC<CoinTossProps> = ({ result, onComplete }) => {
     playSound('buttonClick');
     onComplete();
   };
-  
+
+  const handleSkip = () => {
+    setIsFlipping(false);
+    setShowButton(true);
+  };
+
   return (
-    <div className="fixed top-0 left-0 w-full h-full bg-black/80 flex flex-col items-center justify-center z-50">
+    <div
+      className="fixed top-0 left-0 w-full h-full bg-black/80 flex flex-col items-center justify-center z-50 cursor-pointer"
+      onClick={showButton ? undefined : handleSkip}
+    >
       <div className="text-center">
         <h2 className="text-3xl font-bold mb-8 text-white">Randomizing Tiebreaker</h2>
-        
+
         <div className="coin-flip-container">
           <div className={`coin ${isFlipping ? 'flipping' : ''} ${result === Team.Titans ? 'flip-titans' : 'flip-atlanteans'}`}>
             <div className="coin-face heads">
@@ -52,12 +60,16 @@ const CoinToss: React.FC<CoinTossProps> = ({ result, onComplete }) => {
             </div>
           </div>
         </div>
-        
+
         <div className="text-2xl font-bold mt-8 text-white">
           {result === Team.Titans ? 'Titans go first!' : 'Atlanteans go first!'}
         </div>
-        
-        <button 
+
+        {!showButton && (
+          <p className="text-gray-400 text-sm mt-4">Tap anywhere to skip</p>
+        )}
+
+        <button
           className={`continue-button ${showButton ? 'visible' : ''}`}
           onClick={handleContinue}
         >
@@ -70,30 +82,36 @@ const CoinToss: React.FC<CoinTossProps> = ({ result, onComplete }) => {
         .coin.flipping.flip-titans {
           animation: flipCoinTitans 3s ease-out forwards;
         }
-        
+
         .coin.flipping.flip-atlanteans {
           animation: flipCoinAtlanteans 3s ease-out forwards;
         }
-        
+
+        .coin.flip-titans:not(.flipping) {
+          transform: rotateY(0deg) rotateX(10deg);
+        }
+
+        .coin.flip-atlanteans:not(.flipping) {
+          transform: rotateY(180deg) rotateX(10deg);
+        }
+
         @keyframes flipCoinTitans {
           0% { transform: rotateY(0) rotateX(0); }
           20% { transform: rotateY(180deg) rotateX(10deg); }
           40% { transform: rotateY(360deg) rotateX(-10deg); }
           60% { transform: rotateY(540deg) rotateX(10deg); }
           80% { transform: rotateY(720deg) rotateX(-10deg); }
-          100% { transform: rotateY(0deg) rotateX(10deg); } /* End on Titans side (heads) */
+          100% { transform: rotateY(0deg) rotateX(10deg); }
         }
-        
+
         @keyframes flipCoinAtlanteans {
           0% { transform: rotateY(0) rotateX(0); }
           20% { transform: rotateY(180deg) rotateX(10deg); }
           40% { transform: rotateY(360deg) rotateX(-10deg); }
           60% { transform: rotateY(540deg) rotateX(10deg); }
           80% { transform: rotateY(720deg) rotateX(-10deg); }
-          100% { transform: rotateY(180deg) rotateX(10deg); } /* End on Atlanteans side (tails) */
+          100% { transform: rotateY(180deg) rotateX(10deg); }
         }
-        
- 
       `}</style>
     </div>
   );
