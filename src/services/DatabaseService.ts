@@ -6,6 +6,7 @@ import { CloudSyncService } from './supabase/CloudSyncService';
 import { filterMatches } from '../shared/utils/matchFilters';
 import { HERO_LEVEL_MAX, HERO_LEVEL_MIN } from '../shared/constants/game';
 import { isTrackedStat, isValidHeroLevel } from '../shared/utils/statValues';
+import { fillMissingFields } from '../shared/utils/mergeFill';
 import { formatLocalDate } from '../shared/utils/localDate';
 
 // Database configuration
@@ -1178,6 +1179,9 @@ class DatabaseService {
         console.error('[DatabaseService] Cloud deletion failed:', error);
       });
 
+      // Upload the recalculated player stats
+      CloudSyncService.triggerAutoUpload();
+
     } catch (error) {
       console.error('Error deleting match:', error);
       throw error;
@@ -2078,7 +2082,7 @@ class DatabaseService {
       }
       
       const existingMatches = await this.getAllMatches();
-      const existingMatchIds = new Set(existingMatches.map(m => m.id));
+      const existingMatchesById = new Map(existingMatches.map(m => [m.id, m]));
       
       const importedMatchPlayersMap = new Map<string, DBMatchPlayer[]>();
       for (const mp of importedData.matchPlayers) {
@@ -2089,7 +2093,14 @@ class DatabaseService {
       }
       
       for (const importedMatch of importedData.matches) {
-        if (existingMatchIds.has(importedMatch.id)) {
+        const localMatch = existingMatchesById.get(importedMatch.id);
+        if (localMatch) {
+          // Known match: only fill in fields this device is missing
+          await this.fillMissingMatchData(
+            localMatch,
+            importedMatch,
+            importedMatchPlayersMap.get(importedMatch.id) || []
+          );
           continue;
         }
         
@@ -2115,6 +2126,37 @@ class DatabaseService {
     } catch (error) {
       console.error('Error merging data:', error);
       return false;
+    }
+  }
+
+  /**
+   * For a match that already exists locally, fill fields that are missing on the
+   * local match and its match players from an imported copy. Never overwrites a
+   * local value and never adds match players to an existing match.
+   */
+  private async fillMissingMatchData(
+    localMatch: DBMatch,
+    importedMatch: DBMatch,
+    importedMatchPlayers: DBMatchPlayer[]
+  ): Promise<void> {
+    const matchFill = fillMissingFields(localMatch, importedMatch);
+    if (matchFill.filledKeys.length > 0) {
+      await this.saveMatch(matchFill.merged);
+    }
+
+    if (importedMatchPlayers.length === 0) return;
+
+    const localMatchPlayers = await this.getMatchPlayers(localMatch.id);
+    const localById = new Map(localMatchPlayers.map(mp => [mp.id, mp]));
+
+    for (const importedMatchPlayer of importedMatchPlayers) {
+      const localMatchPlayer = localById.get(importedMatchPlayer.id);
+      if (!localMatchPlayer) continue;
+
+      const playerFill = fillMissingFields(localMatchPlayer, importedMatchPlayer);
+      if (playerFill.filledKeys.length > 0) {
+        await this.saveMatchPlayer(playerFill.merged);
+      }
     }
   }
 
@@ -2722,6 +2764,9 @@ class DatabaseService {
 
       // Step 5: Recalculate player statistics (this handles rating recalculation)
       await this.recalculatePlayerStats();
+
+      // Step 6: Upload the edit (debounced; no-op when cloud sync is off)
+      CloudSyncService.triggerAutoUpload();
 
       console.log(`Successfully edited match ${matchId}`);
     } catch (error) {
