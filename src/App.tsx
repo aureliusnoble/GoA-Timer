@@ -1,4 +1,4 @@
-import { useState, useEffect, useReducer, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useReducer, useRef, useMemo, lazy, Suspense } from 'react';
 import './App.css';
 import GameSetup from './components/GameSetup';
 import GameTimer from './components/GameTimer';
@@ -17,7 +17,14 @@ import { AuthProvider } from './context/AuthContext';
 import { ViewModeProvider, useViewMode } from './context/ViewModeContext';
 import { StatsFilterProvider } from './context/StatsFilterContext';
 import ViewModeBanner from './components/common/ViewModeBanner';
-import { PlayerRoundStats } from './components/EndOfRoundAssistant';
+import {
+  GameStatLog,
+  RoundValues,
+  applyTotalsToPlayers,
+  commitRound,
+  createEmptyStatLog,
+  restoreStatLog,
+} from './shared/utils/gameStatLog';
 import {
   Hero,
   GameState,
@@ -28,8 +35,7 @@ import {
   LaneState,
   DraftMode,
   DraftingState,
-  PickBanStep,
-  PlayerStats
+  PickBanStep
 } from './types';
 import { getAllExpansions, filterHeroesByExpansions } from './data/heroes';
 import { GlobalStatsService } from './services/supabase/GlobalStatsService';
@@ -492,6 +498,8 @@ function AppContent() {
   // Victory screen state
   const [showVictoryScreen, setShowVictoryScreen] = useState<boolean>(false);
   const [victorTeam, setVictorTeam] = useState<Team | null>(null);
+  // In-game stats: one entry per round; player totals are derived from it
+  const [statLog, setStatLog] = useState<GameStatLog>(createEmptyStatLog);
   
   // NEW: Match statistics states
   const [showMatchStatistics, setShowMatchStatistics] = useState<boolean>(false);
@@ -529,6 +537,12 @@ function AppContent() {
   
   // Game state with reducer
   const [gameState, dispatch] = useReducer(gameReducer, initialGameState);
+
+  // Players with stats derived from the round log (what the timer/victory screens show and save)
+  const playersWithStats = useMemo(
+    () => applyTotalsToPlayers(localPlayers, statLog),
+    [localPlayers, statLog]
+  );
   
   // Timer states
   const [strategyTimerActive, setStrategyTimerActive] = useState<boolean>(false);
@@ -544,7 +558,8 @@ function AppContent() {
         try {
           await gameStorageService.saveGame({
             gameState,
-            players: localPlayers,
+            players: playersWithStats,
+            statLog,
             strategyTime,
             moveTime,
             strategyTimeRemaining,
@@ -571,7 +586,8 @@ function AppContent() {
     moveTimerActive,
     showVictoryScreen,
     strategyTime,
-    moveTime
+    moveTime,
+    statLog
   ]);
 
   // App initialization: run migration and check for saved game
@@ -1520,12 +1536,12 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
   // Calculate total player count
   const playerCount = playersToUse.length;
   
-  // IMPORTANT FIX: Reset player stats for the new game while preserving only level
+  // Every game starts with no stats (heroes start at level 1); stats come from the round log
   const playersWithResetStats = playersToUse.map(player => ({
     ...player,
-    // Only preserve level if it exists, otherwise no stats object
-    stats: player.stats?.level ? { level: player.stats.level } : undefined
+    stats: undefined
   }));
+  setStatLog(createEmptyStatLog());
   
   // Update local players with reset stats
   setLocalPlayers(playersWithResetStats);
@@ -1726,6 +1742,9 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
     // Restore player state
     setLocalPlayers(savedPlayers);
     players = savedPlayers;
+
+    // Restore the round log (saves from older versions only have totals -> baseline)
+    setStatLog(restoreStatLog(savedGameData.statLog, savedPlayers));
     
     // Restore timer states
     setStrategyTimeRemaining(savedStrategyTime);
@@ -1757,55 +1776,10 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
     setShowResumePrompt(false);
   };
 
-  // NEW: Handle saving player round stats
-// NEW: Handle saving player round stats
-const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStats }) => {
-  // Update the players with new stats
-  const updatedPlayers = localPlayers.map(player => {
-    const playerRoundStats = roundStats[player.id];
-    
-    if (playerRoundStats && 
-        ((playerRoundStats.kills ?? 0) > 0 || (playerRoundStats.deaths ?? 0) > 0 || 
-         (playerRoundStats.assists ?? 0) > 0 || (playerRoundStats.goldCollected ?? 0) > 0 || 
-         (playerRoundStats.minionKills ?? 0) > 0 || playerRoundStats.level)) {
-      
-      // Only create/update stats object if there's actual data to track
-      const updatedStats: PlayerStats = {};
-      
-      // Only set fields that have meaningful values
-      if ((playerRoundStats.kills ?? 0) > 0 || player.stats?.totalKills) {
-        updatedStats.totalKills = (player.stats?.totalKills || 0) + (playerRoundStats.kills ?? 0);
-      }
-      if ((playerRoundStats.deaths ?? 0) > 0 || player.stats?.totalDeaths) {
-        updatedStats.totalDeaths = (player.stats?.totalDeaths || 0) + (playerRoundStats.deaths ?? 0);
-      }
-      if ((playerRoundStats.assists ?? 0) > 0 || player.stats?.totalAssists) {
-        updatedStats.totalAssists = (player.stats?.totalAssists || 0) + (playerRoundStats.assists ?? 0);
-      }
-      if ((playerRoundStats.goldCollected ?? 0) > 0 || player.stats?.totalGoldEarned) {
-        updatedStats.totalGoldEarned = (player.stats?.totalGoldEarned || 0) + (playerRoundStats.goldCollected ?? 0);
-      }
-      if ((playerRoundStats.minionKills ?? 0) > 0 || player.stats?.totalMinionKills) {
-        updatedStats.totalMinionKills = (player.stats?.totalMinionKills || 0) + (playerRoundStats.minionKills ?? 0);
-      }
-      if (playerRoundStats.level) {
-        updatedStats.level = playerRoundStats.level;
-      } else if (player.stats?.level) {
-        updatedStats.level = player.stats.level;
-      }
-      
-      return {
-        ...player,
-        stats: updatedStats
-      };
-    }
-    
-    return player;
-  });
-  
-  setLocalPlayers(updatedPlayers);
-  players = updatedPlayers;
-};
+  // Reviewed values for a round (end-of-round or final-round review): replace that round
+  const handleCommitRoundStats = (round: number, values: RoundValues) => {
+    setStatLog(prev => commitRound(prev, round, values));
+  };
 
   // Handle strategy timer
   useEffect(() => {
@@ -2152,7 +2126,7 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
       ) : (
         <GameTimer 
           gameState={gameState}
-          players={localPlayers}
+          players={playersWithStats}
           strategyTimeRemaining={strategyTimeRemaining}
           moveTimeRemaining={moveTimeRemaining}
           strategyTimerEnabled={strategyTimerEnabled}
@@ -2176,7 +2150,8 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
           onAdjustTurn={adjustTurn}
           onDeclareVictory={declareVictory}
           onFlipCoin={flipCoin}
-          onSavePlayerStats={handleSavePlayerStats}
+          statLog={statLog}
+          onSavePlayerStats={handleCommitRoundStats}
         />
       )}
       </Suspense>
@@ -2187,10 +2162,12 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
         <VictoryScreen
           winningTeam={victorTeam}
           onReturnToSetup={resetToSetup}
-          players={localPlayers}
+          players={playersWithStats}
           gameLength={gameLength}
           doubleLanes={gameState.hasMultipleLanes}
-          onUpdatePlayerStats={handleSavePlayerStats}
+          statLog={statLog}
+          finalRound={gameState.round}
+          onUpdatePlayerStats={handleCommitRoundStats}
         />
       )}
       </Suspense>

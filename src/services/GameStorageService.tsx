@@ -1,9 +1,10 @@
 // src/services/GameStorageService.ts
 import { GameState, Player } from '../types';
 import { renamePlayerInSavedGameData } from '../shared/utils/playerRename';
+import type { GameStatLog } from '../shared/utils/gameStatLog';
 
 // Interface for saved game data
-interface SavedGameData {
+export interface SavedGameData {
   gameState: GameState;
   players: Player[];
   timestamp: number;
@@ -17,6 +18,8 @@ interface SavedGameData {
   moveTimerActive: boolean;
   strategyTimerEnabled: boolean;
   moveTimerEnabled: boolean;
+  /** Round-by-round stats of the game (absent in saves from older versions). */
+  statLog?: GameStatLog;
 }
 
 class GameStorageService {

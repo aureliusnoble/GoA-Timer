@@ -5,7 +5,8 @@ import { Trophy, Home, Database, AlertTriangle, CheckCircle } from 'lucide-react
 import { useSound } from '../context/SoundContext';
 import dbService from '../services/DatabaseService';
 import EnhancedTooltip from './common/EnhancedTooltip';
-import EndOfRoundAssistant, { PlayerRoundStats } from './EndOfRoundAssistant';
+import EndOfRoundAssistant from './EndOfRoundAssistant';
+import { GameStatLog, RoundValues, buildReviewValues } from '../shared/utils/gameStatLog';
 import VictoryTypeSelector from './common/VictoryTypeSelector';
 import { NO_HERO_ID } from '../shared/utils/heroIds';
 
@@ -15,8 +16,12 @@ interface VictoryScreenProps {
   players: Player[]; // Need players to save match data
   gameLength: GameLength;
   doubleLanes: boolean;
-  // NEW: Function to update player stats with final round data
-  onUpdatePlayerStats?: (playerStats: { [playerId: number]: PlayerRoundStats }) => void;
+  /** The game's round log (pre-fills the final-round review). */
+  statLog: GameStatLog;
+  /** Round the final-round review applies to. */
+  finalRound: number;
+  /** Save the reviewed final-round values. */
+  onUpdatePlayerStats?: (round: number, values: RoundValues) => void;
 }
 
 const VictoryScreen: React.FC<VictoryScreenProps> = ({ 
@@ -25,6 +30,8 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
   players,
   gameLength,
   doubleLanes,
+  statLog,
+  finalRound,
   onUpdatePlayerStats
 }) => {
   const [animationComplete, setAnimationComplete] = useState(false);
@@ -113,12 +120,12 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
   };
 
   // NEW: Handler for final round stats collection
-  const handleFinalRoundStats = (stats?: { [playerId: number]: PlayerRoundStats }) => {
+  const handleFinalRoundStats = (stats?: RoundValues) => {
     playSound('buttonClick');
     
     // If stats provided and we have the update function, integrate them
     if (stats && onUpdatePlayerStats) {
-      onUpdatePlayerStats(stats);
+      onUpdatePlayerStats(finalRound, stats);
     }
     
     // Mark as recorded and hide the assistant
@@ -288,8 +295,10 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
       </div>
       
       {/* NEW: End of Round Assistant for final round stats collection */}
-      <EndOfRoundAssistant 
+      <EndOfRoundAssistant
         players={players}
+        round={finalRound}
+        initialValues={buildReviewValues(statLog, finalRound, players)}
         onComplete={handleFinalRoundStats}
         isVisible={showStatsCollection}
       />

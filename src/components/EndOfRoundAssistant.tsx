@@ -1,5 +1,5 @@
 // src/components/EndOfRoundAssistant.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Player, Team } from '../types';
 import { 
   CheckCircle, 
@@ -20,16 +20,12 @@ import {
 import { useSound } from '../context/SoundContext';
 import { HERO_LEVEL_MAX, HERO_LEVEL_MIN } from '../shared/constants/game';
 import { clampHeroLevel } from '../shared/utils/statValues';
-
-// Interface for individual stat category toggles (follows RecordMatch pattern)
-interface StatCategories {
-  kills: boolean;
-  deaths: boolean;
-  assists: boolean;
-  goldEarned: boolean;
-  minionKills: boolean;
-  level: boolean;
-}
+import {
+  RoundValues,
+  StatCategories,
+  StatKey,
+  filterValuesToCategories,
+} from '../shared/utils/gameStatLog';
 
 // Default enabled stats (start with all disabled - user selects what to track)
 const DEFAULT_ENABLED_STATS: StatCategories = {
@@ -43,19 +39,13 @@ const DEFAULT_ENABLED_STATS: StatCategories = {
 
 interface EndOfRoundAssistantProps {
   players: Player[];
-  onComplete: (stats?: { [playerId: number]: PlayerRoundStats }) => void;
   isVisible: boolean;
-}
-
-// Stats collected for a single round - Updated to include level
-// All fields optional to support selective stat tracking
-export interface PlayerRoundStats {
-  goldCollected?: number;
-  kills?: number;
-  assists?: number;
-  deaths?: number;
-  minionKills?: number;
-  level?: number;
+  /** Round being reviewed (shown under the title). */
+  round: number;
+  /** Pre-fill: what is already logged for this round (see buildReviewValues). */
+  initialValues: RoundValues;
+  /** Save (& continue). stats is undefined when logging is off. */
+  onComplete: (stats?: RoundValues) => void;
 }
 
 // Enum for stat tracking tabs - Updated to include Level
@@ -70,7 +60,9 @@ enum StatTrackingTab {
 const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
   players,
   onComplete,
-  isVisible
+  isVisible,
+  round,
+  initialValues
 }) => {
   const { playSound } = useSound();
   
@@ -81,7 +73,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
   const [enabledStats, setEnabledStats] = useState<StatCategories>(DEFAULT_ENABLED_STATS);
   
   // State for player stats this round
-  const [playerStats, setPlayerStats] = useState<{[playerId: number]: PlayerRoundStats}>({});
+  const [playerStats, setPlayerStats] = useState<RoundValues>({});
   
   // State for active tab
   const [activeTab, setActiveTab] = useState<StatTrackingTab>(StatTrackingTab.Kills);
@@ -96,22 +88,18 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
     pityCoins: false
   });
 
-  // Initialize stats for all players
+  // Initialise ONLY when the assistant opens (false -> true). Props such as
+  // initialValues are rebuilt on every parent render; re-initialising on each
+  // render would wipe what the user is entering.
+  const wasVisibleRef = useRef(false);
   useEffect(() => {
-    if (isVisible) {
-      const initialStats: {[playerId: number]: PlayerRoundStats} = {};
+    if (isVisible && !wasVisibleRef.current) {
+      const initialStats: RoundValues = {};
       players.forEach(player => {
-        initialStats[player.id] = {
-          goldCollected: 0,
-          kills: 0,
-          assists: 0,
-          deaths: 0,
-          minionKills: 0,
-          level: player.stats?.level || 1 // Initialize with current level or default to 1
-        };
+        initialStats[player.id] = { ...(initialValues[player.id] ?? {}) };
       });
       setPlayerStats(initialStats);
-      
+
       // Reset checklist
       setChecklistItems({
         minionBattle: false,
@@ -121,43 +109,29 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
         levelUp: false,
         pityCoins: false
       });
-      
+
       // Reset tab to kills
       setActiveTab(StatTrackingTab.Kills);
-      
+
       // Play sound when showing
       playSound('phaseChange');
     }
-  }, [players, isVisible, playSound]);
+    wasVisibleRef.current = isVisible;
+  }, [isVisible, players, initialValues, playSound]);
 
   // Handle stat changes with increment/decrement
-  const adjustStat = (playerId: number, statName: keyof PlayerRoundStats, delta: number) => {
+  const adjustStat = (playerId: number, statName: StatKey, delta: number) => {
     playSound('buttonClick');
     setPlayerStats(prev => {
-      const currentValue = prev[playerId]?.[statName] || 0;
-      
-      // Special case for level - keep it inside the hero level range
       if (statName === 'level') {
-        const newLevel = clampHeroLevel(currentValue + delta);
-        return {
-          ...prev,
-          [playerId]: {
-            ...prev[playerId],
-            [statName]: newLevel
-          }
-        };
+        // Keep level within the hero level range
+        const currentLevel = prev[playerId]?.level ?? HERO_LEVEL_MIN;
+        const newLevel = clampHeroLevel(currentLevel + delta);
+        return { ...prev, [playerId]: { ...prev[playerId], level: newLevel } };
       }
-      
-      // For other stats, just ensure they don't go below 0
-      const newValue = Math.max(0, currentValue + delta);
-      
-      return {
-        ...prev,
-        [playerId]: {
-          ...prev[playerId],
-          [statName]: newValue
-        }
-      };
+      // Other stats never go below 0
+      const current = prev[playerId]?.[statName] ?? 0;
+      return { ...prev, [playerId]: { ...prev[playerId], [statName]: Math.max(0, current + delta) } };
     });
   };
 
@@ -198,23 +172,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
     
     // Pass the stats back to parent component if logging is enabled
     if (loggingEnabled) {
-      // Filter stats based on enabled categories
-      const filteredStats: { [playerId: number]: PlayerRoundStats } = {};
-      
-      Object.entries(playerStats).forEach(([playerIdStr, stats]) => {
-        const playerId = parseInt(playerIdStr);
-        const filteredPlayerStats: PlayerRoundStats = {
-          goldCollected: enabledStats.goldEarned ? stats.goldCollected : undefined,
-          kills: enabledStats.kills ? stats.kills : undefined,
-          assists: enabledStats.assists ? stats.assists : undefined,
-          deaths: enabledStats.deaths ? stats.deaths : undefined,
-          minionKills: enabledStats.minionKills ? stats.minionKills : undefined,
-          level: enabledStats.level ? stats.level : undefined
-        };
-        filteredStats[playerId] = filteredPlayerStats;
-      });
-      
-      onComplete(filteredStats);
+      onComplete(filterValuesToCategories(playerStats, enabledStats));
     } else {
       onComplete();
     }
@@ -274,7 +232,10 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 overflow-y-auto">
       <div className="bg-gray-800 rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold">End of Round Assistant</h2>
+          <div>
+            <h2 className="text-2xl font-bold">End of Round Assistant</h2>
+            <p className="text-sm text-gray-400">Round {round}</p>
+          </div>
           <button
             onClick={() => onComplete()}
             className="p-1 bg-gray-700 hover:bg-gray-600 rounded-full"
@@ -892,24 +853,24 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                                 <div>
                                   <div className="font-medium flex items-center">{player.name}</div>
                                   <div className="text-xs flex items-center">
-                                    <span className="flex items-center" title="Gold Collected"><Coins size={12} className="mr-1" />{playerStats[player.id]?.goldCollected || 0}</span>
+                                    <span className="flex items-center" title="Gold Collected"><Coins size={12} className="mr-1" />{playerStats[player.id]?.goldEarned || 0}</span>
                                   </div>
                                 </div>
                               </div>
                               <div className="flex items-center space-x-1">
                                 <button 
                                   className="bg-gray-700 hover:bg-gray-600 p-1 rounded"
-                                  onClick={() => adjustStat(player.id, 'goldCollected', -1)}
-                                  disabled={!playerStats[player.id]?.goldCollected}
+                                  onClick={() => adjustStat(player.id, 'goldEarned', -1)}
+                                  disabled={!playerStats[player.id]?.goldEarned}
                                 >
                                   <CircleMinus size={16} />
                                 </button>
                                 <div className="w-8 text-center font-bold">
-                                  {playerStats[player.id]?.goldCollected || 0}
+                                  {playerStats[player.id]?.goldEarned || 0}
                                 </div>
                                 <button 
                                   className="bg-gray-700 hover:bg-gray-600 p-1 rounded"
-                                  onClick={() => adjustStat(player.id, 'goldCollected', 1)}
+                                  onClick={() => adjustStat(player.id, 'goldEarned', 1)}
                                 >
                                   <CirclePlus size={16} />
                                 </button>
@@ -945,24 +906,24 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                                 <div>
                                   <div className="font-medium flex items-center">{player.name}</div>
                                   <div className="text-xs flex items-center">
-                                    <span className="flex items-center" title="Gold Collected"><Coins size={12} className="mr-1" />{playerStats[player.id]?.goldCollected || 0}</span>
+                                    <span className="flex items-center" title="Gold Collected"><Coins size={12} className="mr-1" />{playerStats[player.id]?.goldEarned || 0}</span>
                                   </div>
                                 </div>
                               </div>
                               <div className="flex items-center space-x-1">
                                 <button 
                                   className="bg-gray-700 hover:bg-gray-600 p-1 rounded"
-                                  onClick={() => adjustStat(player.id, 'goldCollected', -1)}
-                                  disabled={!playerStats[player.id]?.goldCollected}
+                                  onClick={() => adjustStat(player.id, 'goldEarned', -1)}
+                                  disabled={!playerStats[player.id]?.goldEarned}
                                 >
                                   <CircleMinus size={16} />
                                 </button>
                                 <div className="w-8 text-center font-bold">
-                                  {playerStats[player.id]?.goldCollected || 0}
+                                  {playerStats[player.id]?.goldEarned || 0}
                                 </div>
                                 <button 
                                   className="bg-gray-700 hover:bg-gray-600 p-1 rounded"
-                                  onClick={() => adjustStat(player.id, 'goldCollected', 1)}
+                                  onClick={() => adjustStat(player.id, 'goldEarned', 1)}
                                 >
                                   <CirclePlus size={16} />
                                 </button>
@@ -1176,7 +1137,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                           <Coins size={16} className="mr-2" /> Gold Collected
                         </div>
                         <div className="text-xl">
-                          {Object.values(playerStats).reduce((sum, stats) => sum + (stats.goldCollected || 0), 0)}
+                          {Object.values(playerStats).reduce((sum, stats) => sum + (stats.goldEarned || 0), 0)}
                         </div>
                       </div>
                     )}

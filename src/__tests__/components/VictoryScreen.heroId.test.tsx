@@ -5,6 +5,7 @@ import VictoryScreen from '../../components/VictoryScreen';
 import { Team, GameLength, Player } from '../../types';
 import { heroes } from '../../data/heroes';
 import { NO_HERO_ID } from '../../shared/utils/heroIds';
+import { createEmptyStatLog } from '../../shared/utils/gameStatLog';
 
 const mocks = vi.hoisted(() => ({ recordMatch: vi.fn() }));
 
@@ -40,6 +41,8 @@ describe('VictoryScreen hero ids', () => {
         players={players}
         gameLength={GameLength.Quick}
         doubleLanes={false}
+        statLog={createEmptyStatLog()}
+        finalRound={1}
       />
     );
 

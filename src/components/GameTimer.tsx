@@ -18,7 +18,8 @@ import {
 } from 'lucide-react';
 import EnhancedTooltip from './common/EnhancedTooltip';
 import { useSound } from '../context/SoundContext';
-import EndOfRoundAssistant, { PlayerRoundStats } from './EndOfRoundAssistant';
+import EndOfRoundAssistant from './EndOfRoundAssistant';
+import { GameStatLog, RoundValues, buildReviewValues } from '../shared/utils/gameStatLog';
 
 interface GameTimerProps {
   gameState: GameState;
@@ -47,7 +48,10 @@ interface GameTimerProps {
   // New props
   strategyTimerEnabled: boolean;
   moveTimerEnabled: boolean;
-  onSavePlayerStats?: (playerStats: { [playerId: number]: PlayerRoundStats }) => void;
+  /** The game's round log (pre-fills the end-of-round review). */
+  statLog: GameStatLog;
+  /** Save the reviewed values for a round. */
+  onSavePlayerStats?: (round: number, values: RoundValues) => void;
 }
 
 const GameTimer: React.FC<GameTimerProps> = ({
@@ -77,6 +81,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
   // New props
   strategyTimerEnabled,
   moveTimerEnabled,
+  statLog,
   onSavePlayerStats
 }) => {
   const { playSound } = useSound();
@@ -205,10 +210,10 @@ const GameTimer: React.FC<GameTimerProps> = ({
   };
   
   // Handler for completing the end of round process
-  const handleEndOfRoundComplete = (stats?: { [playerId: number]: PlayerRoundStats }) => {
+  const handleEndOfRoundComplete = (stats?: RoundValues) => {
     // Save stats if provided
     if (stats && onSavePlayerStats) {
-      onSavePlayerStats(stats);
+      onSavePlayerStats(gameState.round, stats);
     }
     
     // Hide the assistant
@@ -687,10 +692,12 @@ const GameTimer: React.FC<GameTimerProps> = ({
       )}
       
       {/* End of Round Assistant */}
-      <EndOfRoundAssistant 
+      <EndOfRoundAssistant
         players={players}
-        onComplete={handleEndOfRoundComplete}
         isVisible={showEndOfRoundAssistant}
+        round={gameState.round}
+        initialValues={buildReviewValues(statLog, gameState.round, players)}
+        onComplete={handleEndOfRoundComplete}
       />
     </div>
   );
