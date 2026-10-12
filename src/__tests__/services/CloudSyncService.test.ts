@@ -95,3 +95,103 @@ describe('CloudSyncService.uploadLocalData', () => {
     }
   });
 });
+
+describe('CloudSyncService player renames', () => {
+  const PENDING_KEY = 'cloudSync_pendingPlayerRenames';
+
+  beforeEach(() => {
+    fakeSupabase.reset();
+    vi.clearAllMocks();
+    localStorage.removeItem(PENDING_KEY);
+    vi.spyOn(CloudSyncService, 'triggerAutoUpload').mockImplementation(() => {});
+    db.exportData.mockResolvedValue({ players: [], matches: [], matchPlayers: [], exportDate: new Date(), version: 4 });
+    db.mergeData.mockResolvedValue(true);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    localStorage.removeItem(PENDING_KEY);
+  });
+
+  it('re-keys cloud match players, deletes the old cloud player and empties the queue', async () => {
+    const applied = await CloudSyncService.queuePlayerRename('Jhon', 'John');
+
+    expect(applied).toBe(true);
+    const [rekey] = fakeSupabase.callsTo('cloud_match_players', 'update');
+    expect(rekey.payload).toEqual({ player_id: 'John' });
+    expect(rekey.filters).toEqual([
+      { method: 'eq', column: 'owner_id', value: 'owner-1' },
+      { method: 'eq', column: 'player_id', value: 'Jhon' },
+    ]);
+    const [removal] = fakeSupabase.callsTo('cloud_players', 'delete');
+    expect(removal.filters).toEqual([
+      { method: 'eq', column: 'owner_id', value: 'owner-1' },
+      { method: 'eq', column: 'local_id', value: 'Jhon' },
+    ]);
+    expect(CloudSyncService.getPendingPlayerRenames()).toEqual([]);
+    expect(CloudSyncService.triggerAutoUpload).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the rename queued when the cloud update fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    fakeSupabase.respondWith(call =>
+      call.table === 'cloud_match_players' && call.op === 'update'
+        ? { error: { message: 'network down' } }
+        : { data: [], error: null }
+    );
+
+    const applied = await CloudSyncService.queuePlayerRename('Jhon', 'John');
+
+    expect(applied).toBe(false);
+    expect(fakeSupabase.callsTo('cloud_players', 'delete')).toHaveLength(0);
+    expect(CloudSyncService.getPendingPlayerRenames()).toMatchObject([{ oldId: 'Jhon', newId: 'John' }]);
+  });
+
+  it('keeps the rename queued while signed out', async () => {
+    fakeSupabase.setUser(null);
+
+    await CloudSyncService.queuePlayerRename('Jhon', 'John');
+
+    expect(fakeSupabase.callsTo('cloud_match_players')).toHaveLength(0);
+    expect(CloudSyncService.getPendingPlayerRenames()).toMatchObject([{ oldId: 'Jhon', newId: 'John' }]);
+  });
+
+  it('applies queued renames before uploading', async () => {
+    localStorage.setItem(PENDING_KEY, JSON.stringify([{ oldId: 'Jhon', newId: 'John', queuedAt: '2026-10-12T10:00:00.000Z' }]));
+
+    await CloudSyncService.uploadLocalData();
+
+    const tables = fakeSupabase.calls.map(call => `${call.table}:${call.op}`);
+    expect(tables.indexOf('cloud_match_players:update')).toBeGreaterThanOrEqual(0);
+    expect(tables.indexOf('cloud_match_players:update')).toBeLessThan(tables.indexOf('profiles:update'));
+    expect(CloudSyncService.getPendingPlayerRenames()).toEqual([]);
+  });
+
+  it('stops instead of re-applying a rename it cannot remove from the queue', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    localStorage.setItem(PENDING_KEY, JSON.stringify([{ oldId: 'Jhon', newId: 'John', queuedAt: '2026-10-12T10:00:00.000Z' }]));
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new Error('storage unavailable'); });
+
+    const result = await CloudSyncService.downloadOwnCloudData();
+
+    expect(result.success).toBe(false);
+    expect(fakeSupabase.callsTo('cloud_match_players', 'update')).toHaveLength(1);
+    expect(CloudSyncService.getPendingPlayerRenames()).toMatchObject([{ oldId: 'Jhon', newId: 'John' }]);
+  });
+
+  it('refuses to download own data while a rename cannot be applied', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    localStorage.setItem(PENDING_KEY, JSON.stringify([{ oldId: 'Jhon', newId: 'John', queuedAt: '2026-10-12T10:00:00.000Z' }]));
+    fakeSupabase.respondWith(call =>
+      call.table === 'cloud_match_players' && call.op === 'update'
+        ? { error: { message: 'network down' } }
+        : { data: [], error: null }
+    );
+
+    const result = await CloudSyncService.downloadOwnCloudData();
+
+    expect(result.success).toBe(false);
+    expect(db.mergeData).not.toHaveBeenCalled();
+    expect(fakeSupabase.callsTo('cloud_players', 'select')).toHaveLength(0);
+  });
+});

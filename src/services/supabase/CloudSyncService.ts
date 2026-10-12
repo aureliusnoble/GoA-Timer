@@ -11,6 +11,12 @@ import {
   localMatchToCloudRow,
   localPlayerToCloudRow,
 } from '../../shared/utils/cloudMapping';
+import {
+  appendPendingRename,
+  parsePendingRenames,
+  PendingPlayerRename,
+  removePendingRename,
+} from '../../shared/utils/pendingPlayerRenames';
 
 export interface SyncStatus {
   status: 'idle' | 'uploading' | 'downloading' | 'merging' | 'complete' | 'error';
@@ -84,6 +90,9 @@ class CloudSyncServiceClass {
       if (!user) {
         throw new Error('Not authenticated');
       }
+
+      // Re-key renamed players in the cloud before uploading (failures are logged and retried next sync)
+      await this.flushPendingPlayerRenames(user.id);
 
       const localData = await dbService.exportData();
       this.updateStatus({ status: 'uploading', progress: 5, message: 'Exporting local database...' });
@@ -447,6 +456,112 @@ class CloudSyncServiceClass {
     }, this.autoUploadDebounceMs);
   }
 
+  // ---------------------------------------------------------------------------
+  // Player renames
+  // ---------------------------------------------------------------------------
+
+  private readonly PENDING_RENAMES_KEY = 'cloudSync_pendingPlayerRenames';
+
+  /**
+   * Record that a player was renamed (or merged) locally so the user's cloud rows
+   * follow: cloud_match_players.player_id is re-keyed in place and the old
+   * cloud_players row is deleted, then an auto-upload sends the renamed player.
+   * The rename is kept in a local queue until it has been applied, so it survives
+   * being offline or signed out; every upload/download drains the queue first.
+   * Resolves to true when the queue was fully applied now.
+   */
+  async queuePlayerRename(oldId: string, newId: string): Promise<boolean> {
+    if (!isSupabaseConfigured() || !supabase) return false;
+
+    this.savePendingPlayerRenames(
+      appendPendingRename(this.getPendingPlayerRenames(), { oldId, newId, queuedAt: new Date().toISOString() })
+    );
+
+    const applied = await this.flushPendingPlayerRenamesNow();
+    this.triggerAutoUpload();
+    return applied;
+  }
+
+  getPendingPlayerRenames(): PendingPlayerRename[] {
+    try {
+      return parsePendingRenames(localStorage.getItem(this.PENDING_RENAMES_KEY));
+    } catch {
+      return [];
+    }
+  }
+
+  /** Store the queue; false when localStorage refused the write. */
+  private savePendingPlayerRenames(queue: PendingPlayerRename[]): boolean {
+    try {
+      if (queue.length === 0) {
+        localStorage.removeItem(this.PENDING_RENAMES_KEY);
+      } else {
+        localStorage.setItem(this.PENDING_RENAMES_KEY, JSON.stringify(queue));
+      }
+      return true;
+    } catch (error) {
+      console.error('[CloudSyncService] Could not store pending player renames:', error);
+      return false;
+    }
+  }
+
+  /** Apply queued renames now unless another sync is running (that sync drains the queue itself). */
+  async flushPendingPlayerRenamesNow(): Promise<boolean> {
+    if (!isSupabaseConfigured() || !supabase) return false;
+    if (this.syncInProgress) return false;
+
+    this.syncInProgress = true;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return false;
+      return await this.flushPendingPlayerRenames(user.id);
+    } catch (error) {
+      console.error('[CloudSyncService] Applying player renames failed:', error);
+      return false;
+    } finally {
+      this.syncInProgress = false;
+    }
+  }
+
+  /**
+   * Apply queued renames to this owner's cloud rows, oldest first. Stops at the
+   * first failure and keeps that entry (and later ones) for the next attempt.
+   */
+  private async flushPendingPlayerRenames(ownerId: string): Promise<boolean> {
+    if (!supabase) return false;
+
+    for (;;) {
+      const next = this.getPendingPlayerRenames()[0];
+      if (!next) return true;
+
+      const { error: rekeyError } = await supabase
+        .from('cloud_match_players')
+        .update({ player_id: next.newId })
+        .eq('owner_id', ownerId)
+        .eq('player_id', next.oldId);
+      if (rekeyError) {
+        console.error(`[CloudSyncService] Could not re-key cloud match players "${next.oldId}" -> "${next.newId}":`, rekeyError.message);
+        return false;
+      }
+
+      const { error: deleteError } = await supabase
+        .from('cloud_players')
+        .delete()
+        .eq('owner_id', ownerId)
+        .eq('local_id', next.oldId);
+      if (deleteError) {
+        console.error(`[CloudSyncService] Could not delete cloud player "${next.oldId}":`, deleteError.message);
+        return false;
+      }
+
+      // Re-read so renames queued while this one was in flight are kept.
+      // If the entry can't be removed, stop rather than apply it again forever.
+      if (!this.savePendingPlayerRenames(removePendingRename(this.getPendingPlayerRenames(), next))) {
+        return false;
+      }
+    }
+  }
+
   /**
    * Download user's own cloud data from other devices.
    * Filters to only get records NOT from the current device.
@@ -468,6 +583,12 @@ class CloudSyncServiceClass {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         throw new Error('Not authenticated');
+      }
+
+      // Renames must reach the cloud first, or the old player IDs would be downloaded again
+      const renamesApplied = await this.flushPendingPlayerRenames(user.id);
+      if (!renamesApplied) {
+        throw new Error('Could not apply pending player renames to the cloud. Please try again.');
       }
 
       const currentDeviceId = this.getDeviceId();
