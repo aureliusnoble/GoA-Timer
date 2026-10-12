@@ -7,6 +7,7 @@ import { useSound } from '../../context/SoundContext';
 import { getAllExpansions, filterHeroesByExpansions } from '../../data/heroes';
 import PlayerNameInput from '../PlayerNameInput';
 import VictoryTypeSelector from '../common/VictoryTypeSelector';
+import { formatLocalDate, formatLocalTime, parseLocalDateTime } from '../../shared/utils/localDate';
 
 interface RecordMatchProps {
   onBack: () => void;
@@ -50,10 +51,9 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   // Form state
-  const [matchDate, setMatchDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [matchTime, setMatchTime] = useState<string>(
-    new Date().toTimeString().split(' ')[0].substring(0, 5)
-  );
+  // Default to the user's local "now" (YYYY-MM-DD / HH:MM)
+  const [matchDate, setMatchDate] = useState<string>(() => formatLocalDate(new Date()));
+  const [matchTime, setMatchTime] = useState<string>(() => formatLocalTime(new Date()));
   const [gameLength, setGameLength] = useState<GameLength>(GameLength.Long);
   const [doubleLanes, setDoubleLanes] = useState<boolean>(false);
   const [winningTeam, setWinningTeam] = useState<Team>(Team.Titans);
@@ -478,6 +478,8 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
     // Check if date is valid
     if (!matchDate) {
       errors.date = 'Match date is required';
+    } else if (!parseLocalDateTime(matchDate, matchTime)) {
+      errors.date = 'Match date or time is invalid';
     }
     
     // Check if we have at least 4 players (2 per team)
@@ -579,9 +581,15 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
     setErrorMessage(null);
     
     try {
+      // Local date + time (empty time = 00:00); validateForm() has already checked it parses
+      const matchDateTime = parseLocalDateTime(matchDate, matchTime);
+      if (!matchDateTime) {
+        throw new Error(`Invalid match date/time: ${matchDate} ${matchTime}`);
+      }
+
       // Create match data object
       const matchData = {
-        date: new Date(`${matchDate}T${matchTime || '00:00'}`),
+        date: matchDateTime,
         winningTeam,
         gameLength,
         doubleLanes,
@@ -635,8 +643,8 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
 
       // Reset form for a new entry
       setPlayers([]);
-      setMatchDate(new Date().toISOString().split('T')[0]);
-      setMatchTime(new Date().toTimeString().split(' ')[0].substring(0, 5));
+      setMatchDate(formatLocalDate(new Date()));
+      setMatchTime(formatLocalTime(new Date()));
       setVictoryType(undefined);
       
     } catch (error) {

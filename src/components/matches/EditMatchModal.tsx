@@ -8,6 +8,7 @@ import { heroes } from '../../data/heroes';
 import HeroSelector from './HeroSelector';
 import EnhancedTooltip from '../common/EnhancedTooltip';
 import VictoryTypeSelector from '../common/VictoryTypeSelector';
+import { formatLocalDate, formatLocalTime, parseLocalDateTime } from '../../shared/utils/localDate';
 
 interface EditMatchModalProps {
   isOpen: boolean;
@@ -267,19 +268,14 @@ const EditMatchModal: React.FC<EditMatchModalProps> = ({
     );
   };
 
-  const formatDate = (date: Date) => {
-    return new Date(date).toISOString().split('T')[0];
-  };
+  // Date/time fields show and edit the match's LOCAL calendar day and wall-clock time.
+  const formatDate = (date: Date) => formatLocalDate(new Date(date));
 
-  const formatTime = (date: Date) => {
-    const d = new Date(date);
-    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-  };
+  const formatTime = (date: Date) => formatLocalTime(new Date(date));
 
   const updateDateTime = (dateStr: string, timeStr: string) => {
-    const [hours, minutes] = timeStr.split(':');
-    const newDate = new Date(dateStr);
-    newDate.setHours(parseInt(hours), parseInt(minutes));
+    const newDate = parseLocalDateTime(dateStr, timeStr); // empty time = 00:00
+    if (!newDate) return; // cleared or invalid date: keep the current value
     updateMatchField('date', newDate);
   };
 
