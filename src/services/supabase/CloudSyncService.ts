@@ -1,7 +1,16 @@
 import { supabase, isSupabaseConfigured } from './SupabaseClient';
 import dbService from '../DatabaseService';
-import type { DBPlayer, DBMatch, DBMatchPlayer, ExportData } from '../DatabaseService';
+import type { ExportData } from '../DatabaseService';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import {
+  cloudMatchPlayerRowToLocal,
+  cloudMatchRowToLocal,
+  cloudPlayerRowToLocal,
+  CloudUploadContext,
+  localMatchPlayerToCloudRow,
+  localMatchToCloudRow,
+  localPlayerToCloudRow,
+} from '../../shared/utils/cloudMapping';
 
 export interface SyncStatus {
   status: 'idle' | 'uploading' | 'downloading' | 'merging' | 'complete' | 'error';
@@ -93,7 +102,11 @@ class CloudSyncServiceClass {
         console.log(`[CloudSyncService] Skipping ${localData.matches.length - matchesToUpload.length} tombstoned matches`);
       }
 
-      const deviceId = this.getDeviceId();
+      const uploadContext: CloudUploadContext = {
+        ownerId: user.id,
+        deviceId: this.getDeviceId(),
+        syncedAt: new Date().toISOString(),
+      };
       let recordsAdded = 0;
 
       // Upload players
@@ -102,24 +115,7 @@ class CloudSyncServiceClass {
         const player = localData.players[i];
         const { error } = await supabase
           .from('cloud_players')
-          .upsert({
-            owner_id: user.id,
-            local_id: player.id,
-            name: player.name,
-            total_games: player.totalGames,
-            wins: player.wins,
-            losses: player.losses,
-            elo: player.elo,
-            mu: player.mu,
-            sigma: player.sigma,
-            ordinal: player.ordinal,
-            last_played: player.lastPlayed,
-            date_created: player.dateCreated,
-            device_id: player.deviceId || deviceId,
-            level: player.level,
-            sync_source: 'local',
-            synced_at: new Date().toISOString(),
-          }, {
+          .upsert(localPlayerToCloudRow(player, uploadContext), {
             onConflict: 'owner_id,local_id',
           });
 
@@ -137,20 +133,7 @@ class CloudSyncServiceClass {
         const match = matchesToUpload[i];
         const { error } = await supabase
           .from('cloud_matches')
-          .upsert({
-            id: match.id,
-            owner_id: user.id,
-            date: match.date,
-            winning_team: match.winningTeam.toLowerCase(),
-            game_length: match.gameLength.toLowerCase(),
-            double_lanes: match.doubleLanes,
-            titan_players: match.titanPlayers,
-            atlantean_players: match.atlanteanPlayers,
-            device_id: match.deviceId || deviceId,
-            sync_source: 'local',
-            synced_at: new Date().toISOString(),
-            victory_type: match.victoryType || null,
-          }, {
+          .upsert(localMatchToCloudRow(match, uploadContext), {
             onConflict: 'owner_id,id',
           });
 
@@ -168,25 +151,7 @@ class CloudSyncServiceClass {
         const mp = matchPlayersToUpload[i];
         const { error } = await supabase
           .from('cloud_match_players')
-          .upsert({
-            id: mp.id,
-            owner_id: user.id,
-            match_id: mp.matchId,
-            player_id: mp.playerId,
-            team: mp.team.toLowerCase(),
-            hero_id: mp.heroId,
-            hero_name: mp.heroName,
-            hero_roles: mp.heroRoles,
-            kills: mp.kills,
-            deaths: mp.deaths,
-            assists: mp.assists,
-            gold_earned: mp.goldEarned,
-            minion_kills: mp.minionKills,
-            level: mp.level,
-            device_id: mp.deviceId || deviceId,
-            sync_source: 'local',
-            synced_at: new Date().toISOString(),
-          }, {
+          .upsert(localMatchPlayerToCloudRow(mp, uploadContext), {
             onConflict: 'owner_id,id',
           });
 
@@ -305,9 +270,9 @@ class CloudSyncServiceClass {
 
       // Convert to local format and merge
       const importData: ExportData = {
-        players: (friendPlayers || []).map(p => this.cloudPlayerToLocal(p)),
-        matches: (friendMatches || []).map(m => this.cloudMatchToLocal(m)),
-        matchPlayers: (friendMatchPlayers || []).map(mp => this.cloudMatchPlayerToLocal(mp)),
+        players: (friendPlayers || []).map(cloudPlayerRowToLocal),
+        matches: (friendMatches || []).map(cloudMatchRowToLocal),
+        matchPlayers: (friendMatchPlayers || []).map(cloudMatchPlayerRowToLocal),
         exportDate: new Date(),
         version: 4,
       };
@@ -533,9 +498,9 @@ class CloudSyncServiceClass {
 
       // Convert to local format
       const importData: ExportData = {
-        players: (ownPlayers || []).map(p => this.cloudPlayerToLocal(p)),
-        matches: filteredMatches.map(m => this.cloudMatchToLocal(m)),
-        matchPlayers: filteredMatchPlayers.map(mp => this.cloudMatchPlayerToLocal(mp)),
+        players: (ownPlayers || []).map(cloudPlayerRowToLocal),
+        matches: filteredMatches.map(cloudMatchRowToLocal),
+        matchPlayers: filteredMatchPlayers.map(cloudMatchPlayerRowToLocal),
         exportDate: new Date(),
         version: 4,
       };
@@ -829,63 +794,6 @@ class CloudSyncServiceClass {
   private getDeviceId(): string {
     const storageKey = 'guards-of-atlantis-device-id';
     return localStorage.getItem(storageKey) || 'unknown';
-  }
-
-  private cloudPlayerToLocal(cloudPlayer: Record<string, unknown>): DBPlayer {
-    return {
-      id: cloudPlayer.local_id as string,
-      name: cloudPlayer.name as string,
-      totalGames: cloudPlayer.total_games as number,
-      wins: cloudPlayer.wins as number,
-      losses: cloudPlayer.losses as number,
-      elo: cloudPlayer.elo as number,
-      mu: cloudPlayer.mu as number | undefined,
-      sigma: cloudPlayer.sigma as number | undefined,
-      ordinal: cloudPlayer.ordinal as number | undefined,
-      lastPlayed: new Date(cloudPlayer.last_played as string),
-      dateCreated: new Date(cloudPlayer.date_created as string),
-      deviceId: cloudPlayer.device_id as string | undefined,
-      level: cloudPlayer.level as number | undefined,
-    };
-  }
-
-  private cloudMatchToLocal(cloudMatch: Record<string, unknown>): DBMatch {
-    // Keep values lowercase to match Team and GameLength enum values
-    const winningTeam = (cloudMatch.winning_team as string).toLowerCase();
-    const gameLength = (cloudMatch.game_length as string).toLowerCase();
-
-    return {
-      id: cloudMatch.id as string,
-      date: new Date(cloudMatch.date as string),
-      winningTeam: winningTeam as DBMatch['winningTeam'],
-      gameLength: gameLength as DBMatch['gameLength'],
-      doubleLanes: cloudMatch.double_lanes as boolean,
-      titanPlayers: cloudMatch.titan_players as number,
-      atlanteanPlayers: cloudMatch.atlantean_players as number,
-      deviceId: cloudMatch.device_id as string | undefined,
-    };
-  }
-
-  private cloudMatchPlayerToLocal(cloudMp: Record<string, unknown>): DBMatchPlayer {
-    // Keep team lowercase to match Team enum values
-    const team = (cloudMp.team as string).toLowerCase();
-
-    return {
-      id: cloudMp.id as string,
-      matchId: cloudMp.match_id as string,
-      playerId: cloudMp.player_id as string,
-      team: team as DBMatchPlayer['team'],
-      heroId: cloudMp.hero_id as number,
-      heroName: cloudMp.hero_name as string,
-      heroRoles: cloudMp.hero_roles as string[],
-      kills: cloudMp.kills as number | undefined,
-      deaths: cloudMp.deaths as number | undefined,
-      assists: cloudMp.assists as number | undefined,
-      goldEarned: cloudMp.gold_earned as number | undefined,
-      minionKills: cloudMp.minion_kills as number | undefined,
-      level: cloudMp.level as number | undefined,
-      deviceId: cloudMp.device_id as string | undefined,
-    };
   }
 }
 

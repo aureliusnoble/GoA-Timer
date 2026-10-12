@@ -1,12 +1,12 @@
 import { useCallback, useMemo } from 'react';
 import { useViewMode } from '../context/ViewModeContext';
 import { dbService, DBPlayer, DBMatch, DBMatchPlayer } from '../services/DatabaseService';
-import { CloudPlayer, CloudMatch, CloudMatchPlayer } from '../services/supabase/ShareService';
-import { Team, GameLength, HeroImpactResult } from '../types';
+import { Team, HeroImpactResult } from '../types';
 import { computeHeroImpactAsync } from '../services/HeroSkillService';
 import { heroes as allHeroesData } from '../data/heroes';
 import { rating, rate, ordinal } from 'openskill';
 import { filterMatches, MatchFilterOptions } from '../shared/utils/matchFilters';
+import { cloudMatchPlayerRowToLocal, cloudMatchRowToLocal, cloudPlayerRowToLocal } from '../shared/utils/cloudMapping';
 import { formatLocalDate } from '../shared/utils/localDate';
 
 const LOCAL_IMPACT_CACHE_TTL = 5 * 60 * 1000;
@@ -510,65 +510,6 @@ function getDisplayRating(player: DBPlayer): number {
 }
 
 /**
- * Convert cloud player data to local DBPlayer format
- */
-function cloudPlayerToLocal(cp: CloudPlayer): DBPlayer {
-  return {
-    id: cp.local_id || cp.name,
-    name: cp.name,
-    totalGames: cp.total_games,
-    wins: cp.wins,
-    losses: cp.losses,
-    elo: cp.elo,
-    mu: cp.mu,
-    sigma: cp.sigma,
-    ordinal: cp.ordinal,
-    lastPlayed: cp.last_played ? new Date(cp.last_played) : new Date(),
-    dateCreated: new Date(cp.date_created),
-    deviceId: cp.device_id || undefined,
-    level: cp.level || undefined,
-  };
-}
-
-/**
- * Convert cloud match data to local DBMatch format
- */
-function cloudMatchToLocal(cm: CloudMatch): DBMatch {
-  return {
-    id: cm.id,
-    date: new Date(cm.date),
-    winningTeam: cm.winning_team as Team,
-    gameLength: cm.game_length as GameLength,
-    doubleLanes: cm.double_lanes,
-    titanPlayers: cm.titan_players,
-    atlanteanPlayers: cm.atlantean_players,
-    deviceId: cm.device_id || undefined,
-  };
-}
-
-/**
- * Convert cloud match player data to local DBMatchPlayer format
- */
-function cloudMatchPlayerToLocal(cmp: CloudMatchPlayer): DBMatchPlayer {
-  return {
-    id: cmp.id,
-    matchId: cmp.match_id,
-    playerId: cmp.player_id,
-    team: cmp.team as Team,
-    heroId: cmp.hero_id,
-    heroName: cmp.hero_name,
-    heroRoles: cmp.hero_roles || [],
-    kills: cmp.kills,
-    deaths: cmp.deaths,
-    assists: cmp.assists,
-    goldEarned: cmp.gold_earned,
-    minionKills: cmp.minion_kills,
-    level: cmp.level,
-    deviceId: cmp.device_id || undefined,
-  };
-}
-
-/**
  * Hook that provides data source abstraction
  * Returns data from shared cloud data when in view mode,
  * otherwise returns data from local IndexedDB
@@ -579,17 +520,17 @@ export function useDataSource() {
   // Convert shared data to local format (memoized)
   const localPlayers = useMemo(() => {
     if (!isViewMode || !sharedData?.players) return null;
-    return sharedData.players.map(cloudPlayerToLocal);
+    return sharedData.players.map(cloudPlayerRowToLocal);
   }, [isViewMode, sharedData?.players]);
 
   const localMatches = useMemo(() => {
     if (!isViewMode || !sharedData?.matches) return null;
-    return sharedData.matches.map(cloudMatchToLocal);
+    return sharedData.matches.map(cloudMatchRowToLocal);
   }, [isViewMode, sharedData?.matches]);
 
   const localMatchPlayers = useMemo(() => {
     if (!isViewMode || !sharedData?.matchPlayers) return null;
-    return sharedData.matchPlayers.map(cloudMatchPlayerToLocal);
+    return sharedData.matchPlayers.map(cloudMatchPlayerRowToLocal);
   }, [isViewMode, sharedData?.matchPlayers]);
 
   // Get all players
