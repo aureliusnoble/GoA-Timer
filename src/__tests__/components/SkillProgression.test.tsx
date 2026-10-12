@@ -1,6 +1,6 @@
 // src/__tests__/components/SkillProgression.test.tsx
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import SkillProgression from '../../components/matches/DetailedPlayerStats/SkillProgression';
 import type { RatingJourney } from '../../shared/utils/ratingReplay';
 
@@ -76,5 +76,71 @@ describe('SkillProgression filters and starting rating', () => {
     render(<SkillProgression playerId="Alice" playerName="Alice" gameLengthFilter="long" recalculateTrueSkill />);
     expect(await screen.findByText('Current Rating (recalculated)')).toBeTruthy();
     expect(screen.getByText('Starting Rating').nextElementSibling?.textContent).toBe('1200');
+  });
+});
+
+describe('SkillProgression tap-to-select readout', () => {
+  // jsdom has no SVG layout: map client coordinates 1:1 to SVG coordinates.
+  beforeAll(() => {
+    Object.defineProperty(SVGElement.prototype, 'getScreenCTM', {
+      configurable: true,
+      value: () => ({ inverse: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }) }),
+    });
+  });
+
+  // Desktop chart (jsdom window is 1024 px wide): width 1000, padding left 70 / right 30.
+  // Points are at match numbers 7 (start), 8 and 10, so the x domain is [6.5, 10.5].
+  const xPixel = (matchNumber: number) => 70 + ((matchNumber - 6.5) / 4) * 900;
+  const chartSvg = () => screen.getByTestId('skill-progression-chart').querySelector('svg')!;
+
+  it('prompts the user before anything is selected', async () => {
+    render(<SkillProgression playerId="Alice" playerName="Alice" dateRange={{ startDate: new Date(2026, 0, 7, 12) }} />);
+    const readout = await screen.findByTestId('progression-readout');
+    expect(readout.textContent).toContain('Tap a dot to see the exact rating');
+  });
+
+  it('lets a vertical swipe that starts on the chart scroll the page', async () => {
+    render(<SkillProgression playerId="Alice" playerName="Alice" dateRange={{ startDate: new Date(2026, 0, 7, 12) }} />);
+    await screen.findByTestId('progression-readout');
+    const containerStyle = chartSvg().parentElement!.getAttribute('style');
+    expect(containerStyle).toContain('touch-action: pan-y');
+    expect(containerStyle).toContain('user-select: none');
+  });
+
+  it('selects the nearest match on tap/click and shows rating, change and smoothed median', async () => {
+    render(<SkillProgression playerId="Alice" playerName="Alice" dateRange={{ startDate: new Date(2026, 0, 7, 12) }} />);
+    const readout = await screen.findByTestId('progression-readout');
+    const svg = chartSvg();
+
+    expect(svg.innerHTML).not.toMatch(/251, 191, 36|#FBBF24/i);
+    fireEvent.click(svg, { clientX: xPixel(10) - 20, clientY: 200 });
+    // The selected dot is highlighted in amber
+    expect(chartSvg().innerHTML).toMatch(/251, 191, 36|#FBBF24/i);
+
+    expect(readout.textContent).toContain('Match 10 (game 2)');
+    expect(readout.textContent).toContain(new Date(2026, 0, 10).toLocaleDateString());
+    expect(within(readout).getByText('1350')).toBeTruthy();
+    expect(readout.textContent).toContain('-20 vs previous');
+    expect(readout.textContent).toContain('Group median (smoothed)');
+  });
+
+  it('steps through matches with the previous/next buttons and can clear the selection', async () => {
+    render(<SkillProgression playerId="Alice" playerName="Alice" dateRange={{ startDate: new Date(2026, 0, 7, 12) }} />);
+    const readout = await screen.findByTestId('progression-readout');
+    fireEvent.click(chartSvg(), { clientX: xPixel(8), clientY: 200 });
+    expect(readout.textContent).toContain('Match 8 (game 1)');
+    expect(readout.textContent).toContain('+30 vs previous');
+
+    fireEvent.click(screen.getByLabelText('Previous match'));
+    expect(readout.textContent).toContain('Period start');
+    expect(within(readout).getByText('1340')).toBeTruthy();
+    expect(readout.textContent).not.toContain('vs previous');
+
+    fireEvent.click(screen.getByLabelText('Next match'));
+    fireEvent.click(screen.getByLabelText('Next match'));
+    expect(readout.textContent).toContain('Match 10 (game 2)');
+
+    fireEvent.click(screen.getByLabelText('Clear selection'));
+    expect(readout.textContent).toContain('Tap a dot to see the exact rating');
   });
 });

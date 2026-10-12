@@ -119,3 +119,61 @@ export function buildProgressionSeries(journey: RatingJourney, playerId: string)
     startsAtPeriodStart,
   };
 }
+
+export interface ProgressionReadout {
+  /** True for the starting point (index 0). */
+  isStart: boolean;
+  matchNumber: number;
+  /** 0 for the start, otherwise the player's n-th shown match. */
+  gameNumber: number;
+  date: string;
+  rating: number;
+  /** Rating change versus the previous point; null for the start. */
+  change: number | null;
+  /** Smoothed group median at this point. */
+  groupMedian: number;
+}
+
+/** Readout for the selected point, or null for an out-of-range index. */
+export function describeProgressionPoint(
+  points: readonly ProgressionPoint[],
+  index: number
+): ProgressionReadout | null {
+  const point = points[index];
+  if (!point) return null;
+  const previous = index > 0 ? points[index - 1] : undefined;
+  return {
+    isStart: index === 0,
+    matchNumber: point.matchNumber,
+    gameNumber: index,
+    date: point.date,
+    rating: point.playerRating,
+    change: previous ? point.playerRating - previous.playerRating : null,
+    groupMedian: point.p50,
+  };
+}
+
+/** Index of the value closest to target (first one wins a tie); -1 for an empty list. */
+export function findNearestPointIndex(values: readonly number[], target: number): number {
+  if (values.length === 0 || !Number.isFinite(target)) return values.length === 0 ? -1 : 0;
+  let best = 0;
+  for (let i = 1; i < values.length; i++) {
+    if (Math.abs(values[i] - target) < Math.abs(values[best] - target)) best = i;
+  }
+  return best;
+}
+
+/**
+ * At most maxTicks evenly spread tick values (always keeping the first and last) so the
+ * x-axis labels do not overlap on narrow screens.
+ */
+export function pickAxisTicks(values: readonly number[], maxTicks: number): number[] {
+  const unique = Array.from(new Set(values)).sort((a, b) => a - b);
+  if (unique.length <= maxTicks) return unique;
+  if (maxTicks <= 1) return unique.slice(0, 1);
+  const picked = new Set<number>();
+  for (let i = 0; i < maxTicks; i++) {
+    picked.add(unique[Math.round((i * (unique.length - 1)) / (maxTicks - 1))]);
+  }
+  return Array.from(picked).sort((a, b) => a - b);
+}

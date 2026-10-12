@@ -1,12 +1,18 @@
 // src/components/matches/DetailedPlayerStats/SkillProgression.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  VictoryChart, VictoryLine, VictoryScatter, VictoryAxis, VictoryArea
+  VictoryChart, VictoryLine, VictoryScatter, VictoryAxis, VictoryArea, VictoryContainer, Selection
 } from 'victory';
-import { TrendingUp, Info, ArrowUp, ArrowDown } from 'lucide-react';
+import { TrendingUp, Info, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useDataSource } from '../../../hooks/useDataSource';
 import EnhancedTooltip from '../../common/EnhancedTooltip';
-import { buildProgressionSeries, ProgressionSeries } from '../../../shared/utils/skillProgression';
+import {
+  buildProgressionSeries,
+  ProgressionSeries,
+  describeProgressionPoint,
+  findNearestPointIndex,
+  pickAxisTicks
+} from '../../../shared/utils/skillProgression';
 
 interface SkillProgressionProps {
   playerId: string;
@@ -65,6 +71,32 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({
   const [journeyRecalculated, setJourneyRecalculated] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const chartData = useMemo(() => series?.points ?? [], [series]);
+  // Index into chartData of the tapped/clicked point (null = nothing selected)
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+  // A new series (other player or filters) clears the selection
+  useEffect(() => {
+    setSelectedIndex(null);
+  }, [series]);
+
+  // Tap/click anywhere on the chart selects the nearest match by x. Uses the chart's own
+  // click event (fired by taps on touch screens), so it does not rely on hover.
+  const chartEvents = useMemo(() => [{
+    target: 'parent' as const,
+    eventHandlers: {
+      onClick: (evt: React.SyntheticEvent, targetProps?: { scale?: { x?: { invert?: (value: number) => number } } }) => {
+        const invert = targetProps?.scale?.x?.invert;
+        if (!invert) return [];
+        const { x } = Selection.getSVGEventCoordinates(evt);
+        const index = findNearestPointIndex(chartData.map(d => d.matchNumber), invert(x));
+        if (index >= 0) setSelectedIndex(index);
+        return [];
+      }
+    }
+  }], [chartData]);
+
+  const readout = selectedIndex === null ? null : describeProgressionPoint(chartData, selectedIndex);
+  const selectedPoint = selectedIndex === null ? undefined : chartData[selectedIndex];
 
   // Use view-mode-aware data source
   const { isViewModeLoading, getPlayerRatingJourney } = useDataSource();
@@ -271,18 +303,83 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({
         )}
       </div>
 
+      {/* Selected point readout (tap or click a dot) */}
+      <div
+        className="mb-3 p-3 bg-gray-800 rounded-lg text-sm min-h-[3rem] flex items-center"
+        aria-live="polite"
+        data-testid="progression-readout"
+      >
+        {readout ? (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 w-full">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setSelectedIndex(Math.max(0, (selectedIndex ?? 0) - 1))}
+                disabled={selectedIndex === 0}
+                aria-label="Previous match"
+                className="p-2 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedIndex(Math.min(chartData.length - 1, (selectedIndex ?? 0) + 1))}
+                disabled={selectedIndex === chartData.length - 1}
+                aria-label="Next match"
+                className="p-2 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+            <span className="font-semibold text-white">
+              {readout.isStart
+                ? (series?.startsAtPeriodStart ? 'Period start' : 'Start')
+                : `Match ${readout.matchNumber} (game ${readout.gameNumber})`}
+            </span>
+            {!readout.isStart && (
+              <span className="text-gray-400">{new Date(readout.date).toLocaleDateString()}</span>
+            )}
+            <span className="text-gray-300">
+              Rating <span className="font-semibold text-blue-400">{readout.rating}</span>
+            </span>
+            {readout.change !== null && (
+              <span className={readout.change >= 0 ? 'text-green-400' : 'text-red-400'}>
+                {readout.change >= 0 ? '+' : ''}{readout.change} vs previous
+              </span>
+            )}
+            <span className="text-gray-400">Group median (smoothed) {readout.groupMedian}</span>
+            <button
+              type="button"
+              onClick={() => setSelectedIndex(null)}
+              aria-label="Clear selection"
+              className="ml-auto p-2 rounded hover:bg-gray-700"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        ) : (
+          <span className="text-gray-400">Tap a dot to see the exact rating for that match.</span>
+        )}
+      </div>
+
       {/* Chart */}
-      <div style={{ width: '100%', height: isMobile ? 400 : 550 }}>
+      <div style={{ width: '100%', height: isMobile ? 400 : 550 }} data-testid="skill-progression-chart">
         <VictoryChart
           width={isMobile ? 400 : 1000}
           height={isMobile ? 380 : 530}
           domain={{ x: xDomain, y: yDomain }}
           padding={{ top: 30, bottom: 60, left: 70, right: 30 }}
+          events={chartEvents}
+          // pan-y keeps vertical page scrolling possible when a swipe starts on the chart.
+          // A custom style replaces Victory's default parent style, so repeat its other values.
+          containerComponent={
+            <VictoryContainer style={{ height: '100%', width: '100%', userSelect: 'none', touchAction: 'pan-y' }} />
+          }
         >
-          {/* X Axis - Match Numbers */}
+          {/* X Axis - Match Numbers (thinned so labels do not overlap on phones) */}
           <VictoryAxis
             label="Match Number"
-            tickValues={chartData.map(d => d.matchNumber)}
+            tickValues={pickAxisTicks(chartData.map(d => d.matchNumber), isMobile ? 6 : 12)}
             tickFormat={(t) => Math.round(t)}
             style={{
               axis: { stroke: '#6B7280' },
@@ -406,6 +503,20 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({
               data: { fill: '#3B82F6' }
             }}
           />
+
+          {/* Selected dot highlight */}
+          {selectedPoint && (
+            <VictoryScatter
+              name="selected-point"
+              data={[selectedPoint]}
+              x="matchNumber"
+              y="playerRating"
+              size={11}
+              style={{
+                data: { fill: '#FBBF24', stroke: '#FFFFFF', strokeWidth: 2 }
+              }}
+            />
+          )}
         </VictoryChart>
       </div>
 
