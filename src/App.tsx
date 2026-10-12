@@ -506,6 +506,8 @@ function AppContent() {
   // Victory screen state
   const [showVictoryScreen, setShowVictoryScreen] = useState<boolean>(false);
   const [victorTeam, setVictorTeam] = useState<Team | null>(null);
+  // true once the finished game's match was written to the stats DB (stop autosaving it)
+  const [matchRecorded, setMatchRecorded] = useState<boolean>(false);
   // In-game stats: one entry per round; player totals are derived from it
   const [statLog, setStatLog] = useState<GameStatLog>(createEmptyStatLog);
   // Which stats are tracked - remembered between games
@@ -566,8 +568,8 @@ function AppContent() {
 
   // NEW: Save game state periodically or when important state changes
   useEffect(() => {
-    if (gameStarted && !showVictoryScreen) {
-      // Only save if the game is in progress (not in setup and not at victory)
+    if (gameStarted && !matchRecorded) {
+      // Save while the game is in progress AND on the victory screen until the match is recorded
       const saveGameData = async () => {
         try {
           await gameStorageService.saveGame({
@@ -581,7 +583,8 @@ function AppContent() {
             strategyTimerActive,
             moveTimerActive,
             strategyTimerEnabled,
-            moveTimerEnabled
+            moveTimerEnabled,
+            victorTeam: showVictoryScreen && victorTeam ? victorTeam : undefined,
           });
         } catch (error) {
           console.error('Error saving game state:', error);
@@ -599,6 +602,8 @@ function AppContent() {
     strategyTimerActive,
     moveTimerActive,
     showVictoryScreen,
+    victorTeam,
+    matchRecorded,
     strategyTime,
     moveTime,
     statLog
@@ -1556,6 +1561,7 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
     stats: undefined
   }));
   setStatLog(createEmptyStatLog());
+  setMatchRecorded(false);
   
   // Update local players with reset stats
   setLocalPlayers(playersWithResetStats);
@@ -1706,7 +1712,12 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
     setVictorTeam(team);
     setShowVictoryScreen(true);
     
-    // Clear any saved game state when a game ends
+    // The autosave keeps the finished game (with victorTeam) until the match is recorded, so a reload on the victory screen does not lose it.
+  };
+
+  // Called by the victory screen once the match is in the stats DB
+  const handleMatchRecorded = () => {
+    setMatchRecorded(true);
     gameStorageService.clearGame().catch(console.error);
   };
   
@@ -1722,6 +1733,7 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
     
     setShowVictoryScreen(false);
     setVictorTeam(null);
+    setMatchRecorded(false);
     setGameStarted(false);
     setIsDraftingMode(false);
     setShowDraftModeSelection(false);
@@ -1759,6 +1771,7 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
 
     // Restore the round log (saves from older versions only have totals -> baseline)
     setStatLog(restoreStatLog(savedGameData.statLog, savedPlayers));
+    setMatchRecorded(false);
     
     // Restore timer states
     setStrategyTimeRemaining(savedStrategyTime);
@@ -1773,6 +1786,14 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
     const restoredDurations = resolveTimerDurations(savedGameData, { strategyTime, moveTime });
     setStrategyTime(restoredDurations.strategyTime);
     setMoveTime(restoredDurations.moveTime);
+
+    // A finished game whose match was never recorded: go straight back to the victory screen
+    if (savedGameData.victorTeam === Team.Titans || savedGameData.victorTeam === Team.Atlanteans) {
+      setStrategyTimerActive(false);
+      setMoveTimerActive(false);
+      setVictorTeam(savedGameData.victorTeam);
+      setShowVictoryScreen(true);
+    }
 
     // Start the game
     setGameStarted(true);
@@ -1946,6 +1967,7 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
           onResume={handleResumeGame}
           onDiscard={handleDiscardSavedGame}
           savedTime={savedGameDate}
+          victorTeam={savedGameData.victorTeam}
         />
       )}
 
@@ -2184,7 +2206,7 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
           winningTeam={victorTeam}
           onReturnToSetup={resetToSetup}
           players={playersWithStats}
-          gameLength={gameLength}
+          gameLength={gameState.gameLength}
           doubleLanes={gameState.hasMultipleLanes}
           statLog={statLog}
           finalRound={finalRoundStatus.round}
@@ -2194,6 +2216,7 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
           onSaveRoundDraft={handleSaveRoundDraft}
           trackingSettings={statTracking}
           onTrackingSettingsChange={setStatTracking}
+          onMatchSaved={handleMatchRecorded}
         />
       )}
       </Suspense>

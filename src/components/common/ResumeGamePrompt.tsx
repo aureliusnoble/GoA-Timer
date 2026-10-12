@@ -10,6 +10,7 @@ interface ResumeGamePromptProps {
   onResume: () => void;
   onDiscard: () => void;
   savedTime: string; // Formatted time string showing when the game was saved
+  victorTeam?: Team; // Set when the game was finished but its match not yet saved
 }
 
 const ResumeGamePrompt: React.FC<ResumeGamePromptProps> = ({
@@ -17,7 +18,8 @@ const ResumeGamePrompt: React.FC<ResumeGamePromptProps> = ({
   players,
   onResume,
   onDiscard,
-  savedTime
+  savedTime,
+  victorTeam
 }) => {
   const { playSound } = useSound();
 
@@ -50,13 +52,21 @@ const ResumeGamePrompt: React.FC<ResumeGamePromptProps> = ({
       <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full shadow-lg border border-blue-500">
         <h2 className="text-2xl font-bold mb-4 flex items-center">
           <Clock size={24} className="mr-2 text-blue-400" />
-          Resume Previous Game?
+          {victorTeam ? 'Unsaved Match Result' : 'Resume Previous Game?'}
         </h2>
         
-        <p className="mb-4">
-          You have an ongoing game session from <span className="font-medium text-blue-300">{savedTime}</span>.
-          Would you like to resume where you left off?
-        </p>
+        {victorTeam ? (
+          <p className="mb-4">
+            A game from <span className="font-medium text-blue-300">{savedTime}</span> ended in {victorTeam === Team.Titans ? 'a' : 'an'}{' '}
+            <span className="font-medium">{victorTeam === Team.Titans ? 'Titan' : 'Atlantean'} victory</span>, but the match
+            was not saved yet. Return to the victory screen to save it?
+          </p>
+        ) : (
+          <p className="mb-4">
+            You have an ongoing game session from <span className="font-medium text-blue-300">{savedTime}</span>.
+            Would you like to resume where you left off?
+          </p>
+        )}
         
         <div className="bg-gray-700 p-4 rounded-lg mb-6">
           <h3 className="font-semibold mb-2 text-blue-200">Game Summary:</h3>
@@ -90,7 +100,7 @@ const ResumeGamePrompt: React.FC<ResumeGamePromptProps> = ({
             className="flex-1 bg-green-600 hover:bg-green-500 px-4 py-3 rounded-lg text-white font-medium flex items-center justify-center shadow-md"
             onClick={handleResume}
           >
-            <Play size={18} className="mr-2" /> Resume Game
+            <Play size={18} className="mr-2" /> {victorTeam ? 'Back to Victory Screen' : 'Resume Game'}
           </button>
           
           <button

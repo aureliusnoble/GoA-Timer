@@ -32,6 +32,8 @@ interface VictoryScreenProps {
   /** Remembered stat-tracking settings (logging switch + categories). */
   trackingSettings: StatTrackingSettings;
   onTrackingSettingsChange?: (settings: StatTrackingSettings) => void;
+  /** Called once the match has been written to the database. */
+  onMatchSaved?: () => void;
 }
 
 const VictoryScreen: React.FC<VictoryScreenProps> = ({ 
@@ -47,7 +49,8 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
   onUpdatePlayerStats,
   onSaveRoundDraft,
   trackingSettings,
-  onTrackingSettingsChange
+  onTrackingSettingsChange,
+  onMatchSaved
 }) => {
   const [animationComplete, setAnimationComplete] = useState(false);
   const [isSavingMatchData, setSavingMatchData] = useState(false);
@@ -137,6 +140,7 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
       
       // Update state
       setMatchDataSaved(true);
+      onMatchSaved?.();
       playSound('phaseChange');
     } catch (error) {
       console.error('Error saving match data:', error);

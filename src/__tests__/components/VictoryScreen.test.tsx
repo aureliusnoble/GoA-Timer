@@ -37,6 +37,7 @@ function renderVictory(overrides: Partial<Props> = {}) {
     onTrackingSettingsChange: vi.fn(),
     onUpdatePlayerStats: vi.fn(),
     onSaveRoundDraft: vi.fn(),
+    onMatchSaved: vi.fn(),
     ...overrides,
   };
   const utils = render(<VictoryScreen {...props} />);
@@ -80,12 +81,13 @@ describe('VictoryScreen final-round stats (4.1)', () => {
   });
 
   it('hides "Record Final Round Stats" once the match is saved', async () => {
-    renderVictory();
+    const { props } = renderVictory();
     fireEvent.click(screen.getByText('Throne'));
     await clickAndFlush(screen.getByText('Save Match Data'));
     expect(recordMatch).toHaveBeenCalledTimes(1);
     expect(screen.getByText('Saved Successfully')).toBeTruthy();
     expect(screen.queryByText('Record Final Round Stats')).toBeNull();
+    expect(props.onMatchSaved).toHaveBeenCalledTimes(1);
   });
 
   it('asks before saving when tracking was on and the final round is unrecorded', async () => {
@@ -123,5 +125,17 @@ describe('VictoryScreen final-round stats (4.1)', () => {
     fireEvent.click(screen.getByText('Throne'));
     await clickAndFlush(screen.getByText('Save Match Data'));
     expect(recordMatch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('VictoryScreen keeps the finished game until saved (4.1)', () => {
+  it('does not report the match as saved when saving fails', async () => {
+    recordMatch.mockRejectedValueOnce(new Error('boom'));
+    const { props } = renderVictory();
+    fireEvent.click(screen.getByText('Throne'));
+    await clickAndFlush(screen.getByText('Save Match Data'));
+    expect(props.onMatchSaved).not.toHaveBeenCalled();
+    expect(screen.getByText('Failed to save match data. Please try again.')).toBeTruthy();
+    expect(screen.getByText('Record Final Round Stats')).toBeTruthy();
   });
 });
