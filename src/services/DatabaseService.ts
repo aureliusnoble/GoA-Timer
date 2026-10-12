@@ -56,6 +56,9 @@ export interface DBMatch {
   atlanteanPlayers: number;
   deviceId?: string;
   victoryType?: VictoryType; // Optional for backward compatibility with legacy matches
+  // Set when the match is edited on this device; merge-fill never fills an edited
+  // match or its match players. Local only: never uploaded to the cloud.
+  locallyEditedAt?: Date;
 }
 
 // MatchPlayer database model
@@ -2132,13 +2135,16 @@ class DatabaseService {
   /**
    * For a match that already exists locally, fill fields that are missing on the
    * local match and its match players from an imported copy. Never overwrites a
-   * local value and never adds match players to an existing match.
+   * local value and never adds match players to an existing match. A match edited
+   * on this device is left untouched, so a value cleared in Edit Match stays cleared.
    */
   private async fillMissingMatchData(
     localMatch: DBMatch,
     importedMatch: DBMatch,
     importedMatchPlayers: DBMatchPlayer[]
   ): Promise<void> {
+    if (localMatch.locallyEditedAt) return;
+
     const matchFill = fillMissingFields(localMatch, importedMatch);
     if (matchFill.filledKeys.length > 0) {
       await this.saveMatch(matchFill.merged);
@@ -2758,7 +2764,8 @@ class DatabaseService {
     try {
       // Use Promise.all to perform updates concurrently but atomically
       await Promise.all([
-        this.updateMatch(matchId, matchUpdates),
+        // Mark the match as edited here so cloud merges never refill a cleared value
+        this.updateMatch(matchId, { ...matchUpdates, locallyEditedAt: new Date() }),
         this.updateMatchPlayers(playerUpdates)
       ]);
 

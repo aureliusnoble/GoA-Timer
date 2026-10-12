@@ -100,6 +100,20 @@ describe('mergeData on a match that already exists locally', () => {
     expect(saveMatchPlayer).not.toHaveBeenCalled();
   });
 
+  it('does not refill a field cleared on a locally edited match, nor fill its match players', async () => {
+    const editedMatch: DBMatch = { ...match, locallyEditedAt: new Date('2026-10-01T12:00:00Z') };
+    const clearedAliceRow: DBMatchPlayer = { ...aliceRow, kills: undefined };
+    const { saveMatch, saveMatchPlayer } = stubStorage(editedMatch, [clearedAliceRow, bobRow]);
+
+    await dbService.mergeData(exportData({
+      matches: [{ ...match, victoryType: 'wave' }],
+      matchPlayers: [{ ...aliceRow, kills: 3, deaths: 2 }, { ...bobRow, kills: 1 }],
+    }));
+
+    expect(saveMatch).not.toHaveBeenCalled();
+    expect(saveMatchPlayer).not.toHaveBeenCalled();
+  });
+
   it('does not add an unknown match player to an existing match', async () => {
     const { saveMatchPlayer } = stubStorage(match, [aliceRow, bobRow]);
 
@@ -109,6 +123,34 @@ describe('mergeData on a match that already exists locally', () => {
     }));
 
     expect(saveMatchPlayer).not.toHaveBeenCalled();
+  });
+});
+
+describe('local edit marker', () => {
+  function stubEdit() {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    connectFakeDb();
+    vi.spyOn(dbService, 'getMatch').mockResolvedValue(match);
+    vi.spyOn(dbService, 'getMatchPlayers').mockResolvedValue([aliceRow, bobRow]);
+    vi.spyOn(dbService, 'updateMatchPlayers').mockResolvedValue();
+    vi.spyOn(dbService, 'recalculatePlayerStats').mockResolvedValue();
+    return vi.spyOn(dbService, 'updateMatch').mockResolvedValue();
+  }
+
+  it('editMatch marks the match as locally edited along with match-level changes', async () => {
+    const updateMatch = stubEdit();
+
+    await dbService.editMatch('match-1', { victoryType: 'throne' }, []);
+
+    expect(updateMatch).toHaveBeenCalledWith('match-1', { victoryType: 'throne', locallyEditedAt: expect.any(Date) });
+  });
+
+  it('editMatch marks the match as locally edited when only match players change', async () => {
+    const updateMatch = stubEdit();
+
+    await dbService.editMatch('match-1', {}, [{ id: 'mp-1', updates: { kills: undefined } }]);
+
+    expect(updateMatch).toHaveBeenCalledWith('match-1', { locallyEditedAt: expect.any(Date) });
   });
 });
 

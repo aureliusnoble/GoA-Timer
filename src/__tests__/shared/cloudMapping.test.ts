@@ -89,6 +89,10 @@ describe('cloudMatchRowToLocal', () => {
     expect(match.gameLength).toBe(GameLength.Long);
     expect(match.date.toISOString()).toBe('2026-09-01T18:30:00.000Z');
   });
+
+  it('never sets the local edit marker', () => {
+    expect('locallyEditedAt' in cloudMatchRowToLocal({ ...baseMatchRow, victory_type: 'wave' })).toBe(false);
+  });
 });
 
 describe('cloudMatchPlayerRowToLocal', () => {
@@ -158,6 +162,14 @@ describe('localMatchToCloudRow', () => {
 
   it('sends victory_type when the local match has one', () => {
     expect(localMatchToCloudRow({ ...match, victoryType: 'kills' }, ctx).victory_type).toBe('kills');
+  });
+
+  it('never sends the local edit marker', () => {
+    const row = localMatchToCloudRow({ ...match, locallyEditedAt: new Date('2026-10-01T12:00:00.000Z') }, ctx);
+    expect(Object.keys(row).sort()).toEqual([
+      'atlantean_players', 'date', 'device_id', 'double_lanes', 'game_length', 'id',
+      'owner_id', 'sync_source', 'synced_at', 'titan_players', 'winning_team',
+    ]);
   });
 
   it('fills owner, sync metadata and falls back to the current device id', () => {
