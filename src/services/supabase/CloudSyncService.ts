@@ -13,6 +13,7 @@ import {
 } from '../../shared/utils/cloudMapping';
 import {
   appendPendingRename,
+  nextPendingRenameFor,
   parsePendingRenames,
   PendingPlayerRename,
   removePendingRename,
@@ -468,18 +469,40 @@ class CloudSyncServiceClass {
    * cloud_players row is deleted, then an auto-upload sends the renamed player.
    * The rename is kept in a local queue until it has been applied, so it survives
    * being offline or signed out; every upload/download drains the queue first.
+   * The entry is stamped with the signed-in account so only that account (or,
+   * when signed out, the next account to sync) applies it.
    * Resolves to true when the queue was fully applied now.
    */
   async queuePlayerRename(oldId: string, newId: string): Promise<boolean> {
     if (!isSupabaseConfigured() || !supabase) return false;
 
+    const ownerId = await this.getSignedInUserId();
     this.savePendingPlayerRenames(
-      appendPendingRename(this.getPendingPlayerRenames(), { oldId, newId, queuedAt: new Date().toISOString() })
+      appendPendingRename(this.getPendingPlayerRenames(), {
+        oldId,
+        newId,
+        queuedAt: new Date().toISOString(),
+        ...(ownerId ? { ownerId } : {}),
+      })
     );
 
     const applied = await this.flushPendingPlayerRenamesNow();
     this.triggerAutoUpload();
     return applied;
+  }
+
+  /**
+   * Id of the signed-in account from the locally stored session, so a rename made
+   * offline is still stamped (getUser() needs the auth server and is null offline).
+   */
+  private async getSignedInUserId(): Promise<string | undefined> {
+    if (!supabase) return undefined;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      return session?.user?.id || undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   getPendingPlayerRenames(): PendingPlayerRename[] {
@@ -524,14 +547,16 @@ class CloudSyncServiceClass {
   }
 
   /**
-   * Apply queued renames to this owner's cloud rows, oldest first. Stops at the
-   * first failure and keeps that entry (and later ones) for the next attempt.
+   * Apply this owner's queued renames (and any queued while signed out) to the
+   * owner's cloud rows, oldest first. Other accounts' renames are skipped and
+   * kept. Stops at the first failure and keeps that entry (and later ones) for
+   * the next attempt.
    */
   private async flushPendingPlayerRenames(ownerId: string): Promise<boolean> {
     if (!supabase) return false;
 
     for (;;) {
-      const next = this.getPendingPlayerRenames()[0];
+      const next = nextPendingRenameFor(this.getPendingPlayerRenames(), ownerId);
       if (!next) return true;
 
       const { error: rekeyError } = await supabase

@@ -3,12 +3,19 @@
 // Queue ("outbox") of player renames still to be applied to the user's cloud
 // rows. Stored in localStorage by CloudSyncService and drained, oldest first,
 // at the start of every upload/download so the old ID cannot come back.
+// Each entry belongs to the account that was signed in when it was queued, so
+// another account signing in on this device never applies it to its own rows.
 
 export interface PendingPlayerRename {
   oldId: string;
   newId: string;
   /** ISO timestamp; also makes otherwise identical entries distinguishable. */
   queuedAt: string;
+  /**
+   * Account signed in when the rename was made. Missing when queued while
+   * signed out: then it goes to whichever account this device syncs with next.
+   */
+  ownerId?: string;
 }
 
 function isPendingPlayerRename(value: unknown): value is PendingPlayerRename {
@@ -16,7 +23,8 @@ function isPendingPlayerRename(value: unknown): value is PendingPlayerRename {
   const entry = value as Record<string, unknown>;
   return typeof entry.oldId === 'string' && entry.oldId !== ''
     && typeof entry.newId === 'string' && entry.newId !== ''
-    && typeof entry.queuedAt === 'string';
+    && typeof entry.queuedAt === 'string'
+    && (entry.ownerId === undefined || (typeof entry.ownerId === 'string' && entry.ownerId !== ''));
 }
 
 /** Parse the stored queue; anything malformed is dropped rather than throwing. */
@@ -39,14 +47,26 @@ export function appendPendingRename(
   return [...queue, entry];
 }
 
-/** Remove the first entry equal to `entry` (same oldId, newId and queuedAt). */
+/** Remove the first entry equal to `entry` (same oldId, newId, queuedAt and ownerId). */
 export function removePendingRename(
   queue: readonly PendingPlayerRename[],
   entry: PendingPlayerRename
 ): PendingPlayerRename[] {
   const index = queue.findIndex(item =>
     item.oldId === entry.oldId && item.newId === entry.newId && item.queuedAt === entry.queuedAt
+      && item.ownerId === entry.ownerId
   );
   if (index === -1) return [...queue];
   return [...queue.slice(0, index), ...queue.slice(index + 1)];
+}
+
+/**
+ * Oldest entry `ownerId` may apply: one it queued itself, or one queued while
+ * signed out. Other accounts' renames are skipped and stay queued for them.
+ */
+export function nextPendingRenameFor(
+  queue: readonly PendingPlayerRename[],
+  ownerId: string
+): PendingPlayerRename | undefined {
+  return queue.find(entry => entry.ownerId === undefined || entry.ownerId === ownerId);
 }

@@ -154,6 +154,57 @@ describe('CloudSyncService player renames', () => {
 
     expect(fakeSupabase.callsTo('cloud_match_players')).toHaveLength(0);
     expect(CloudSyncService.getPendingPlayerRenames()).toMatchObject([{ oldId: 'Jhon', newId: 'John' }]);
+    expect(CloudSyncService.getPendingPlayerRenames()[0]).not.toHaveProperty('ownerId');
+  });
+
+  it('stamps a queued rename with the signed-in account', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    fakeSupabase.respondWith(call =>
+      call.table === 'cloud_match_players' && call.op === 'update'
+        ? { error: { message: 'network down' } }
+        : { data: [], error: null }
+    );
+
+    await CloudSyncService.queuePlayerRename('Jhon', 'John');
+
+    expect(CloudSyncService.getPendingPlayerRenames()).toMatchObject([{ oldId: 'Jhon', newId: 'John', ownerId: 'owner-1' }]);
+  });
+
+  it('stamps the account from the stored session when the auth server cannot be reached', async () => {
+    vi.spyOn(fakeSupabase.client.auth, 'getUser').mockResolvedValue({ data: { user: null } });
+
+    await CloudSyncService.queuePlayerRename('Jhon', 'John');
+
+    expect(CloudSyncService.getPendingPlayerRenames()).toMatchObject([{ oldId: 'Jhon', newId: 'John', ownerId: 'owner-1' }]);
+  });
+
+  it("leaves another account's rename queued and still downloads", async () => {
+    const theirs = { oldId: 'Jhon', newId: 'John', queuedAt: '2026-10-12T10:00:00.000Z', ownerId: 'owner-2' };
+    localStorage.setItem(PENDING_KEY, JSON.stringify([theirs]));
+
+    const result = await CloudSyncService.downloadOwnCloudData();
+
+    expect(result.success).toBe(true);
+    expect(fakeSupabase.callsTo('cloud_match_players', 'update')).toHaveLength(0);
+    expect(fakeSupabase.callsTo('cloud_players', 'delete')).toHaveLength(0);
+    expect(db.mergeData).toHaveBeenCalledTimes(1);
+    expect(CloudSyncService.getPendingPlayerRenames()).toEqual([theirs]);
+  });
+
+  it('applies renames queued while signed out or by this account, in order, to the account that syncs', async () => {
+    const unowned = { oldId: 'Jhon', newId: 'John', queuedAt: '2026-10-12T10:00:00.000Z' };
+    const theirs = { oldId: 'Ann', newId: 'Anne', queuedAt: '2026-10-12T10:01:00.000Z', ownerId: 'owner-2' };
+    const mine = { oldId: 'Bob', newId: 'Rob', queuedAt: '2026-10-12T10:02:00.000Z', ownerId: 'owner-1' };
+    localStorage.setItem(PENDING_KEY, JSON.stringify([unowned, theirs, mine]));
+
+    await CloudSyncService.uploadLocalData();
+
+    const rekeys = fakeSupabase.callsTo('cloud_match_players', 'update');
+    expect(rekeys.map(call => call.payload)).toEqual([{ player_id: 'John' }, { player_id: 'Rob' }]);
+    for (const call of rekeys) {
+      expect(call.filters[0]).toEqual({ method: 'eq', column: 'owner_id', value: 'owner-1' });
+    }
+    expect(CloudSyncService.getPendingPlayerRenames()).toEqual([theirs]);
   });
 
   it('applies queued renames before uploading', async () => {

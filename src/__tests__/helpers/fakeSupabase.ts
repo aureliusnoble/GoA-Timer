@@ -50,7 +50,10 @@ export function createFakeSupabase() {
 
   return {
     client: {
-      auth: { getUser: async () => ({ data: { user: userId ? { id: userId } : null } }) },
+      auth: {
+        getUser: async () => ({ data: { user: userId ? { id: userId } : null } }),
+        getSession: async () => ({ data: { session: userId ? { user: { id: userId } } : null } }),
+      },
       from,
     },
     get calls(): FakeCall[] { return calls; },
