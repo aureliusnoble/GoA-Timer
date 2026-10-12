@@ -53,6 +53,8 @@ interface GameTimerProps {
   statLog: GameStatLog;
   /** Save the reviewed values for a round. */
   onSavePlayerStats?: (round: number, values: RoundValues) => void;
+  /** Keep values entered in a review closed with X. */
+  onSaveRoundDraft?: (round: number, values: RoundValues) => void;
   /** Remembered stat-tracking settings (logging switch + categories). */
   trackingSettings: StatTrackingSettings;
   onTrackingSettingsChange: (settings: StatTrackingSettings) => void;
@@ -87,6 +89,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
   moveTimerEnabled,
   statLog,
   onSavePlayerStats,
+  onSaveRoundDraft,
   trackingSettings,
   onTrackingSettingsChange
 }) => {
@@ -228,6 +231,14 @@ const GameTimer: React.FC<GameTimerProps> = ({
     // Start the next turn
     playSound('turnStart');
     onStartNextTurn();
+  };
+
+  // X on the assistant: keep what was entered and stay on this screen (round not advanced)
+  const handleEndOfRoundDismiss = (draft?: RoundValues) => {
+    if (draft && onSaveRoundDraft) {
+      onSaveRoundDraft(gameState.round, draft);
+    }
+    setShowEndOfRoundAssistant(false);
   };
   
   const handleDeclareVictory = (team: Team) => {
@@ -704,6 +715,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
         round={gameState.round}
         initialValues={buildReviewValues(statLog, gameState.round, players)}
         onComplete={handleEndOfRoundComplete}
+        onDismiss={handleEndOfRoundDismiss}
         trackingSettings={trackingSettings}
         onTrackingSettingsChange={onTrackingSettingsChange}
       />

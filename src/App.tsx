@@ -2193,6 +2193,7 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
           onFlipCoin={flipCoin}
           statLog={statLog}
           onSavePlayerStats={handleCommitRoundStats}
+          onSaveRoundDraft={handleSaveRoundDraft}
           trackingSettings={statTracking}
           onTrackingSettingsChange={setStatTracking}
         />

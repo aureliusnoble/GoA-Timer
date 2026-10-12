@@ -87,3 +87,31 @@ describe('EndOfRoundAssistant - X keeps the entered stats (4.1 / 4.5)', () => {
     expect(props.onDismiss).toHaveBeenCalledWith(undefined);
   });
 });
+
+describe('EndOfRoundAssistant - assists (4.5)', () => {
+  it('"Got Kill" gives teammates assists and "-" takes exactly those back', () => {
+    const { props } = renderAssistant({ trackingSettings: tracking({ kills: true, assists: true }) });
+    fireEvent.click(screen.getAllByText('Got Kill')[0]); // Ann (Titans)
+    fireEvent.click(screen.getByLabelText('Remove kill from Ann'));
+    fireEvent.click(screen.getByText('Save Stats & Continue'));
+    expect(props.onComplete).toHaveBeenCalledWith({
+      1: { kills: 0, assists: 0 }, 2: { kills: 0, assists: 0 }, 3: { kills: 0, assists: 0 },
+    });
+  });
+
+  it('assists can be entered without kills tracking', () => {
+    const { props } = renderAssistant({ trackingSettings: tracking({ assists: true }) });
+    fireEvent.click(screen.getByLabelText('Add assist for Cat'));
+    fireEvent.click(screen.getByLabelText('Add assist for Cat'));
+    fireEvent.click(screen.getByLabelText('Remove assist from Cat'));
+    fireEvent.click(screen.getByText('Save Stats & Continue'));
+    expect(props.onComplete).toHaveBeenCalledWith({ 1: { assists: 0 }, 2: { assists: 0 }, 3: { assists: 1 } });
+  });
+
+  it('no assists are granted when assists are not tracked', () => {
+    const { props } = renderAssistant({ trackingSettings: tracking({ kills: true }) });
+    fireEvent.click(screen.getAllByText('Got Kill')[0]);
+    fireEvent.click(screen.getByText('Save Stats & Continue'));
+    expect(props.onComplete).toHaveBeenCalledWith({ 1: { kills: 1 }, 2: { kills: 0 }, 3: { kills: 0 } });
+  });
+});

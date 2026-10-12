@@ -27,6 +27,7 @@ import {
   filterValuesToCategories,
 } from '../shared/utils/gameStatLog';
 import { StatTrackingSettings } from '../shared/utils/statTrackingSettings';
+import { KillEvent, recordKill, undoKill } from '../shared/utils/roundStatEditing';
 import StatCategoryToggles from './common/StatCategoryToggles';
 
 interface EndOfRoundAssistantProps {
@@ -52,7 +53,8 @@ enum StatTrackingTab {
   Deaths,
   Minions,
   Gold,
-  Level // New tab for level tracking
+  Level, // New tab for level tracking
+  Assists
 }
 
 const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
@@ -75,6 +77,9 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
   
   // State for player stats this round
   const [playerStats, setPlayerStats] = useState<RoundValues>({});
+
+  // "Got Kill" presses this session, so "-" can take back the assists a kill granted
+  const [killEvents, setKillEvents] = useState<KillEvent[]>([]);
   
   // State for active tab
   const [activeTab, setActiveTab] = useState<StatTrackingTab>(StatTrackingTab.Kills);
@@ -100,6 +105,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
         initialStats[player.id] = { ...(initialValues[player.id] ?? {}) };
       });
       setPlayerStats(initialStats);
+      setKillEvents([]);
 
       // Start from the remembered tracking settings
       setLoggingEnabled(trackingSettings.enabled);
@@ -200,23 +206,20 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
     }
   };
 
-  // Auto-calculate assists for team kills
+  // "Got Kill": +1 kill, and an assist for each teammate when assists are tracked
   const handleTeamKill = (killerPlayerId: number) => {
     playSound('buttonClick');
-    
-    // Increment killer's kill count
-    adjustStat(killerPlayerId, 'kills', 1);
-    
-    // Find killer's team
-    const killer = players.find(p => p.id === killerPlayerId);
-    if (!killer) return;
-    
-    // Give assists to all other team members
-    players.forEach(player => {
-      if (player.id !== killerPlayerId && player.team === killer.team) {
-        adjustStat(player.id, 'assists', 1);
-      }
-    });
+    const result = recordKill(playerStats, killEvents, players, killerPlayerId, enabledStats.assists);
+    setPlayerStats(result.values);
+    setKillEvents(result.events);
+  };
+
+  // Kill "-": also removes the assists that kill granted
+  const handleUndoKill = (killerPlayerId: number) => {
+    playSound('buttonClick');
+    const result = undoKill(playerStats, killEvents, killerPlayerId);
+    setPlayerStats(result.values);
+    setKillEvents(result.events);
   };
   
   // Change tab for stat tracking
@@ -228,6 +231,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
   // Dynamic tab availability based on enabled stats
   const availableTabs = [
     { tab: StatTrackingTab.Kills, enabled: enabledStats.kills, icon: <Swords size={16} />, label: 'Kills' },
+    { tab: StatTrackingTab.Assists, enabled: enabledStats.assists, icon: <Users size={16} />, label: 'Assists' },
     { tab: StatTrackingTab.Deaths, enabled: enabledStats.deaths, icon: <Skull size={16} />, label: 'Deaths' },
     { tab: StatTrackingTab.Minions, enabled: enabledStats.minionKills, icon: <Bot size={16} />, label: 'Minions' },
     { tab: StatTrackingTab.Gold, enabled: enabledStats.goldEarned, icon: <Coins size={16} />, label: 'Gold' },
@@ -249,6 +253,43 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
   // Group players by team
   const titanPlayers = players.filter(p => p.team === Team.Titans);
   const atlanteanPlayers = players.filter(p => p.team === Team.Atlanteans);
+
+  // Assists tab: +/- per player (works with or without kills tracking)
+  const renderAssistColumn = (teamPlayers: Player[], team: Team) => (
+    <div className={team === Team.Titans ? 'bg-blue-900/30 border border-blue-800 p-4 rounded-lg' : 'bg-red-900/30 border border-red-800 p-4 rounded-lg'}>
+      <h4 className="font-bold text-lg mb-3 flex items-center">
+        <div className={`w-3 h-3 rounded-full mr-2 ${team === Team.Titans ? 'bg-blue-500' : 'bg-red-500'}`}></div>
+        {team === Team.Titans ? 'Titans' : 'Atlanteans'}
+      </h4>
+      <div className="space-y-2">
+        {teamPlayers.map(player => (
+          <div key={player.id} className={`flex justify-between items-center p-2 rounded ${team === Team.Titans ? 'bg-blue-900/40' : 'bg-red-900/40'}`}>
+            <div className="font-medium">{player.name}</div>
+            <div className="flex items-center space-x-1">
+              <button
+                className="bg-gray-700 hover:bg-gray-600 p-1 rounded"
+                onClick={() => adjustStat(player.id, 'assists', -1)}
+                disabled={!playerStats[player.id]?.assists}
+                aria-label={`Remove assist from ${player.name}`}
+              >
+                <CircleMinus size={16} />
+              </button>
+              <div className="w-8 text-center font-bold">
+                {playerStats[player.id]?.assists || 0}
+              </div>
+              <button
+                className="bg-gray-700 hover:bg-gray-600 p-1 rounded"
+                onClick={() => adjustStat(player.id, 'assists', 1)}
+                aria-label={`Add assist for ${player.name}`}
+              >
+                <CirclePlus size={16} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 overflow-y-auto">
@@ -438,7 +479,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                 {activeTab === StatTrackingTab.Kills && (
                   <div>
                     <div className="mb-4 text-sm text-gray-300">
-                      <p>When a player gets a kill, their teammates automatically receive an assist. Click on the player who got the kill.</p>
+                      <p>Tap "Got Kill" for the player who defeated an enemy hero.{enabledStats.assists && ' Their teammates each get an assist ("−" takes it back); fine-tune assists on the Assists tab.'}</p>
                     </div>
                     
                     {/* Team-based layout for kills */}
@@ -478,7 +519,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                                   </div>
                                   <div className="text-xs flex space-x-2">
                                     <span className="flex items-center" title="Kills"><Swords size={12} className="mr-1" />{playerStats[player.id]?.kills || 0}</span>
-                                    <span className="flex items-center" title="Assists"><Users size={12} className="mr-1" />{playerStats[player.id]?.assists || 0}</span>
+                                    {enabledStats.assists && <span className="flex items-center" title="Assists"><Users size={12} className="mr-1" />{playerStats[player.id]?.assists || 0}</span>}
                                   </div>
                                 </div>
                               </div>
@@ -491,8 +532,9 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                                 </button>
                                 <button 
                                   className="bg-gray-700 hover:bg-gray-600 p-1 rounded"
-                                  onClick={() => adjustStat(player.id, 'kills', -1)}
+                                  onClick={() => handleUndoKill(player.id)}
                                   disabled={!playerStats[player.id]?.kills}
+                                  aria-label={`Remove kill from ${player.name}`}
                                 >
                                   <CircleMinus size={16} />
                                 </button>
@@ -537,7 +579,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                                   </div>
                                   <div className="text-xs flex space-x-2">
                                     <span className="flex items-center" title="Kills"><Swords size={12} className="mr-1" />{playerStats[player.id]?.kills || 0}</span>
-                                    <span className="flex items-center" title="Assists"><Users size={12} className="mr-1" />{playerStats[player.id]?.assists || 0}</span>
+                                    {enabledStats.assists && <span className="flex items-center" title="Assists"><Users size={12} className="mr-1" />{playerStats[player.id]?.assists || 0}</span>}
                                   </div>
                                 </div>
                               </div>
@@ -550,8 +592,9 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                                 </button>
                                 <button 
                                   className="bg-gray-700 hover:bg-gray-600 p-1 rounded"
-                                  onClick={() => adjustStat(player.id, 'kills', -1)}
+                                  onClick={() => handleUndoKill(player.id)}
                                   disabled={!playerStats[player.id]?.kills}
+                                  aria-label={`Remove kill from ${player.name}`}
                                 >
                                   <CircleMinus size={16} />
                                 </button>
@@ -564,6 +607,19 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                   </div>
                 )}
                 
+                {/* Assists Tab */}
+                {activeTab === StatTrackingTab.Assists && (
+                  <div>
+                    <div className="mb-4 text-sm text-gray-300">
+                      <p>Adjust assists directly.</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {renderAssistColumn(titanPlayers, Team.Titans)}
+                      {renderAssistColumn(atlanteanPlayers, Team.Atlanteans)}
+                    </div>
+                  </div>
+                )}
+
                 {/* Deaths Tab */}
                 {activeTab === StatTrackingTab.Deaths && (
                   <div>
