@@ -5,6 +5,7 @@ import { DBMatch, DBMatchPlayer } from '../../../services/DatabaseService';
 import { useDataSource } from '../../../hooks/useDataSource';
 import { getRoleTooltip } from '../../../shared/utils/roleDescriptions';
 import EnhancedTooltip from '../../common/EnhancedTooltip';
+import { formatMatchStatLine } from '../../../shared/utils/matchStatDisplay';
 
 interface MatchHistoryProps {
   playerId: string;
@@ -294,12 +295,10 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ playerId }) => {
                   </div>
                 </div>
                 
-                {/* Stats if available */}
-                {(record.playerData.kills !== undefined || record.playerData.deaths !== undefined || record.playerData.assists !== undefined) && (
+                {/* Recorded stats (tracked zeros shown, untracked values as an en dash) */}
+                {formatMatchStatLine(record.playerData) && (
                   <div className="text-sm text-gray-300">
-                    KDA: {record.playerData.kills ?? 0}/{record.playerData.deaths ?? 0}/{record.playerData.assists ?? 0}
-                    {record.playerData.level && ` • Level ${record.playerData.level}`}
-                    {record.playerData.goldEarned && ` • ${record.playerData.goldEarned.toLocaleString()} gold`}
+                    {formatMatchStatLine(record.playerData)}
                   </div>
                 )}
               </div>
@@ -364,10 +363,9 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ playerId }) => {
                       {record.playerData.heroName || 'Unknown Hero'}
                     </span>
                   </div>
-                  {(record.playerData.kills !== undefined || record.playerData.deaths !== undefined || record.playerData.assists !== undefined) && (
+                  {formatMatchStatLine(record.playerData) && (
                     <div className="text-sm text-gray-400">
-                      {record.playerData.kills ?? 0}/{record.playerData.deaths ?? 0}/{record.playerData.assists ?? 0}
-                      {record.playerData.level && ` • Lv.${record.playerData.level}`}
+                      {formatMatchStatLine(record.playerData)}
                     </div>
                   )}
                 </div>

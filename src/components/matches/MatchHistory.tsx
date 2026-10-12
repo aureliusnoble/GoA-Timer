@@ -1,6 +1,6 @@
 // src/components/matches/MatchHistory.tsx
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Search, Calendar, Filter, ChevronDown, ChevronUp, Trash2, Edit, Shield, Award, Swords, Skull, Users, Coins } from 'lucide-react';
+import { ChevronLeft, Search, Calendar, Filter, ChevronDown, ChevronUp, Trash2, Edit, Shield, Award } from 'lucide-react';
 import { DBMatch, DBMatchPlayer} from '../../services/DatabaseService';
 import dbService from '../../services/DatabaseService';
 import { Team, GameLength, VictoryType } from '../../types';
@@ -9,6 +9,8 @@ import EnhancedTooltip from '../common/EnhancedTooltip';
 import EditMatchModal from './EditMatchModal';
 import { useDataSource } from '../../hooks/useDataSource';
 import { getVictoryTypeDisplay } from '../common/VictoryTypeSelector';
+import MatchPlayerStatLine from './MatchPlayerStatLine';
+import { getTrackedStatKeys } from '../../shared/utils/matchStatDisplay';
 
 interface MatchHistoryProps {
   onBack: () => void;
@@ -187,22 +189,6 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ onBack }) => {
       hour: '2-digit',
       minute: '2-digit'
     });
-  };
-  
-  // Helper function to check if any player has combat stats
-  const matchHasCombatStats = (match: MatchWithDetails): boolean => {
-    return match.players.some(player => 
-      (player.kills && player.kills > 0) ||
-      (player.deaths && player.deaths > 0) || 
-      (player.assists && player.assists > 0)
-    );
-  };
-  
-  // Helper function to check if any player has gold stats
-  const matchHasGoldStats = (match: MatchWithDetails): boolean => {
-    return match.players.some(player => 
-      player.goldEarned && player.goldEarned > 0
-    );
   };
   
   // Filter and sort matches
@@ -454,7 +440,7 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ onBack }) => {
                           </h4>
                           <div className="space-y-2">
                             {match.players.filter(p => p.team === Team.Titans).map((player) => (
-                              <div key={player.id} className="flex justify-between items-center bg-blue-900/30 p-2 rounded">
+                              <div key={player.id} className="flex flex-wrap justify-between items-center gap-2 bg-blue-900/30 p-2 rounded">
                                 <div className="flex items-center">
                                   <div className="mr-2 bg-gray-800 p-1 rounded-full">
                                     <Shield size={16} />
@@ -466,38 +452,9 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ onBack }) => {
                                     </div>
                                   </div>
                                 </div>
-                                
-                                {/* Show stats if any player in this match has combat stats */}
-                                {(matchHasCombatStats(match) || matchHasGoldStats(match)) && (
-                                  <div className="flex items-center space-x-2 text-xs bg-gray-800 px-2 py-1 rounded">
-                                    {matchHasCombatStats(match) && (
-                                      <div className="flex items-center space-x-1">
-                                        <span className="flex items-center" title="Kills">
-                                          <Swords size={12} className="text-blue-400 mr-1" />
-                                          {player.kills || 0}
-                                        </span>
-                                        <span>/</span>
-                                        <span className="flex items-center" title="Deaths">
-                                          <Skull size={12} className="text-red-400 mr-1" />
-                                          {player.deaths || 0}
-                                        </span>
-                                        <span>/</span>
-                                        <span className="flex items-center" title="Assists">
-                                          <Users size={12} className="text-green-400 mr-1" />
-                                          {player.assists || 0}
-                                        </span>
-                                      </div>
-                                    )}
-                                    
-                                    {/* Show gold if available */}
-                                    {matchHasGoldStats(match) && (
-                                      <div className="flex items-center ml-2" title="Gold">
-                                        <Coins size={12} className="text-yellow-400 mr-1" />
-                                        {player.goldEarned || 0}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
+
+                                {/* Recorded stats: minion kills and level included, tracked zeros shown as 0 */}
+                                <MatchPlayerStatLine player={player} statKeys={getTrackedStatKeys(match.players)} />
                               </div>
                             ))}
                           </div>
@@ -518,7 +475,7 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ onBack }) => {
                           </h4>
                           <div className="space-y-2">
                             {match.players.filter(p => p.team === Team.Atlanteans).map((player) => (
-                              <div key={player.id} className="flex justify-between items-center bg-red-900/30 p-2 rounded">
+                              <div key={player.id} className="flex flex-wrap justify-between items-center gap-2 bg-red-900/30 p-2 rounded">
                                 <div className="flex items-center">
                                   <div className="mr-2 bg-gray-800 p-1 rounded-full">
                                     <Shield size={16} />
@@ -530,38 +487,9 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ onBack }) => {
                                     </div>
                                   </div>
                                 </div>
-                                
-                                {/* Show stats if any player in this match has combat stats */}
-                                {(matchHasCombatStats(match) || matchHasGoldStats(match)) && (
-                                  <div className="flex items-center space-x-2 text-xs bg-gray-800 px-2 py-1 rounded">
-                                    {matchHasCombatStats(match) && (
-                                      <div className="flex items-center space-x-1">
-                                        <span className="flex items-center" title="Kills">
-                                          <Swords size={12} className="text-blue-400 mr-1" />
-                                          {player.kills || 0}
-                                        </span>
-                                        <span>/</span>
-                                        <span className="flex items-center" title="Deaths">
-                                          <Skull size={12} className="text-red-400 mr-1" />
-                                          {player.deaths || 0}
-                                        </span>
-                                        <span>/</span>
-                                        <span className="flex items-center" title="Assists">
-                                          <Users size={12} className="text-green-400 mr-1" />
-                                          {player.assists || 0}
-                                        </span>
-                                      </div>
-                                    )}
-                                    
-                                    {/* Show gold if available */}
-                                    {matchHasGoldStats(match) && (
-                                      <div className="flex items-center ml-2" title="Gold">
-                                        <Coins size={12} className="text-yellow-400 mr-1" />
-                                        {player.goldEarned || 0}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
+
+                                {/* Recorded stats: minion kills and level included, tracked zeros shown as 0 */}
+                                <MatchPlayerStatLine player={player} statKeys={getTrackedStatKeys(match.players)} />
                               </div>
                             ))}
                           </div>

@@ -608,7 +608,7 @@ interface PlayerEditCardProps {
   validation: ValidationResult;
 }
 
-const PlayerEditCard: React.FC<PlayerEditCardProps> = ({
+export const PlayerEditCard: React.FC<PlayerEditCardProps> = ({
   player,
   onHeroChange,
   onFieldChange,
@@ -641,7 +641,7 @@ const PlayerEditCard: React.FC<PlayerEditCardProps> = ({
           type="number"
           min={min}
           max={max}
-          value={value || ''}
+          value={value ?? ''}
           onChange={(e) => onFieldChange(field, e.target.value ? parseInt(e.target.value) : undefined)}
           className={`w-full px-2 py-1 text-sm bg-gray-800 border rounded focus:outline-none focus:ring-1 ${
             error 
