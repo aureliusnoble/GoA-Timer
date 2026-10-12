@@ -1,6 +1,6 @@
 // src/services/GameStorageService.ts
 import { GameState, Player } from '../types';
-import { playerListHasBoth, renamePlayerInPlayerList } from '../shared/utils/playerRename';
+import { renamePlayerInSavedGameData } from '../shared/utils/playerRename';
 
 // Interface for saved game data
 interface SavedGameData {
@@ -139,16 +139,14 @@ class GameStorageService {
     const request = store.get('current');
     request.onsuccess = () => {
       const saved = request.result as (SavedGameData & { id: string }) | undefined;
-      if (!saved || !Array.isArray(saved.players)) return;
+      const outcome = renamePlayerInSavedGameData(saved, oldName, newName);
       // Safety net: the rename dialog refuses this case, but never create a duplicate here.
-      if (playerListHasBoth(saved.players, oldName, newName)) {
+      if (outcome.status === 'duplicate') {
         console.error(`Saved game already has both "${oldName}" and "${newName}"; leaving its players unchanged.`);
-        return;
       }
-      const players = renamePlayerInPlayerList(saved.players, oldName, newName);
-      if (!players) return;
+      if (outcome.status !== 'renamed') return;
       changed = true;
-      store.put({ ...saved, players });
+      store.put(outcome.value);
     };
 
     return new Promise((resolve, reject) => {

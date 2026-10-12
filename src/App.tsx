@@ -8,7 +8,7 @@ import FeatureAnnouncement from './components/common/FeatureAnnouncement';
 import AudioInitializer from './components/common/AudioInitializer';
 import ResumeGamePrompt from './components/common/ResumeGamePrompt';
 import { gameStorageService } from './services/GameStorageService';
-import { playerListHasBoth, renamePlayerInPlayerList } from './shared/utils/playerRename';
+import { renamePlayerInGameList, renamePlayerInSavedGameData } from './shared/utils/playerRename';
 import { loadTimerDurations, saveTimerDurations, resolveTimerDurations } from './shared/utils/timerDurations';
 import migrationService from './services/MigrationService';
 import { SoundProvider, useSound } from './context/SoundContext';
@@ -1889,13 +1889,20 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
 
   // Keep the setup list, the selected player and any saved game in step with a rename/merge
   const handlePlayerRenamed = (oldId: string, newId: string) => {
+    // Safety net: the rename dialog refuses renames that would put two players with one
+    // name in a game; should one get here anyway, that list is left unchanged.
+    const logDuplicate = (where: string) =>
+      console.error(`${where} already has both "${oldId}" and "${newId}"; leaving it unchanged.`);
     setLocalPlayers(prev => {
-      // Safety net: the rename dialog refuses this case, but never create a duplicate here.
-      if (playerListHasBoth(prev, oldId, newId)) {
-        console.error(`Setup list already has both "${oldId}" and "${newId}"; leaving it unchanged.`);
-        return prev;
-      }
-      return renamePlayerInPlayerList(prev, oldId, newId) ?? prev;
+      const outcome = renamePlayerInGameList(prev, oldId, newId);
+      if (outcome.status === 'duplicate') logDuplicate('Setup list');
+      return outcome.status === 'renamed' ? outcome.value : prev;
+    });
+    // The resume prompt's copy of the saved game, so resuming can't bring the old name back
+    setSavedGameData((prev: any) => {
+      const outcome = renamePlayerInSavedGameData(prev, oldId, newId);
+      if (outcome.status === 'duplicate') logDuplicate('Resume data');
+      return outcome.status === 'renamed' ? outcome.value : prev;
     });
     setSelectedPlayerId(prev => (prev === oldId ? newId : prev));
     gameStorageService.renamePlayerInSavedGame(oldId, newId).catch(error => {

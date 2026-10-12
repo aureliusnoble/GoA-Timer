@@ -5,7 +5,9 @@ import {
   describeRenameError,
   planPlayerRename,
   playerListHasBoth,
+  renamePlayerInGameList,
   renamePlayerInPlayerList,
+  renamePlayerInSavedGameData,
   RenamePlan,
 } from '../../shared/utils/playerRename';
 import type { DBMatchPlayer, DBPlayer } from '../../services/DatabaseService';
@@ -182,6 +184,63 @@ describe('playerListHasBoth', () => {
     expect(playerListHasBoth([{ name: 'John' }], 'Jhon', 'John')).toBe(false);
     expect(playerListHasBoth([{ name: 'Jhon' }, { name: 'john' }], 'Jhon', 'John')).toBe(false);
     expect(playerListHasBoth([], 'Jhon', 'John')).toBe(false);
+  });
+});
+
+describe('renamePlayerInGameList', () => {
+  it('renames the player', () => {
+    expect(renamePlayerInGameList([{ id: 1, name: 'Jhon' }, { id: 2, name: 'Alice' }], 'Jhon', 'John')).toEqual({
+      status: 'renamed',
+      value: [{ id: 1, name: 'John' }, { id: 2, name: 'Alice' }],
+    });
+  });
+
+  it('reports no change when nobody has the old name', () => {
+    expect(renamePlayerInGameList([{ name: 'Alice' }], 'Jhon', 'John')).toEqual({ status: 'unchanged' });
+  });
+
+  it('never creates two players with one name', () => {
+    expect(renamePlayerInGameList([{ name: 'Jhon' }, { name: 'John' }], 'Jhon', 'John')).toEqual({ status: 'duplicate' });
+  });
+});
+
+describe('renamePlayerInSavedGameData', () => {
+  const saved = {
+    id: 'current',
+    gameState: { round: 2 },
+    players: [{ id: 1, name: 'Jhon' }, { id: 2, name: 'Alice' }],
+    timestamp: 1234,
+    strategyTime: 75,
+    moveTime: 25,
+    strategyTimeRemaining: 40,
+    moveTimeRemaining: 10,
+    strategyTimerActive: false,
+    moveTimerActive: true,
+    strategyTimerEnabled: true,
+    moveTimerEnabled: false,
+  };
+
+  it('renames the player and keeps every other field, without touching the input', () => {
+    const outcome = renamePlayerInSavedGameData(saved, 'Jhon', 'John');
+
+    expect(outcome).toEqual({
+      status: 'renamed',
+      value: { ...saved, players: [{ id: 1, name: 'John' }, { id: 2, name: 'Alice' }] },
+    });
+    expect(saved.players[0].name).toBe('Jhon');
+  });
+
+  it('reports no change without saved data, without a player list, or without the player', () => {
+    const withoutPlayers: { players?: { name: string }[]; timestamp: number } = { timestamp: 1 };
+    expect(renamePlayerInSavedGameData(null, 'Jhon', 'John')).toEqual({ status: 'unchanged' });
+    expect(renamePlayerInSavedGameData(undefined, 'Jhon', 'John')).toEqual({ status: 'unchanged' });
+    expect(renamePlayerInSavedGameData(withoutPlayers, 'Jhon', 'John')).toEqual({ status: 'unchanged' });
+    expect(renamePlayerInSavedGameData(saved, 'Bob', 'Rob')).toEqual({ status: 'unchanged' });
+  });
+
+  it('never creates two players with one name', () => {
+    const both = { ...saved, players: [{ id: 1, name: 'Jhon' }, { id: 2, name: 'John' }] };
+    expect(renamePlayerInSavedGameData(both, 'Jhon', 'John')).toEqual({ status: 'duplicate' });
   });
 });
 

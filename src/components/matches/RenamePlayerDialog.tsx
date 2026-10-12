@@ -57,9 +57,10 @@ const RenamePlayerDialog: React.FC<RenamePlayerDialogProps> = ({
         setError(describeRenameError(result.error));
         return;
       }
-      const { oldId, newId } = result.plan;
+      const { kind, oldId, newId } = result.plan;
       if (await bothInCurrentGame(oldId, newId, setupPlayers)) {
-        setError(`“${oldId}” and “${newId}” are both in the current game. Finish or discard that game before merging them.`);
+        const action = kind === 'merge' ? 'merging them' : `renaming “${oldId}” to “${newId}”`;
+        setError(`“${oldId}” and “${newId}” are both in the current game. Finish or discard that game before ${action}.`);
         return;
       }
       setPlan(result.plan);

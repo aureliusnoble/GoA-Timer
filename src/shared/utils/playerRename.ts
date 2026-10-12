@@ -174,6 +174,38 @@ export function playerListHasBoth(
   return players.some(player => player.name === oldId) && players.some(player => player.name === newId);
 }
 
+export type GameRenameOutcome<T> =
+  | { status: 'renamed'; value: T }
+  /** Nobody in it has the old name (or there is nothing to rename in). */
+  | { status: 'unchanged' }
+  /** It already holds both names; left as it is rather than creating a duplicate. */
+  | { status: 'duplicate' };
+
+/** Rename a player in a game's player list without ever creating two entries with one name. */
+export function renamePlayerInGameList<T extends { name: string }>(
+  players: readonly T[],
+  oldId: string,
+  newId: string
+): GameRenameOutcome<T[]> {
+  if (playerListHasBoth(players, oldId, newId)) return { status: 'duplicate' };
+  const renamed = renamePlayerInPlayerList(players, oldId, newId);
+  return renamed ? { status: 'renamed', value: renamed } : { status: 'unchanged' };
+}
+
+/**
+ * Rename a player in saved in-progress game data (the stored record, or App's
+ * copy behind the resume prompt). Every other field is kept as it is.
+ */
+export function renamePlayerInSavedGameData<T extends { players?: readonly { name: string }[] }>(
+  saved: T | null | undefined,
+  oldId: string,
+  newId: string
+): GameRenameOutcome<T> {
+  if (!saved || !Array.isArray(saved.players)) return { status: 'unchanged' };
+  const outcome = renamePlayerInGameList(saved.players, oldId, newId);
+  return outcome.status === 'renamed' ? { status: 'renamed', value: { ...saved, players: outcome.value } } : outcome;
+}
+
 /** User-facing text for a planning error. */
 export function describeRenameError(error: RenamePlayerError): string {
   switch (error.code) {

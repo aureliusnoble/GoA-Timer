@@ -36,6 +36,8 @@ function savedGameWith(...names: string[]) {
 }
 
 const BOTH_IN_GAME = '“Jhon” and “John” are both in the current game. Finish or discard that game before merging them.';
+const BOTH_IN_GAME_RENAME =
+  '“Jhon” and “John” are both in the current game. Finish or discard that game before renaming “Jhon” to “John”.';
 
 describe('RenamePlayerDialog', () => {
   beforeEach(() => {
@@ -136,7 +138,7 @@ describe('RenamePlayerDialog', () => {
 
       typeNameAndContinue('John');
 
-      expect(await screen.findByText(BOTH_IN_GAME)).toBeInTheDocument();
+      expect(await screen.findByText(BOTH_IN_GAME_RENAME)).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Rename' })).not.toBeInTheDocument();
       expect(db.renamePlayer).not.toHaveBeenCalled();
     });
@@ -155,7 +157,7 @@ describe('RenamePlayerDialog', () => {
 
       await waitFor(() => expect(onRenamed).toHaveBeenCalledWith('Jhon', 'John'));
       expect(db.renamePlayer).toHaveBeenCalledWith('Jhon', 'John', 'rename');
-      expect(screen.queryByText(BOTH_IN_GAME)).not.toBeInTheDocument();
+      expect(screen.queryByText(BOTH_IN_GAME_RENAME)).not.toBeInTheDocument();
     });
 
     it('allows a merge when only one of the two players is in each list', async () => {
