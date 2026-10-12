@@ -8,6 +8,7 @@ import FeatureAnnouncement from './components/common/FeatureAnnouncement';
 import AudioInitializer from './components/common/AudioInitializer';
 import ResumeGamePrompt from './components/common/ResumeGamePrompt';
 import { gameStorageService } from './services/GameStorageService';
+import { loadTimerDurations, saveTimerDurations, resolveTimerDurations } from './shared/utils/timerDurations';
 import migrationService from './services/MigrationService';
 import { SoundProvider, useSound } from './context/SoundContext';
 import { ConnectionProvider } from './context/ConnectionContext';
@@ -433,8 +434,9 @@ function AppContent() {
 
   // Game setup state
   const [gameStarted, setGameStarted] = useState<boolean>(false);
-  const [strategyTime, setStrategyTime] = useState<number>(90); // 90 seconds default
-  const [moveTime, setMoveTime] = useState<number>(30); // 30 seconds default
+  // Last-used durations are remembered between games (localStorage); defaults 90s / 30s
+  const [strategyTime, setStrategyTime] = useState<number>(() => loadTimerDurations().strategyTime);
+  const [moveTime, setMoveTime] = useState<number>(() => loadTimerDurations().moveTime);
   const [strategyTimerEnabled, setStrategyTimerEnabled] = useState<boolean>(true);
   const [moveTimerEnabled, setMoveTimerEnabled] = useState<boolean>(true);
   const [gameLength, setGameLength] = useState<GameLength>(GameLength.Quick);
@@ -542,6 +544,8 @@ function AppContent() {
           await gameStorageService.saveGame({
             gameState,
             players: localPlayers,
+            strategyTime,
+            moveTime,
             strategyTimeRemaining,
             moveTimeRemaining,
             strategyTimerActive,
@@ -564,7 +568,9 @@ function AppContent() {
     gameState.teamLives,
     strategyTimerActive,
     moveTimerActive,
-    showVictoryScreen
+    showVictoryScreen,
+    strategyTime,
+    moveTime
   ]);
 
   // App initialization: run migration and check for saved game
@@ -621,6 +627,11 @@ function AppContent() {
   useEffect(() => {
     localStorage.setItem('goa-selected-expansions', JSON.stringify(selectedExpansions));
   }, [selectedExpansions]);
+
+  // Remember the last-used timer durations between games (localStorage only, written on change)
+  useEffect(() => {
+    saveTimerDurations({ strategyTime, moveTime });
+  }, [strategyTime, moveTime]);
 
   // Attempt to unlock audio on first user interaction
   useEffect(() => {
@@ -1742,6 +1753,12 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
     setStrategyTimerEnabled(savedStrategyTimerEnabled);
     setMoveTimerEnabled(savedMoveTimerEnabled);
     
+    // Restore the durations this game was started with. Saves from older versions don't
+    // have them, so the current (remembered) durations are kept.
+    const restoredDurations = resolveTimerDurations(savedGameData, { strategyTime, moveTime });
+    setStrategyTime(restoredDurations.strategyTime);
+    setMoveTime(restoredDurations.moveTime);
+
     // Start the game
     setGameStarted(true);
     setShowResumePrompt(false);

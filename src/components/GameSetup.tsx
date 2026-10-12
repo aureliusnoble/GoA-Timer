@@ -84,15 +84,9 @@ const GameSetup: React.FC<GameSetupProps> = ({
   
   const expansions = getAllExpansions();
   
-  // Set default values when component mounts if they're not already set
+  // On mount: load data for the setup screen. Timer durations are NOT reset here -
+  // the parent remembers the last-used durations between games.
   useEffect(() => {
-    if (strategyTime !== 90) {
-      onStrategyTimeChange(90);
-    }
-    if (moveTime !== 30) {
-      onMoveTimeChange(30);
-    }
-    
     // Check if we have match data to enable View Matches button
     // This was previously setting hasMatchData state which is not being used
     // Since the View Matches button is now always clickable (per the comment),

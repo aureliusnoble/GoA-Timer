@@ -6,6 +6,10 @@ interface SavedGameData {
   gameState: GameState;
   players: Player[];
   timestamp: number;
+  // Timer durations (seconds) the game was played with. Optional: saves from older
+  // versions don't have them (resume then keeps the current durations).
+  strategyTime?: number;
+  moveTime?: number;
   strategyTimeRemaining: number;
   moveTimeRemaining: number;
   strategyTimerActive: boolean;
