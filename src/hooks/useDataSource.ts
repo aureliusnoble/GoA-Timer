@@ -6,6 +6,7 @@ import { computeHeroImpactAsync } from '../services/HeroSkillService';
 import { heroes as allHeroesData } from '../data/heroes';
 import { rating, rate, ordinal } from 'openskill';
 import { filterMatches, MatchFilterOptions } from '../shared/utils/matchFilters';
+import { isRealHeroId, countHeroesPlayed } from '../shared/utils/heroIds';
 import { cloudMatchPlayerRowToLocal, cloudMatchRowToLocal, cloudPlayerRowToLocal } from '../shared/utils/cloudMapping';
 import { formatLocalDate } from '../shared/utils/localDate';
 
@@ -52,7 +53,7 @@ export interface HeroStatsData {
  * Calculate hero stats from matches and match players data
  * This is a pure function that can work with any data source
  */
-function calculateHeroStats(
+export function calculateHeroStats(
   allMatchPlayers: DBMatchPlayer[],
   allMatches: DBMatch[],
   minGamesForRelationships: number = 1,
@@ -93,7 +94,7 @@ function calculateHeroStats(
   for (const matchPlayer of filteredMatchPlayers) {
     const heroId = matchPlayer.heroId;
 
-    if (heroId === undefined || heroId === null) continue;
+    if (!isRealHeroId(heroId)) continue;
 
     if (!heroMap.has(heroId)) {
       heroMap.set(heroId, {
@@ -146,7 +147,7 @@ function calculateHeroStats(
 
     for (const heroMatchPlayer of matchHeroes) {
       const heroId = heroMatchPlayer.heroId;
-      if (heroId === undefined || heroId === null) continue;
+      if (!isRealHeroId(heroId)) continue;
 
       if (!heroMap.has(heroId)) continue;
 
@@ -163,7 +164,7 @@ function calculateHeroStats(
       );
 
       for (const teammate of teammates) {
-        if (teammate.heroId === undefined || teammate.heroId === null) continue;
+        if (!isRealHeroId(teammate.heroId)) continue;
 
         let teammateRecord = heroRecord.teammates.get(teammate.heroId);
         if (!teammateRecord) {
@@ -178,7 +179,7 @@ function calculateHeroStats(
       }
 
       for (const opponent of opponents) {
-        if (opponent.heroId === undefined || opponent.heroId === null) continue;
+        if (!isRealHeroId(opponent.heroId)) continue;
 
         let opponentRecord = heroRecord.opponents.get(opponent.heroId);
         if (!opponentRecord) {
@@ -973,7 +974,7 @@ export function useDataSource() {
       // Process each match player to build match history per hero
       for (const matchPlayer of allMatchPlayers) {
         const heroId = matchPlayer.heroId;
-        if (heroId === undefined || heroId === null) continue;
+        if (!isRealHeroId(heroId)) continue;
 
         // Skip if filtering by heroIds and this hero is not in the list
         if (heroIds && heroIds.length > 0 && !heroIds.includes(heroId)) continue;
@@ -1147,14 +1148,14 @@ export function useDataSource() {
 
         // For each hero in the match
         for (const hero1 of matchHeroes) {
-          if (hero1.heroId === undefined || hero1.heroId === null) continue;
+          if (!isRealHeroId(hero1.heroId)) continue;
           if (!selectedHeroIds.has(hero1.heroId)) continue;
 
           const hero1Won = hero1.team === match.winningTeam;
 
           // Compare with every other hero in the match
           for (const hero2 of matchHeroes) {
-            if (hero2.heroId === undefined || hero2.heroId === null) continue;
+            if (!isRealHeroId(hero2.heroId)) continue;
             if (hero1.heroId === hero2.heroId) continue;
             if (!selectedHeroIds.has(hero2.heroId)) continue;
 
@@ -1341,7 +1342,6 @@ export function useDataSource() {
       let hasCombatStats = false;
       let lastPlayedDate: Date | null = null;
 
-      const heroCount = new Map<number, { heroId: number; heroName: string; count: number }>();
       const roleCount = new Map<string, number>();
 
       for (const mp of playerMatches) {
@@ -1379,16 +1379,6 @@ export function useDataSource() {
           totalMinionKills += mp.minionKills;
         }
 
-        // Favorite heroes
-        if (mp.heroId !== undefined) {
-          const existing = heroCount.get(mp.heroId);
-          if (existing) {
-            existing.count++;
-          } else {
-            heroCount.set(mp.heroId, { heroId: mp.heroId, heroName: mp.heroName, count: 1 });
-          }
-        }
-
         // Favorite roles
         if (mp.heroRoles) {
           for (const role of mp.heroRoles) {
@@ -1402,9 +1392,7 @@ export function useDataSource() {
       const kdRatio = deaths > 0 ? kills / deaths : kills;
 
       // Sort favorite heroes and roles
-      const favoriteHeroes = Array.from(heroCount.values())
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 3);
+      const favoriteHeroes = countHeroesPlayed(playerMatches).slice(0, 3);
 
       const favoriteRoles = Array.from(roleCount.entries())
         .map(([role, count]) => ({ role, count }))

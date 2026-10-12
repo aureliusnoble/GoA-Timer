@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { computeHeroImpact } from '../../services/HeroSkillService';
 import { DBMatch, DBMatchPlayer, DBPlayer } from '../../services/DatabaseService';
 import { Team, GameLength } from '../../types';
+import { NO_HERO_ID } from '../../shared/utils/heroIds';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper factories
@@ -201,5 +202,26 @@ describe('computeHeroImpact', () => {
 
     const validBadges = ['rewards-skill', 'beginner-friendly', 'balanced'];
     expect(validBadges).toContain(gradientBadge);
+  });
+});
+
+describe('computeHeroImpact with unknown heroes', () => {
+  it('produces no result for NO_HERO_ID but still produces one for Arien (id 0)', () => {
+    const players = [makePlayer('p1', 25), makePlayer('p2', 25), makePlayer('p3', 25), makePlayer('p4', 25)];
+    const matches: DBMatch[] = [];
+    const matchPlayers: DBMatchPlayer[] = [];
+    for (let i = 0; i < 12; i++) {
+      const id = String(i);
+      matches.push(makeMatch(id, i % 2 === 0 ? Team.Titans : Team.Atlanteans));
+      matchPlayers.push(makeMatchPlayer(id, 'p1', Team.Titans, 0, 'Arien'));
+      matchPlayers.push(makeMatchPlayer(id, 'p2', Team.Titans, NO_HERO_ID, 'Unknown Hero'));
+      matchPlayers.push(makeMatchPlayer(id, 'p3', Team.Atlanteans, 1, 'Brogan'));
+      matchPlayers.push(makeMatchPlayer(id, 'p4', Team.Atlanteans, NO_HERO_ID, 'Unknown Hero'));
+    }
+
+    const results = computeHeroImpact(matches, matchPlayers, players);
+
+    expect(results.find(r => r.heroId === NO_HERO_ID)).toBeUndefined();
+    expect(results.find(r => r.heroId === 0)).toBeDefined();
   });
 });

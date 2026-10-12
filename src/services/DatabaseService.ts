@@ -4,6 +4,7 @@ import { rating, rate, ordinal } from 'openskill';
 import NormalDistribution from 'normal-distribution';
 import { CloudSyncService } from './supabase/CloudSyncService';
 import { filterMatches } from '../shared/utils/matchFilters';
+import { isRealHeroId, countHeroesPlayed } from '../shared/utils/heroIds';
 import { HERO_LEVEL_MAX, HERO_LEVEL_MIN } from '../shared/constants/game';
 import { isTrackedStat, isValidHeroLevel } from '../shared/utils/statValues';
 import { fillMissingFields } from '../shared/utils/mergeFill';
@@ -377,7 +378,7 @@ class DatabaseService {
       for (const matchPlayer of allMatchPlayers) {
         const heroId = matchPlayer.heroId;
         
-        if (heroId === undefined || heroId === null) continue;
+        if (!isRealHeroId(heroId)) continue;
         
         if (!heroMap.has(heroId)) {
           heroMap.set(heroId, {
@@ -430,7 +431,7 @@ class DatabaseService {
         
         for (const heroMatchPlayer of matchHeroes) {
           const heroId = heroMatchPlayer.heroId;
-          if (heroId === undefined || heroId === null) continue;
+          if (!isRealHeroId(heroId)) continue;
           
           if (!heroMap.has(heroId)) continue;
           
@@ -447,7 +448,7 @@ class DatabaseService {
           );
           
           for (const teammate of teammates) {
-            if (teammate.heroId === undefined || teammate.heroId === null) continue;
+            if (!isRealHeroId(teammate.heroId)) continue;
             
             let teammateRecord = heroRecord.teammates.get(teammate.heroId);
             if (!teammateRecord) {
@@ -462,7 +463,7 @@ class DatabaseService {
           }
           
           for (const opponent of opponents) {
-            if (opponent.heroId === undefined || opponent.heroId === null) continue;
+            if (!isRealHeroId(opponent.heroId)) continue;
             
             let opponentRecord = heroRecord.opponents.get(opponent.heroId);
             if (!opponentRecord) {
@@ -630,7 +631,7 @@ class DatabaseService {
       // Process each match player to build match history per hero
       for (const matchPlayer of allMatchPlayers) {
         const heroId = matchPlayer.heroId;
-        if (heroId === undefined || heroId === null) continue;
+        if (!isRealHeroId(heroId)) continue;
 
         // Skip if filtering by heroIds and this hero is not in the list
         if (heroIds && heroIds.length > 0 && !heroIds.includes(heroId)) continue;
@@ -877,7 +878,6 @@ class DatabaseService {
         let hasCombatStats = false;
         let lastPlayedDate: Date | null = null;
 
-        const heroCount = new Map<number, { heroId: number; heroName: string; count: number }>();
         const roleCount = new Map<string, number>();
 
         for (const mp of playerMatches) {
@@ -915,16 +915,6 @@ class DatabaseService {
             totalMinionKills += mp.minionKills;
           }
 
-          // Favorite heroes
-          if (mp.heroId !== undefined) {
-            const existing = heroCount.get(mp.heroId);
-            if (existing) {
-              existing.count++;
-            } else {
-              heroCount.set(mp.heroId, { heroId: mp.heroId, heroName: mp.heroName, count: 1 });
-            }
-          }
-
           // Favorite roles
           if (mp.heroRoles) {
             for (const role of mp.heroRoles) {
@@ -938,9 +928,7 @@ class DatabaseService {
         const kdRatio = deaths > 0 ? kills / deaths : kills;
 
         // Sort favorite heroes and roles
-        const favoriteHeroes = Array.from(heroCount.values())
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 3);
+        const favoriteHeroes = countHeroesPlayed(playerMatches).slice(0, 3);
 
         const favoriteRoles = Array.from(roleCount.entries())
           .map(([role, count]) => ({ role, count }))
@@ -1713,29 +1701,9 @@ class DatabaseService {
     
     const matchesPlayed = await this.getPlayerMatches(playerId);
     
-    // Calculate favorite heroes
-    const heroesMap = new Map<number, { heroId: number, heroName: string, count: number }>();
-    
-    matchesPlayed.forEach(match => {
-      const existingHero = heroesMap.get(match.heroId);
-      
-      if (existingHero) {
-        existingHero.count += 1;
-      } else {
-        heroesMap.set(match.heroId, {
-          heroId: match.heroId,
-          heroName: match.heroName,
-          count: 1
-        });
-      }
-    });
-    
-    const favoriteHeroes = Array.from(heroesMap.values())
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 3);
-
-    const allHeroesPlayed = Array.from(heroesMap.values())
-      .sort((a, b) => b.count - a.count);
+    // Calculate favorite heroes (Arien, id 0, counts; matches without a hero are skipped)
+    const allHeroesPlayed = countHeroesPlayed(matchesPlayed);
+    const favoriteHeroes = allHeroesPlayed.slice(0, 3);
     
     // Calculate favorite roles
     const rolesMap = new Map<string, { role: string, count: number }>();
@@ -2731,6 +2699,7 @@ class DatabaseService {
     // Hero duplicate validation
     const heroUsage = new Map<number, string[]>();
     playersData.forEach(player => {
+      if (!isRealHeroId(player.heroId)) return; // several players may lack a hero
       if (!heroUsage.has(player.heroId)) {
         heroUsage.set(player.heroId, []);
       }
@@ -3007,14 +2976,14 @@ class DatabaseService {
 
         // For each hero in the match
         for (const hero1 of matchHeroes) {
-          if (hero1.heroId === undefined || hero1.heroId === null) continue;
+          if (!isRealHeroId(hero1.heroId)) continue;
           if (!selectedHeroIds.has(hero1.heroId)) continue;
 
           const hero1Won = hero1.team === match.winningTeam;
 
           // Compare with every other hero in the match
           for (const hero2 of matchHeroes) {
-            if (hero2.heroId === undefined || hero2.heroId === null) continue;
+            if (!isRealHeroId(hero2.heroId)) continue;
             if (hero1.heroId === hero2.heroId) continue;
             if (!selectedHeroIds.has(hero2.heroId)) continue;
 

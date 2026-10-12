@@ -7,6 +7,7 @@ import dbService from '../services/DatabaseService';
 import EnhancedTooltip from './common/EnhancedTooltip';
 import EndOfRoundAssistant, { PlayerRoundStats } from './EndOfRoundAssistant';
 import VictoryTypeSelector from './common/VictoryTypeSelector';
+import { NO_HERO_ID } from '../shared/utils/heroIds';
 
 interface VictoryScreenProps {
   winningTeam: Team;
@@ -86,7 +87,7 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
       const playerData = players.map(player => ({
         id: player.name, // Use name as player ID
         team: player.team,
-        heroId: player.hero?.id || 0,
+        heroId: player.hero?.id ?? NO_HERO_ID,
         heroName: player.hero?.name || 'Unknown Hero',
         heroRoles: player.hero?.roles || [],
         kills: player.stats?.totalKills,

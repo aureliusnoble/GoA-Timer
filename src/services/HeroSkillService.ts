@@ -3,6 +3,7 @@
 // g-formula for hero impact estimation, ported from analysis/02_hero_skill_models.py
 
 import { DBMatch, DBMatchPlayer, DBPlayer } from './DatabaseService';
+import { isRealHeroId } from '../shared/utils/heroIds';
 import {
   HeroImpactResult,
   GradientPoint,
@@ -548,6 +549,7 @@ function computeOneHero(
 function collectHeroMeta(matchPlayers: DBMatchPlayer[]): Map<number, string> {
   const heroMeta = new Map<number, string>();
   for (const mp of matchPlayers) {
+    if (!isRealHeroId(mp.heroId)) continue; // no impact entry for "Unknown Hero"
     if (!heroMeta.has(mp.heroId)) {
       heroMeta.set(mp.heroId, mp.heroName);
     }

@@ -9,6 +9,7 @@ import PlayerRelationshipGraph from './PlayerRelationshipGraph';
 import { useDataSource } from '../../hooks/useDataSource';
 import { useStatsFilter } from '../../context/StatsFilterContext';
 import { Team } from '../../types';
+import { countHeroesPlayed } from '../../shared/utils/heroIds';
 
 
 interface PlayerStatsProps {
@@ -521,7 +522,6 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
               const playerMatches = allMatchPlayers.filter(mp => mp.playerId === player.id || mp.playerId === player.name);
 
               // Calculate hero and role stats from match players
-              const heroCount: Record<number, { heroId: number; heroName: string; count: number }> = {};
               const roleCount: Record<string, number> = {};
 
               let kills = 0, deaths = 0, assists = 0, gold = 0, minionKills = 0;
@@ -533,21 +533,13 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
                 gold += mp.goldEarned || 0;
                 minionKills += mp.minionKills || 0;
 
-                // Track hero usage
-                if (!heroCount[mp.heroId]) {
-                  heroCount[mp.heroId] = { heroId: mp.heroId, heroName: mp.heroName, count: 0 };
-                }
-                heroCount[mp.heroId].count++;
-
                 // Track role usage
                 (mp.heroRoles || []).forEach(role => {
                   roleCount[role] = (roleCount[role] || 0) + 1;
                 });
               });
 
-              const favoriteHeroes = Object.values(heroCount)
-                .sort((a, b) => b.count - a.count)
-                .slice(0, 3);
+              const favoriteHeroes = countHeroesPlayed(playerMatches).slice(0, 3);
 
               const favoriteRoles = Object.entries(roleCount)
                 .map(([role, count]) => ({ role, count }))

@@ -10,6 +10,7 @@ import SkillProgression from './DetailedPlayerStats/SkillProgression';
 import RelationshipStats from './DetailedPlayerStats/RelationshipStats';
 import HeroPerformance from './DetailedPlayerStats/HeroPerformance';
 import MatchHistory from './DetailedPlayerStats/MatchHistory';
+import { countHeroesPlayed } from '../../shared/utils/heroIds';
 
 interface DetailedPlayerStatsProps {
   playerId: string;
@@ -173,36 +174,20 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
         const hasCombatStats = kills > 0 || deaths > 0 || assists > 0 || totalGold > 0;
 
         // Recalculate favorite heroes and roles from filtered matches
-        const heroCountMap = new Map<number, { heroId: number; heroName: string; count: number }>();
-        const roleCountMap = new Map<string, number>();
+        // (countHeroesPlayed counts Arien, id 0, and skips matches without a hero)
+        const filteredAllHeroesPlayed = countHeroesPlayed(matches);
+        const filteredFavoriteHeroes = filteredAllHeroesPlayed.slice(0, 5);
 
+        const roleCountMap = new Map<string, number>();
         for (const match of matches) {
-          if (match.heroId) {
-            const existing = heroCountMap.get(match.heroId);
-            if (existing) {
-              existing.count++;
-            } else {
-              heroCountMap.set(match.heroId, {
-                heroId: match.heroId,
-                heroName: match.heroName || `Hero ${match.heroId}`,
-                count: 1
-              });
-            }
-          }
           if (match.heroRoles) {
             for (const role of match.heroRoles) {
               roleCountMap.set(role, (roleCountMap.get(role) || 0) + 1);
             }
           }
         }
-
-        const filteredFavoriteHeroes = Array.from(heroCountMap.values())
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 5);
         const filteredFavoriteRoles = Array.from(roleCountMap.entries())
           .map(([role, count]) => ({ role, count }))
-          .sort((a, b) => b.count - a.count);
-        const filteredAllHeroesPlayed = Array.from(heroCountMap.values())
           .sort((a, b) => b.count - a.count);
 
         // Create filtered stats object
