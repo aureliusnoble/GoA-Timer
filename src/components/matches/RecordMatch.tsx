@@ -7,6 +7,7 @@ import { useSound } from '../../context/SoundContext';
 import { getAllExpansions, filterHeroesByExpansions } from '../../data/heroes';
 import PlayerNameInput from '../PlayerNameInput';
 import VictoryTypeSelector from '../common/VictoryTypeSelector';
+import { HERO_LEVEL_MAX, HERO_LEVEL_MIN } from '../../shared/constants/game';
 import { formatLocalDate, formatLocalTime, parseLocalDateTime } from '../../shared/utils/localDate';
 
 interface RecordMatchProps {
@@ -139,7 +140,7 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
     if (enabledStats.assists) stats.assists = 0;
     if (enabledStats.goldEarned) stats.goldEarned = 0;
     if (enabledStats.minionKills) stats.minionKills = 0;
-    if (enabledStats.level) stats.level = 1;
+    if (enabledStats.level) stats.level = HERO_LEVEL_MIN;
     
     return stats;
   };
@@ -175,7 +176,7 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
           newStats.minionKills = currentStats.minionKills ?? 0;
         }
         if (newEnabledStats.level) {
-          newStats.level = currentStats.level ?? 1;
+          newStats.level = currentStats.level ?? HERO_LEVEL_MIN;
         }
         
         updatedPlayerStats.set(index, newStats);
@@ -239,8 +240,8 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
     }
     
     if (enabledStats.level && stats.level !== undefined) {
-      if (stats.level < 1 || stats.level > 8) {
-        errors.push('Level must be between 1 and 8');
+      if (stats.level < HERO_LEVEL_MIN || stats.level > HERO_LEVEL_MAX) {
+        errors.push(`Level must be between ${HERO_LEVEL_MIN} and ${HERO_LEVEL_MAX}`);
       }
     }
     
@@ -1612,10 +1613,10 @@ const PlayerStatsCard: React.FC<PlayerStatsCardProps> = ({
           {enabledStats.level && (
             <StatInputControl
               label="Level"
-              value={currentStats.level ?? 1}
+              value={currentStats.level ?? HERO_LEVEL_MIN}
               onChange={(value) => handleStatChange('level', value)}
-              min={1}
-              max={8}
+              min={HERO_LEVEL_MIN}
+              max={HERO_LEVEL_MAX}
               enabled={true}
               icon={<Star size={14} />}
             />

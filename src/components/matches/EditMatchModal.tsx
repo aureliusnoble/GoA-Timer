@@ -8,6 +8,7 @@ import { heroes } from '../../data/heroes';
 import HeroSelector from './HeroSelector';
 import EnhancedTooltip from '../common/EnhancedTooltip';
 import VictoryTypeSelector from '../common/VictoryTypeSelector';
+import { HERO_LEVEL_MAX, HERO_LEVEL_MIN } from '../../shared/constants/game';
 import { formatLocalDate, formatLocalTime, parseLocalDateTime } from '../../shared/utils/localDate';
 
 interface EditMatchModalProps {
@@ -628,7 +629,7 @@ const PlayerEditCard: React.FC<PlayerEditCardProps> = ({
     );
   };
 
-  const renderNumberInput = (field: string, label: string, value?: number) => {
+  const renderNumberInput = (field: string, label: string, value?: number, min = 0, max?: number) => {
     const error = getFieldError(field);
     const warning = getFieldWarning(field);
     const hasIssue = error || warning;
@@ -638,7 +639,8 @@ const PlayerEditCard: React.FC<PlayerEditCardProps> = ({
         <label className="block text-xs text-gray-400 mb-1">{label}</label>
         <input
           type="number"
-          min="0"
+          min={min}
+          max={max}
           value={value || ''}
           onChange={(e) => onFieldChange(field, e.target.value ? parseInt(e.target.value) : undefined)}
           className={`w-full px-2 py-1 text-sm bg-gray-800 border rounded focus:outline-none focus:ring-1 ${
@@ -705,7 +707,7 @@ const PlayerEditCard: React.FC<PlayerEditCardProps> = ({
             {renderNumberInput('assists', 'Assists', player.assists)}
             {renderNumberInput('goldEarned', 'Gold', player.goldEarned)}
             {renderNumberInput('minionKills', 'Minions', player.minionKills)}
-            {renderNumberInput('level', 'Level', player.level)}
+            {renderNumberInput('level', 'Level', player.level, HERO_LEVEL_MIN, HERO_LEVEL_MAX)}
           </div>
         </div>
       )}

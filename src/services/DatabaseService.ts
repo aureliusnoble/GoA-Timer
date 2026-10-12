@@ -4,6 +4,8 @@ import { rating, rate, ordinal } from 'openskill';
 import NormalDistribution from 'normal-distribution';
 import { CloudSyncService } from './supabase/CloudSyncService';
 import { filterMatches } from '../shared/utils/matchFilters';
+import { HERO_LEVEL_MAX, HERO_LEVEL_MIN } from '../shared/constants/game';
+import { isTrackedStat, isValidHeroLevel } from '../shared/utils/statValues';
 import { formatLocalDate } from '../shared/utils/localDate';
 
 // Database configuration
@@ -2592,10 +2594,10 @@ class DatabaseService {
       }
     });
 
-    // Statistics validation
+    // Statistics validation (undefined/null = not tracked and always allowed)
     playersData.forEach(player => {
       // Unrealistic kill counts for game length
-      if (player.kills && player.kills > 0) {
+      if (isTrackedStat(player.kills) && player.kills > 0) {
         const maxKillsQuick = 10;
         const maxKillsLong = 20;
         const maxKills = matchData.gameLength === GameLength.Quick ? maxKillsQuick : maxKillsLong;
@@ -2611,7 +2613,7 @@ class DatabaseService {
       }
 
       // Unrealistic death counts
-      if (player.deaths && player.deaths > 15) {
+      if (isTrackedStat(player.deaths) && player.deaths > 15) {
         warnings.push({
           field: 'deaths',
           playerId: player.playerId,
@@ -2622,8 +2624,8 @@ class DatabaseService {
 
       // Negative statistics
       ['kills', 'deaths', 'assists', 'goldEarned', 'minionKills'].forEach(field => {
-        const value = player[field as keyof DBMatchPlayer] as number;
-        if (value !== undefined && value < 0) {
+        const value: unknown = player[field as keyof DBMatchPlayer];
+        if (isTrackedStat(value) && value < 0) {
           errors.push({
             field,
             playerId: player.playerId,
@@ -2634,11 +2636,11 @@ class DatabaseService {
       });
 
       // Level validation
-      if (player.level !== undefined && (player.level < 1 || player.level > 10)) {
+      if (player.level !== undefined && player.level !== null && !isValidHeroLevel(player.level)) {
         errors.push({
           field: 'level',
           playerId: player.playerId,
-          message: 'Level must be between 1 and 10',
+          message: `Level for ${player.playerId} must be between ${HERO_LEVEL_MIN} and ${HERO_LEVEL_MAX}`,
           severity: 'error'
         });
       }

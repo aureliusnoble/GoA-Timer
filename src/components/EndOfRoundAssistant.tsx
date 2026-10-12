@@ -18,6 +18,8 @@ import {
   Shield // Added Shield icon for player level
 } from 'lucide-react';
 import { useSound } from '../context/SoundContext';
+import { HERO_LEVEL_MAX, HERO_LEVEL_MIN } from '../shared/constants/game';
+import { clampHeroLevel } from '../shared/utils/statValues';
 
 // Interface for individual stat category toggles (follows RecordMatch pattern)
 interface StatCategories {
@@ -134,9 +136,9 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
     setPlayerStats(prev => {
       const currentValue = prev[playerId]?.[statName] || 0;
       
-      // Special case for level - keep it between 1 and 10
+      // Special case for level - keep it inside the hero level range
       if (statName === 'level') {
-        const newLevel = Math.max(1, Math.min(10, currentValue + delta));
+        const newLevel = clampHeroLevel(currentValue + delta);
         return {
           ...prev,
           [playerId]: {
@@ -1019,7 +1021,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                                 <button 
                                   className="bg-gray-700 hover:bg-gray-600 p-1 rounded"
                                   onClick={() => adjustStat(player.id, 'level', -1)}
-                                  disabled={playerStats[player.id]?.level === 1}
+                                  disabled={(playerStats[player.id]?.level ?? HERO_LEVEL_MIN) <= HERO_LEVEL_MIN}
                                 >
                                   <CircleMinus size={16} />
                                 </button>
@@ -1029,7 +1031,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                                 <button 
                                   className="bg-gray-700 hover:bg-gray-600 p-1 rounded"
                                   onClick={() => adjustStat(player.id, 'level', 1)}
-                                  disabled={playerStats[player.id]?.level === 10}
+                                  disabled={(playerStats[player.id]?.level ?? HERO_LEVEL_MIN) >= HERO_LEVEL_MAX}
                                 >
                                   <CirclePlus size={16} />
                                 </button>
@@ -1076,7 +1078,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                                 <button 
                                   className="bg-gray-700 hover:bg-gray-600 p-1 rounded"
                                   onClick={() => adjustStat(player.id, 'level', -1)}
-                                  disabled={playerStats[player.id]?.level === 1}
+                                  disabled={(playerStats[player.id]?.level ?? HERO_LEVEL_MIN) <= HERO_LEVEL_MIN}
                                 >
                                   <CircleMinus size={16} />
                                 </button>
@@ -1086,7 +1088,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                                 <button 
                                   className="bg-gray-700 hover:bg-gray-600 p-1 rounded"
                                   onClick={() => adjustStat(player.id, 'level', 1)}
-                                  disabled={playerStats[player.id]?.level === 10}
+                                  disabled={(playerStats[player.id]?.level ?? HERO_LEVEL_MIN) >= HERO_LEVEL_MAX}
                                 >
                                   <CirclePlus size={16} />
                                 </button>
