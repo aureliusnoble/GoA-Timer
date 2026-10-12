@@ -7,6 +7,7 @@ import { filterMatches } from '../shared/utils/matchFilters';
 import { HERO_LEVEL_MAX, HERO_LEVEL_MIN } from '../shared/constants/game';
 import { isTrackedStat, isValidHeroLevel } from '../shared/utils/statValues';
 import { fillMissingFields } from '../shared/utils/mergeFill';
+import { applyRenamePlan, normalisePlayerName, planPlayerRename, RenameKind, RenamePlanResult } from '../shared/utils/playerRename';
 import { formatLocalDate } from '../shared/utils/localDate';
 
 // Database configuration
@@ -2490,6 +2491,106 @@ class DatabaseService {
       console.error(`Error deleting player ${playerId}:`, error);
       return false;
     }
+  }
+
+  // ========== RENAME / MERGE PLAYER ==========
+
+  /**
+   * Work out what renaming a player to `newName` would do, without writing anything.
+   * A plan of kind 'merge' means a player with that name already exists.
+   */
+  async previewPlayerRename(oldId: string, newName: string): Promise<RenamePlanResult> {
+    const newId = normalisePlayerName(newName);
+    const [players, oldRows, targetRows] = await Promise.all([
+      this.getAllPlayers(),
+      this.getPlayerMatches(oldId),
+      newId === '' ? Promise.resolve([] as DBMatchPlayer[]) : this.getPlayerMatches(newId),
+    ]);
+    return planPlayerRename({ oldId, newName, players, matchPlayers: [...oldRows, ...targetRows] });
+  }
+
+  /**
+   * Rename a player, or merge them into an existing player, in ONE IndexedDB
+   * transaction over players + matchPlayers. The plan is recomputed from data
+   * read inside that transaction; either every write commits or none does.
+   * `expectedKind` is what the user confirmed: if the data changed so that the
+   * operation would now be different, nothing is written (KIND_CHANGED).
+   * On success, stats are recalculated and the rename is queued for the cloud.
+   */
+  async renamePlayer(oldId: string, newName: string, expectedKind: RenameKind): Promise<RenamePlanResult> {
+    if (!this.db) await this.initialize();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const newId = normalisePlayerName(newName);
+
+    const result = await new Promise<RenamePlanResult>((resolve, reject) => {
+      const transaction = this.db!.transaction([TABLES.PLAYERS, TABLES.MATCH_PLAYERS], 'readwrite');
+      const playerStore = transaction.objectStore(TABLES.PLAYERS);
+      const matchPlayerStore = transaction.objectStore(TABLES.MATCH_PLAYERS);
+      const rowsByPlayer = matchPlayerStore.index('playerId');
+      let outcome: RenamePlanResult | null = null;
+
+      const playersRequest = playerStore.getAll();
+      const oldRowsRequest = rowsByPlayer.getAll(oldId);
+      const targetRowsRequest = rowsByPlayer.getAll(newId);
+
+      // Requests in a transaction complete in order, so all three results are ready here
+      targetRowsRequest.onsuccess = () => {
+        const planned = planPlayerRename({
+          oldId,
+          newName,
+          players: playersRequest.result as DBPlayer[],
+          matchPlayers: [
+            ...(oldRowsRequest.result as DBMatchPlayer[]),
+            ...(targetRowsRequest.result as DBMatchPlayer[]),
+          ],
+        });
+
+        if (!planned.ok) {
+          outcome = planned;
+          transaction.abort();
+          return;
+        }
+        if (planned.plan.kind !== expectedKind) {
+          outcome = { ok: false, error: { code: 'KIND_CHANGED', expected: expectedKind, actual: planned.plan.kind } };
+          transaction.abort();
+          return;
+        }
+
+        outcome = planned;
+        applyRenamePlan(planned.plan, { players: playerStore, matchPlayers: matchPlayerStore });
+      };
+
+      transaction.oncomplete = () => {
+        if (outcome) {
+          resolve(outcome);
+        } else {
+          reject(new Error('Rename finished without a result'));
+        }
+      };
+
+      transaction.onabort = () => {
+        if (outcome && !outcome.ok) {
+          resolve(outcome); // aborted on purpose: nothing was written
+        } else {
+          reject(transaction.error ?? new Error('Rename was rolled back; no data was changed'));
+        }
+      };
+    });
+
+    if (result.ok) {
+      try {
+        await this.recalculatePlayerStats();
+      } catch (error) {
+        console.error('[DatabaseService] Player renamed, but recalculating stats failed:', error);
+      }
+
+      CloudSyncService.queuePlayerRename(result.plan.oldId, result.plan.newId).catch(error => {
+        console.error('[DatabaseService] Could not queue the rename for cloud sync:', error);
+      });
+    }
+
+    return result;
   }
 
   // ========== MATCH EDITING EXTENSIONS ==========
