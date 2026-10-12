@@ -35,10 +35,23 @@ const PlayerNameInput: React.FC<PlayerNameInputProps> = ({
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const warningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hideSuggestionsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Latest typed/selected text. Handlers that run before React re-renders (e.g. the blur
+  // fired synchronously by a keyboard selection) read this instead of a stale `inputValue`.
+  const valueRef = useRef(player.name);
+  // Last name reported to the parent, so repeated blurs don't re-send the same name.
+  const lastCommittedRef = useRef(player.name);
   const suggestionListId = useId();
+  
+  const setValue = (value: string) => {
+    valueRef.current = value;
+    setInputValue(value);
+  };
   
   // Initialize input with player name
   useEffect(() => {
+    valueRef.current = player.name;
+    lastCommittedRef.current = player.name;
     setInputValue(player.name);
   }, [player.name]);
   
@@ -75,7 +88,7 @@ const PlayerNameInput: React.FC<PlayerNameInputProps> = ({
     
     // Only update if input contains allowed characters
     if (isValidInput(value)) {
-      setInputValue(value);
+      setValue(value);
       
       // Show suggestions if we have a value and suggestions
       setShowSuggestions(!!value && suggestedNames.length > 0);
@@ -97,26 +110,40 @@ const PlayerNameInput: React.FC<PlayerNameInputProps> = ({
     }
   };
   
-  // Handle blur event - simplified approach
+  // Report a (trimmed) name to the parent immediately - never from a timer, so the parent
+  // always sees it before handling whatever click caused the blur (Add/Remove player).
+  const commitName = (raw: string) => {
+    const trimmed = raw.trim();
+    setValue(trimmed);
+    if (trimmed !== lastCommittedRef.current) {
+      lastCommittedRef.current = trimmed;
+      onNameChange(trimmed);
+    }
+  };
+  
+  const clearHideSuggestionsTimeout = () => {
+    if (hideSuggestionsTimeoutRef.current) {
+      clearTimeout(hideSuggestionsTimeoutRef.current);
+      hideSuggestionsTimeoutRef.current = null;
+    }
+  };
+  
+  // Handle blur event: commit now; only hiding the list is delayed (so a tap on a
+  // suggestion still lands on touch browsers that blur before the tap).
   const handleBlur = () => {
-    // Hide suggestions and commit current value
-    // Use setTimeout to allow suggestion clicks to complete first
-    setTimeout(() => {
+    commitName(valueRef.current);
+    clearHideSuggestionsTimeout();
+    hideSuggestionsTimeoutRef.current = setTimeout(() => {
       setShowSuggestions(false);
       setHighlightedIndex(-1);
-      
-      // Commit the current input value (trimmed)
-      const trimmedValue = inputValue.trim();
-      if (trimmedValue !== inputValue) {
-        setInputValue(trimmedValue);
-      }
-      onNameChange(trimmedValue);
-    }, 200); // Slightly longer delay to ensure clicks complete
+      hideSuggestionsTimeoutRef.current = null;
+    }, 200);
   };
   
   // Handle focus event
   const handleFocus = () => {
-    if (inputValue && suggestedNames.length > 0) {
+    clearHideSuggestionsTimeout();
+    if (valueRef.current && suggestedNames.length > 0) {
       setShowSuggestions(true);
     }
   };
@@ -147,9 +174,7 @@ const PlayerNameInput: React.FC<PlayerNameInputProps> = ({
           handleSelectSuggestion(filteredSuggestions[highlightedIndex], 'keyboard');
         } else {
           // User pressed Enter on a new name - commit the current value
-          const trimmedValue = inputValue.trim();
-          setInputValue(trimmedValue);
-          onNameChange(trimmedValue);
+          commitName(valueRef.current);
           setShowSuggestions(false);
           setHighlightedIndex(-1);
           inputRef.current?.blur();
@@ -164,8 +189,11 @@ const PlayerNameInput: React.FC<PlayerNameInputProps> = ({
         break;
         
       case 'Tab':
-        // Allow natural tab behavior, close suggestions
-        if (showSuggestions) {
+        // Never preventDefault: focus moves on as normal.
+        // Accept a suggestion only if one is highlighted (arrow keys or mouse hover).
+        if (highlightedIndex >= 0 && highlightedIndex < filteredSuggestions.length) {
+          handleSelectSuggestion(filteredSuggestions[highlightedIndex], 'tab');
+        } else {
           setShowSuggestions(false);
           setHighlightedIndex(-1);
         }
@@ -174,10 +202,10 @@ const PlayerNameInput: React.FC<PlayerNameInputProps> = ({
   };
 
   // Handle selection of a suggested name - simplified
-  const handleSelectSuggestion = (name: string, method: 'mouse' | 'keyboard' = 'mouse') => {
+  const handleSelectSuggestion = (name: string, method: 'mouse' | 'keyboard' | 'tab' = 'mouse') => {
     // Immediately commit the selected name
-    setInputValue(name);
-    onNameChange(name);
+    commitName(name);
+    clearHideSuggestionsTimeout();
     setShowSuggestions(false);
     setHighlightedIndex(-1);
     playSound('buttonClick');
@@ -201,6 +229,9 @@ const PlayerNameInput: React.FC<PlayerNameInputProps> = ({
     return () => {
       if (warningTimeoutRef.current) {
         clearTimeout(warningTimeoutRef.current);
+      }
+      if (hideSuggestionsTimeoutRef.current) {
+        clearTimeout(hideSuggestionsTimeoutRef.current);
       }
     };
   }, []);
