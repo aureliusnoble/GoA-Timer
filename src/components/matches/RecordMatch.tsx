@@ -317,7 +317,7 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
     };
     
     const newPlayerIndex = players.length;
-    setPlayers([...players, newPlayer]);
+    setPlayers(prev => [...prev, newPlayer]);
     
     // Initialize stats for new player if in detailed mode
     if (detailedMode) {
@@ -337,9 +337,8 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
   const handleRemovePlayer = (playerId: number) => {
     playSound('buttonClick');
     
-    const updatedPlayers = [...players];
-    updatedPlayers.splice(playerId, 1);
-    setPlayers(updatedPlayers);
+    const updatedPlayers = players.filter((_, i) => i !== playerId);
+    setPlayers(prev => prev.filter((_, i) => i !== playerId));
     
     // Clean up stats and errors for removed player and reindex remaining players
     if (detailedMode) {
@@ -359,21 +358,14 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
       setPlayerStats(newPlayerStats);
       setStatsErrors(newStatsErrors);
     }
-    
-    // Re-check for duplicates after removing a player
-    checkForDuplicates(updatedPlayers);
   };
   
-  // Update player name and check for duplicates
+  // Update player name (duplicate warnings follow via the effect on `players`)
   const handlePlayerNameChange = (index: number, name: string) => {
-    const updatedPlayers = [...players];
-    // Update both id and name fields to keep them in sync
-    updatedPlayers[index].id = name;
-    updatedPlayers[index].name = name;
-    setPlayers(updatedPlayers);
-    
-    // Check for duplicate names
-    checkForDuplicates(updatedPlayers);
+    // Functional update: a name commit can arrive after an Add/Remove in the same gesture,
+    // so it must apply to the latest list, never to a captured copy. Update both id and
+    // name fields to keep them in sync (and never mutate the existing player objects).
+    setPlayers(prev => prev.map((p, i) => (i === index ? { ...p, id: name, name } : p)));
   };
   
   // Check for duplicate player names and heroes
@@ -406,6 +398,11 @@ const RecordMatch: React.FC<RecordMatchProps> = ({ onBack }) => {
     
     setDuplicateHeroIds(duplicateHeroes);
   };
+  
+  // Keep duplicate-name/hero warnings in sync with the latest player list
+  useEffect(() => {
+    checkForDuplicates(players);
+  }, [players]);
   
   // Open hero selector for a specific player
   const handleOpenHeroSelector = (index: number) => {

@@ -730,7 +730,7 @@ const addPlayer = (team: Team) => {
     // stats will be undefined initially - only created when tracking is enabled
   };
   
-  setLocalPlayers([...localPlayers, newPlayer]);
+  setLocalPlayers(prev => [...prev, newPlayer]);
   
   // Enforce Long game for 8+ players
   if (localPlayers.length >= 7 && gameLength === GameLength.Quick) {
@@ -746,31 +746,26 @@ const addPlayer = (team: Team) => {
     
     playSound('buttonClick');
     
-    // Filter out the player
-    const updatedPlayers = localPlayers.filter(p => p.id !== playerId);
-    
-    // Reassign IDs to ensure contiguous numbering
-    const reindexedPlayers = updatedPlayers.map((player, index) => ({
-      ...player,
-      id: index + 1
-    }));
-    
-    // Update player state
-    setLocalPlayers(reindexedPlayers);
-    
-    // If we've dropped below 8 players (or 6 with double lane option enabled), reset lanes if needed
-    const shouldHaveDoubleLane = 
-      reindexedPlayers.length >= 7 || 
-      (reindexedPlayers.length === 6 && useDoubleLaneFor6Players && gameLength === GameLength.Long);
-    
-    if (!shouldHaveDoubleLane) {
+    // A single functional update, so it composes with a name commit made in the same gesture
+    setLocalPlayers(prev => {
+      // Filter out the player and reassign IDs to ensure contiguous numbering
+      const reindexedPlayers = prev
+        .filter(p => p.id !== playerId)
+        .map((player, index) => ({
+          ...player,
+          id: index + 1
+        }));
+      
+      // If we've dropped below 8 players (or 6 with double lane option enabled), reset lanes if needed
+      const shouldHaveDoubleLane =
+        reindexedPlayers.length >= 7 ||
+        (reindexedPlayers.length === 6 && useDoubleLaneFor6Players && gameLength === GameLength.Long);
+      
       // If we no longer need double lanes, remove lane assignments
-      const playersWithoutLanes = reindexedPlayers.map(player => ({
-        ...player,
-        lane: undefined
-      }));
-      setLocalPlayers(playersWithoutLanes);
-    }
+      return shouldHaveDoubleLane
+        ? reindexedPlayers
+        : reindexedPlayers.map(player => ({ ...player, lane: undefined }));
+    });
     
     // If we dropped below 7 players and were in long game mode,
     // we keep the same game length to avoid confusion
@@ -815,14 +810,10 @@ const addPlayer = (team: Team) => {
 
   // Handle player name change
   const handlePlayerNameChange = (playerId: number, name: string) => {
-    const updatedPlayers = localPlayers.map(player => {
-      if (player.id === playerId) {
-        return { ...player, name };
-      }
-      return player;
-    });
-    
-    setLocalPlayers(updatedPlayers);
+    // Functional update: never overwrite the list with a copy captured before an Add/Remove
+    setLocalPlayers(prev =>
+      prev.map(player => (player.id === playerId ? { ...player, name } : player))
+    );
     nameCheckRef.current = false; // Reset name check when names change
   };
 
