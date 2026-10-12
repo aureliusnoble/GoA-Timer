@@ -129,6 +129,19 @@ describe('saveRoundDraft / getFinalRoundStatus', () => {
     expect(deriveTotals(log, 1)).toEqual({ totalKills: 4 });
   });
 
+  it('a draft that leaves out a category keeps that category\'s value', () => {
+    let log = saveRoundDraft(createEmptyStatLog(), 3, { 1: { kills: 2, deaths: 1 } });
+    log = saveRoundDraft(log, 3, { 1: { deaths: 0 } }); // kills unticked
+    expect(getRoundEntry(log, 3)?.players[1]).toEqual({ kills: 2, deaths: 0 });
+  });
+
+  it('a draft for one player keeps the other players\' values', () => {
+    let log = commitRound(createEmptyStatLog(), 3, { 1: { kills: 1 }, 2: { assists: 2 } });
+    log = saveRoundDraft(log, 3, { 1: { kills: 3 } });
+    expect(getRoundEntry(log, 3)?.players).toEqual({ 1: { kills: 3 }, 2: { assists: 2 } });
+    expect(isRoundReviewed(log, 3)).toBe(true);
+  });
+
   it('final round is the current round when play happened in it', () => {
     const log = commitRound(createEmptyStatLog(), 2, { 1: { kills: 1 } });
     expect(getFinalRoundStatus(log, { round: 3, turn: 2, currentPhase: 'move' })).toEqual({ round: 3, reviewed: false });

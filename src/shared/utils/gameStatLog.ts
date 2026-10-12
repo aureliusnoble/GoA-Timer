@@ -225,14 +225,21 @@ export function restoreStatLog(
 
 /**
  * Store values entered in a review that was closed (X) without saving, so they
- * are not lost. Keeps the round's reviewed flag as it was.
+ * are not lost. MERGES per player into what the round already holds: a
+ * category or player the draft leaves out keeps its logged value. Keeps the
+ * round's reviewed flag as it was.
  */
 export function saveRoundDraft(log: GameStatLog, round: number, values: RoundValues): GameStatLog {
   const existing = getRoundEntry(log, round);
+  const players: RoundValues = { ...existing?.players };
+  for (const [id, draftValues] of Object.entries(cleanRoundValues(values))) {
+    const playerId = Number(id);
+    players[playerId] = { ...existing?.players[playerId], ...draftValues };
+  }
   return upsertRound(log, {
     round,
     reviewed: existing?.reviewed ?? false,
-    players: cleanRoundValues(values),
+    players,
   });
 }
 
