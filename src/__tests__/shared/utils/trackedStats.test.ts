@@ -5,6 +5,7 @@ import {
   summarizeStat,
   summarizePlayerStats,
   formatTrackedGames,
+  compareNullsLowest,
 } from '../../../shared/utils/trackedStats';
 
 describe('isTrackedStat', () => {
@@ -76,13 +77,38 @@ describe('summarizePlayerStats', () => {
     const summary = summarizePlayerStats([{}, { kills: null, goldEarned: null }]);
     expect(summary.hasCombatStats).toBe(false);
     expect(summary.hasAnyTrackedStats).toBe(false);
-    expect(summary.kdRatio).toBe(0);
+    expect(summary.kdRatio).toBeNull();
+  });
+
+  it('has no K/D ratio when deaths were never tracked', () => {
+    expect(summarizePlayerStats([{ kills: 3 }]).kdRatio).toBeNull();
+    expect(summarizePlayerStats([{ kills: 3, deaths: null }, { kills: 1 }]).kdRatio).toBeNull();
+  });
+
+  it('has no K/D ratio when kills were never tracked', () => {
+    expect(summarizePlayerStats([{ deaths: 2 }]).kdRatio).toBeNull();
+    expect(summarizePlayerStats([{ kills: null, deaths: 2, assists: 1 }]).kdRatio).toBeNull();
+  });
+
+  it('gives a K/D ratio of 0 for tracked 0 kills and 0 deaths', () => {
+    expect(summarizePlayerStats([{ kills: 0, deaths: 0 }]).kdRatio).toBe(0);
   });
 
   it('counts level-only or minion-only data as tracked but not as combat data', () => {
     const summary = summarizePlayerStats([{ level: 4 }, { minionKills: 2 }]);
     expect(summary.hasCombatStats).toBe(false);
     expect(summary.hasAnyTrackedStats).toBe(true);
+  });
+});
+
+describe('compareNullsLowest', () => {
+  it('orders numbers ascending and treats null as the lowest value', () => {
+    const sorted = [2, null, 0.5, null, 3].sort(compareNullsLowest);
+    expect(sorted).toEqual([null, null, 0.5, 2, 3]);
+  });
+
+  it('treats two nulls as equal', () => {
+    expect(compareNullsLowest(null, null)).toBe(0);
   });
 });
 

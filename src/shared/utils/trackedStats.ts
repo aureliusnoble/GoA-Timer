@@ -39,8 +39,11 @@ export interface PlayerStatSummary {
   minionKills: StatSummary;
   goldEarned: StatSummary;
   level: StatSummary;
-  /** kills.total / deaths.total (kills.total when there are no deaths), rounded to 2 decimals. */
-  kdRatio: number;
+  /**
+   * kills.total / deaths.total (kills.total when the tracked deaths are 0), rounded to 2 decimals.
+   * null when kills or deaths were never tracked.
+   */
+  kdRatio: number | null;
   /** Kills, deaths, assists or gold tracked in at least one game. */
   hasCombatStats: boolean;
   /** Any of the six stats tracked in at least one game. */
@@ -68,7 +71,11 @@ export function summarizePlayerStats(records: readonly StatRecord[]): PlayerStat
   const minionKills = summarizeStat(records, 'minionKills');
   const goldEarned = summarizeStat(records, 'goldEarned');
   const level = summarizeStat(records, 'level');
-  const kd = deaths.total === 0 ? kills.total : kills.total / deaths.total;
+  let kdRatio: number | null = null;
+  if (kills.games > 0 && deaths.games > 0) {
+    const kd = deaths.total === 0 ? kills.total : kills.total / deaths.total;
+    kdRatio = parseFloat(kd.toFixed(2));
+  }
   return {
     kills,
     deaths,
@@ -76,10 +83,18 @@ export function summarizePlayerStats(records: readonly StatRecord[]): PlayerStat
     minionKills,
     goldEarned,
     level,
-    kdRatio: parseFloat(kd.toFixed(2)),
+    kdRatio,
     hasCombatStats: kills.games + deaths.games + assists.games + goldEarned.games > 0,
     hasAnyTrackedStats: [kills, deaths, assists, minionKills, goldEarned, level].some(s => s.games > 0),
   };
+}
+
+/** Ascending sort comparator for values that may be untracked: null sorts as the lowest value. */
+export function compareNullsLowest(a: number | null, b: number | null): number {
+  if (a === null || b === null) {
+    return a === b ? 0 : a === null ? -1 : 1;
+  }
+  return a - b;
 }
 
 /** "3 of 5 games" - how many of the player's games a stat was tracked in. */

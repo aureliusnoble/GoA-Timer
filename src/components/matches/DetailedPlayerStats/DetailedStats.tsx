@@ -1,7 +1,7 @@
 // src/components/matches/DetailedPlayerStats/DetailedStats.tsx
 import React from 'react';
 import { Swords, TrendingUp, Coins, Target, Users } from 'lucide-react';
-import { PlayerStatSummary, formatTrackedGames } from '../../../shared/utils/trackedStats';
+import { PlayerStatSummary, StatSummary, formatTrackedGames } from '../../../shared/utils/trackedStats';
 
 interface DetailedStatsProps {
   /** Per-stat totals, tracked-game counts and averages (see summarizePlayerStats). */
@@ -33,6 +33,13 @@ const DetailedStats: React.FC<DetailedStatsProps> = ({ summary, totalGames }) =>
 
   const kdaGames = Math.max(kills.games, deaths.games, assists.games);
   const tracked = (games: number) => formatTrackedGames(games, totalGames);
+  // A stat that was never tracked shows N/A rather than a misleading 0
+  const totalOrNA = (stat: StatSummary) => (stat.games > 0 ? stat.total : 'N/A');
+  const perGame = (stat: StatSummary) =>
+    stat.games > 0 ? `${stat.average.toFixed(1)} (${stat.games} games)` : 'N/A';
+  const isPerfectKd = deaths.games > 0 && deaths.total === 0 && kills.total > 0;
+  // K+A per game needs both stats; count only the games both could come from
+  const killParticipationGames = Math.min(kills.games, assists.games);
 
   return (
     <div className="bg-gray-700 rounded-lg p-6 mb-6">
@@ -49,7 +56,7 @@ const DetailedStats: React.FC<DetailedStatsProps> = ({ summary, totalGames }) =>
             <Swords size={16} className="text-red-400" />
           </div>
           <div className="text-lg font-bold text-white">
-            {kills.total}/{deaths.total}/{assists.total}
+            {kdaGames > 0 ? `${totalOrNA(kills)}/${totalOrNA(deaths)}/${totalOrNA(assists)}` : 'N/A'}
           </div>
           <div className="text-xs text-gray-500">
             tracked in {tracked(kdaGames)}
@@ -63,10 +70,10 @@ const DetailedStats: React.FC<DetailedStatsProps> = ({ summary, totalGames }) =>
             <Target size={16} className="text-yellow-400" />
           </div>
           <div className="text-2xl font-bold text-yellow-400">
-            {kdRatio.toFixed(2)}
+            {kdRatio !== null ? kdRatio.toFixed(2) : 'N/A'}
           </div>
           <div className="text-xs text-gray-500">
-            {deaths.total === 0 ? 'Perfect' : 'kill/death ratio'}
+            {isPerfectKd ? 'Perfect' : 'kill/death ratio'}
           </div>
         </div>
 
@@ -119,10 +126,10 @@ const DetailedStats: React.FC<DetailedStatsProps> = ({ summary, totalGames }) =>
             <Target size={16} className="text-blue-400" />
           </div>
           <div className="text-2xl font-bold text-blue-400">
-            {(kills.average + assists.average).toFixed(1)}
+            {killParticipationGames > 0 ? (kills.average + assists.average).toFixed(1) : 'N/A'}
           </div>
           <div className="text-xs text-gray-500">
-            (K+A) per game
+            (K+A) per game · {tracked(killParticipationGames)}
           </div>
         </div>
       </div>
@@ -136,19 +143,19 @@ const DetailedStats: React.FC<DetailedStatsProps> = ({ summary, totalGames }) =>
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-400">Kills per Game</span>
               <span className="font-medium">
-                {kills.average.toFixed(1)} ({kills.games} games)
+                {perGame(kills)}
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-400">Deaths per Game</span>
               <span className="font-medium">
-                {deaths.average.toFixed(1)} ({deaths.games} games)
+                {perGame(deaths)}
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-400">Assists per Game</span>
               <span className="font-medium">
-                {assists.average.toFixed(1)} ({assists.games} games)
+                {perGame(assists)}
               </span>
             </div>
           </div>

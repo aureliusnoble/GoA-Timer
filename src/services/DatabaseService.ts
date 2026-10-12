@@ -783,7 +783,7 @@ class DatabaseService {
       kills: number;
       deaths: number;
       assists: number;
-      kdRatio: number;
+      kdRatio: number | null;
       totalGold: number;
       totalMinionKills: number;
       averageGold: number;
@@ -849,7 +849,7 @@ class DatabaseService {
         kills: number;
         deaths: number;
         assists: number;
-        kdRatio: number;
+        kdRatio: number | null;
         totalGold: number;
         totalMinionKills: number;
         averageGold: number;

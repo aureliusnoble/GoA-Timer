@@ -910,7 +910,8 @@ export function useDataSource() {
     kills: number;
     deaths: number;
     assists: number;
-    kdRatio: number;
+    /** null when kills or deaths were never tracked */
+    kdRatio: number | null;
     totalGold: number;
     totalMinionKills: number;
     averageGold: number;

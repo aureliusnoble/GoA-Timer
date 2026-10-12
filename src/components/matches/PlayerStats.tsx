@@ -10,7 +10,7 @@ import { useDataSource } from '../../hooks/useDataSource';
 import { useStatsFilter } from '../../context/StatsFilterContext';
 import { Team } from '../../types';
 import { countHeroesPlayed } from '../../shared/utils/heroIds';
-import { summarizePlayerStats } from '../../shared/utils/trackedStats';
+import { summarizePlayerStats, compareNullsLowest } from '../../shared/utils/trackedStats';
 
 
 interface PlayerStatsProps {
@@ -32,7 +32,8 @@ interface PlayerWithStats extends DBPlayer {
   kills: number;
   deaths: number;
   assists: number;
-  kdRatio: number;
+  /** null when kills or deaths were never tracked */
+  kdRatio: number | null;
   averageGold: number;
   averageMinionKills: number;
   gamesWithGoldData: number;
@@ -646,7 +647,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
         comparison = a.winRate - b.winRate;
         break;
       case 'kdRatio':
-        comparison = a.kdRatio - b.kdRatio;
+        comparison = compareNullsLowest(a.kdRatio, b.kdRatio);
         break;
       default:
         comparison = 0;
@@ -1239,7 +1240,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
                               <TrendingUp size={14} className="mr-1" />
                               <span>KD Ratio</span>
                             </div>
-                            <div className="font-medium text-center">{player.kdRatio}</div>
+                            <div className="font-medium text-center">{player.kdRatio ?? 'N/A'}</div>
                           </div>
                           <div className="bg-gray-800 p-2 rounded">
                             <div className="flex items-center text-green-400 text-sm mb-1">
