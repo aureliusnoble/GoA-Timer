@@ -99,7 +99,10 @@ CREATE TABLE cloud_matches (
   device_id TEXT,
   sync_source TEXT NOT NULL,
   synced_at TIMESTAMPTZ DEFAULT NOW(),
-  CONSTRAINT unique_match_per_owner UNIQUE (owner_id, id)
+  victory_type TEXT,
+  CONSTRAINT unique_match_per_owner UNIQUE (owner_id, id),
+  CONSTRAINT cloud_matches_victory_type_check
+    CHECK (victory_type IS NULL OR victory_type IN ('throne', 'wave', 'kills'))
 );
 
 CREATE INDEX idx_cloud_matches_owner ON cloud_matches(owner_id);

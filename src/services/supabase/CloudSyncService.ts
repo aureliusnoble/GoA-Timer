@@ -108,6 +108,7 @@ class CloudSyncServiceClass {
         syncedAt: new Date().toISOString(),
       };
       let recordsAdded = 0;
+      let failedCount = 0;
 
       // Upload players
       this.updateStatus({ status: 'uploading', progress: 20, message: `Uploading ${localData.players.length} players...` });
@@ -119,7 +120,12 @@ class CloudSyncServiceClass {
             onConflict: 'owner_id,local_id',
           });
 
-        if (!error) recordsAdded++;
+        if (error) {
+          failedCount++;
+          console.error(`[CloudSyncService] Failed to upload player "${player.id}":`, error.message);
+        } else {
+          recordsAdded++;
+        }
         this.updateStatus({
           status: 'uploading',
           progress: 20 + Math.floor((i / localData.players.length) * 20),
@@ -137,7 +143,12 @@ class CloudSyncServiceClass {
             onConflict: 'owner_id,id',
           });
 
-        if (!error) recordsAdded++;
+        if (error) {
+          failedCount++;
+          console.error(`[CloudSyncService] Failed to upload match ${match.id}:`, error.message);
+        } else {
+          recordsAdded++;
+        }
         this.updateStatus({
           status: 'uploading',
           progress: 40 + Math.floor((i / Math.max(matchesToUpload.length, 1)) * 30),
@@ -155,7 +166,12 @@ class CloudSyncServiceClass {
             onConflict: 'owner_id,id',
           });
 
-        if (!error) recordsAdded++;
+        if (error) {
+          failedCount++;
+          console.error(`[CloudSyncService] Failed to upload match player ${mp.id} (match ${mp.matchId}):`, error.message);
+        } else {
+          recordsAdded++;
+        }
         this.updateStatus({
           status: 'uploading',
           progress: 70 + Math.floor((i / Math.max(matchPlayersToUpload.length, 1)) * 25),
@@ -172,15 +188,22 @@ class CloudSyncServiceClass {
       const lastSyncAt = new Date();
       localStorage.setItem('cloudSync_lastSync', lastSyncAt.toISOString());
 
+      const failureMessage = failedCount > 0
+        ? `${failedCount} record${failedCount === 1 ? '' : 's'} failed to upload (see console for details)`
+        : undefined;
+
       this.updateStatus({
         status: 'complete',
         progress: 100,
-        message: `Upload complete! ${recordsAdded} records synced.`,
+        message: failureMessage
+          ? `Upload finished: ${recordsAdded} records synced, ${failureMessage}.`
+          : `Upload complete! ${recordsAdded} records synced.`,
+        error: failureMessage,
         lastSyncAt,
       });
 
       this.syncInProgress = false;
-      return { success: true, recordsAdded, recordsUpdated: 0 };
+      return { success: failedCount === 0, recordsAdded, recordsUpdated: 0, error: failureMessage };
     } catch (error) {
       console.error('[CloudSyncService] Upload error:', error);
       this.updateStatus({
