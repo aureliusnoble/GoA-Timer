@@ -44,6 +44,8 @@ describe('VictoryScreen hero ids', () => {
         doubleLanes={false}
         statLog={createEmptyStatLog()}
         finalRound={1}
+        finalRoundReviewed={false}
+        statTrackingActive={false}
         trackingSettings={defaultStatTrackingSettings()}
       />
     );

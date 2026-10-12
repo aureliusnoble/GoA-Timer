@@ -1,0 +1,127 @@
+// src/__tests__/components/VictoryScreen.test.tsx
+import React from 'react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, act } from '@testing-library/react';
+
+const { recordMatch } = vi.hoisted(() => ({ recordMatch: vi.fn() }));
+vi.mock('../../services/DatabaseService', () => ({ default: { recordMatch } }));
+
+import VictoryScreen from '../../components/VictoryScreen';
+import { GameLength, Hero, Player, Team } from '../../types';
+import { createEmptyStatLog } from '../../shared/utils/gameStatLog';
+import { defaultStatTrackingSettings } from '../../shared/utils/statTrackingSettings';
+
+const hero = (id: number, name: string): Hero => ({
+  id, name, icon: '', complexity: 1, roles: ['Tank'], expansion: 'base', description: '',
+});
+
+const PLAYERS: Player[] = [
+  { id: 1, team: Team.Titans, hero: hero(10, 'Arien'), name: 'Ann' },
+  { id: 2, team: Team.Atlanteans, hero: hero(12, 'Tigerclaw'), name: 'Cat' },
+];
+
+type Props = React.ComponentProps<typeof VictoryScreen>;
+
+function renderVictory(overrides: Partial<Props> = {}) {
+  const props: Props = {
+    winningTeam: Team.Titans,
+    onReturnToSetup: vi.fn(),
+    players: PLAYERS,
+    gameLength: GameLength.Quick,
+    doubleLanes: false,
+    statLog: createEmptyStatLog(),
+    finalRound: 3,
+    finalRoundReviewed: false,
+    statTrackingActive: false,
+    trackingSettings: defaultStatTrackingSettings(),
+    onTrackingSettingsChange: vi.fn(),
+    onUpdatePlayerStats: vi.fn(),
+    onSaveRoundDraft: vi.fn(),
+    ...overrides,
+  };
+  const utils = render(<VictoryScreen {...props} />);
+  // buttons appear after the 3 s victory animation
+  act(() => { vi.advanceTimersByTime(3000); });
+  return { props, ...utils };
+}
+
+async function clickAndFlush(element: HTMLElement) {
+  await act(async () => { fireEvent.click(element); });
+}
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  recordMatch.mockReset();
+  recordMatch.mockResolvedValue('match-1');
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe('VictoryScreen final-round stats (4.1)', () => {
+  it('closing the final-round assistant with X does not count as recorded', () => {
+    const { props } = renderVictory();
+    fireEvent.click(screen.getByText('Record Final Round Stats'));
+    fireEvent.click(screen.getByLabelText('Close'));
+    expect(screen.queryByText('Final round statistics recorded')).toBeNull();
+    expect(screen.getByText('Record Final Round Stats')).toBeTruthy();
+    expect(props.onUpdatePlayerStats).not.toHaveBeenCalled();
+  });
+
+  it('X keeps entered values as a draft for the final round', () => {
+    const { props } = renderVictory({
+      trackingSettings: { enabled: true, categories: { ...defaultStatTrackingSettings().categories, kills: true } },
+    });
+    fireEvent.click(screen.getByText('Record Final Round Stats'));
+    fireEvent.click(screen.getAllByText('Got Kill')[0]);
+    fireEvent.click(screen.getByLabelText('Close'));
+    expect(props.onSaveRoundDraft).toHaveBeenCalledWith(3, { 1: { kills: 1 }, 2: { kills: 0 } });
+  });
+
+  it('hides "Record Final Round Stats" once the match is saved', async () => {
+    renderVictory();
+    fireEvent.click(screen.getByText('Throne'));
+    await clickAndFlush(screen.getByText('Save Match Data'));
+    expect(recordMatch).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Saved Successfully')).toBeTruthy();
+    expect(screen.queryByText('Record Final Round Stats')).toBeNull();
+  });
+
+  it('asks before saving when tracking was on and the final round is unrecorded', async () => {
+    renderVictory({ statTrackingActive: true });
+    fireEvent.click(screen.getByText('Throne'));
+    await clickAndFlush(screen.getByText('Save Match Data'));
+    expect(recordMatch).not.toHaveBeenCalled();
+    expect(screen.getByText('Final round stats not recorded')).toBeTruthy();
+    await clickAndFlush(screen.getByText('Save Without Them'));
+    expect(recordMatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('"Record Final Round" from the prompt opens the final-round assistant', async () => {
+    renderVictory({ statTrackingActive: true });
+    fireEvent.click(screen.getByText('Throne'));
+    await clickAndFlush(screen.getByText('Save Match Data'));
+    fireEvent.click(screen.getByText('Record Final Round'));
+    expect(screen.getByLabelText('Close')).toBeTruthy();
+    expect(screen.queryByText('Final round stats not recorded')).toBeNull();
+  });
+
+  it('does not ask after the final-round assistant was finished with logging off', async () => {
+    renderVictory({ statTrackingActive: true });
+    fireEvent.click(screen.getByText('Record Final Round Stats'));
+    fireEvent.click(screen.getByText('Continue'));
+    fireEvent.click(screen.getByText('Throne'));
+    await clickAndFlush(screen.getByText('Save Match Data'));
+    expect(screen.queryByText('Final round stats not recorded')).toBeNull();
+    expect(recordMatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not ask when the final round was recorded', async () => {
+    renderVictory({ statTrackingActive: true, finalRoundReviewed: true });
+    expect(screen.getByText('Final round statistics recorded')).toBeTruthy();
+    fireEvent.click(screen.getByText('Throne'));
+    await clickAndFlush(screen.getByText('Save Match Data'));
+    expect(recordMatch).toHaveBeenCalledTimes(1);
+  });
+});

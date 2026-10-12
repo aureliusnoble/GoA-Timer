@@ -11,6 +11,8 @@ import {
   restoreStatLog,
   getRoundEntry,
   isRoundReviewed,
+  saveRoundDraft,
+  getFinalRoundStatus,
   StatCategories,
 } from '../../shared/utils/gameStatLog';
 import { Player, Team } from '../../types';
@@ -113,5 +115,31 @@ describe('legacy saves', () => {
     expect(log.rounds.map(r => r.round)).toEqual([1, 2]);
     expect(log.rounds[0].reviewed).toBe(false);
     expect(deriveTotals(log, 1)).toEqual({ totalKills: 1 });
+  });
+});
+
+describe('saveRoundDraft / getFinalRoundStatus', () => {
+  it('a draft is not a review, and keeps an existing review flag', () => {
+    let log = saveRoundDraft(createEmptyStatLog(), 3, { 1: { kills: 1 } });
+    expect(isRoundReviewed(log, 3)).toBe(false);
+    expect(deriveTotals(log, 1)).toEqual({ totalKills: 1 });
+    log = commitRound(log, 3, { 1: { kills: 2 } });
+    log = saveRoundDraft(log, 3, { 1: { kills: 4 } });
+    expect(isRoundReviewed(log, 3)).toBe(true);
+    expect(deriveTotals(log, 1)).toEqual({ totalKills: 4 });
+  });
+
+  it('final round is the current round when play happened in it', () => {
+    const log = commitRound(createEmptyStatLog(), 2, { 1: { kills: 1 } });
+    expect(getFinalRoundStatus(log, { round: 3, turn: 2, currentPhase: 'move' })).toEqual({ round: 3, reviewed: false });
+  });
+
+  it('final round is the previous, reviewed round when victory comes before round N+1 starts', () => {
+    const log = commitRound(createEmptyStatLog(), 2, { 1: { kills: 1 } });
+    expect(getFinalRoundStatus(log, { round: 3, turn: 1, currentPhase: 'strategy' })).toEqual({ round: 2, reviewed: true });
+  });
+
+  it('does not step back when the previous round was not reviewed', () => {
+    expect(getFinalRoundStatus(createEmptyStatLog(), { round: 3, turn: 1, currentPhase: 'strategy' })).toEqual({ round: 3, reviewed: false });
   });
 });

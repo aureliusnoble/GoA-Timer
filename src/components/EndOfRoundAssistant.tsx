@@ -38,6 +38,8 @@ interface EndOfRoundAssistantProps {
   initialValues: RoundValues;
   /** Save (& continue). stats is undefined when logging is off. */
   onComplete: (stats?: RoundValues) => void;
+  /** X button. draft = what was entered (undefined when logging is off). Must not discard it. */
+  onDismiss?: (draft?: RoundValues) => void;
   /** Logging switch + categories to start from when the assistant opens. */
   trackingSettings: StatTrackingSettings;
   /** Called whenever the user changes the logging switch or a category. */
@@ -56,6 +58,7 @@ enum StatTrackingTab {
 const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
   players,
   onComplete,
+  onDismiss,
   isVisible,
   round,
   initialValues,
@@ -185,7 +188,18 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
       onComplete();
     }
   };
-  
+
+  // X: never discard - hand what was entered back to the caller
+  const handleDismiss = () => {
+    playSound('buttonClick');
+    const draft = loggingEnabled ? filterValuesToCategories(playerStats, enabledStats) : undefined;
+    if (onDismiss) {
+      onDismiss(draft);
+    } else {
+      onComplete();
+    }
+  };
+
   // Auto-calculate assists for team kills
   const handleTeamKill = (killerPlayerId: number) => {
     playSound('buttonClick');
@@ -245,7 +259,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
             <p className="text-sm text-gray-400">Round {round}</p>
           </div>
           <button
-            onClick={() => onComplete()}
+            onClick={handleDismiss}
             className="p-1 bg-gray-700 hover:bg-gray-600 rounded-full"
             aria-label="Close"
           >

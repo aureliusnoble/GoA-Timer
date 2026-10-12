@@ -21,8 +21,14 @@ interface VictoryScreenProps {
   statLog: GameStatLog;
   /** Round the final-round review applies to. */
   finalRound: number;
+  /** Whether the final round's stats were already reviewed (from the round log). */
+  finalRoundReviewed: boolean;
+  /** true when stats were tracked this game (asks before saving without the final round). */
+  statTrackingActive: boolean;
   /** Save the reviewed final-round values. */
   onUpdatePlayerStats?: (round: number, values: RoundValues) => void;
+  /** Keep values entered in a review closed with X (not counted as recorded). */
+  onSaveRoundDraft?: (round: number, values: RoundValues) => void;
   /** Remembered stat-tracking settings (logging switch + categories). */
   trackingSettings: StatTrackingSettings;
   onTrackingSettingsChange?: (settings: StatTrackingSettings) => void;
@@ -36,7 +42,10 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
   doubleLanes,
   statLog,
   finalRound,
+  finalRoundReviewed,
+  statTrackingActive,
   onUpdatePlayerStats,
+  onSaveRoundDraft,
   trackingSettings,
   onTrackingSettingsChange
 }) => {
@@ -46,7 +55,11 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
   const [saveError, setSaveError] = useState<string | null>(null);
   // NEW: State for managing final round stats collection
   const [showStatsCollection, setShowStatsCollection] = useState<boolean>(false);
-  const [finalRoundStatsRecorded, setFinalRoundStatsRecorded] = useState<boolean>(false);
+  // The user finished the final-round assistant with logging switched off
+  const [finalRoundDeclined, setFinalRoundDeclined] = useState<boolean>(false);
+  // Shown when saving while the final round's stats were never recorded
+  const [showFinalRoundPrompt, setShowFinalRoundPrompt] = useState<boolean>(false);
+  const finalRoundStatsRecorded = finalRoundReviewed;
   // State for victory type selection
   const [victoryType, setVictoryType] = useState<VictoryType | undefined>(undefined);
   const [victoryTypeError, setVictoryTypeError] = useState<string | null>(null);
@@ -72,13 +85,21 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
   };
   
   // Save match data to database
-  const handleSaveMatchData = async () => {
+  const handleSaveMatchData = async (skipFinalRoundCheck = false) => {
     // Validate victory type selection
     if (!victoryType) {
       setVictoryTypeError('Please select how the match was won');
       playSound('buttonClick');
       return;
     }
+
+    // Never drop the final round silently
+    if (!skipFinalRoundCheck && statTrackingActive && !finalRoundStatsRecorded && !finalRoundDeclined) {
+      playSound('buttonClick');
+      setShowFinalRoundPrompt(true);
+      return;
+    }
+    setShowFinalRoundPrompt(false);
 
     setSavingMatchData(true);
     setSaveError(null);
@@ -125,19 +146,30 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
     }
   };
 
-  // NEW: Handler for final round stats collection
+  // Final-round assistant saved
   const handleFinalRoundStats = (stats?: RoundValues) => {
     playSound('buttonClick');
-    
-    // If stats provided and we have the update function, integrate them
     if (stats && onUpdatePlayerStats) {
       onUpdatePlayerStats(finalRound, stats);
+    } else if (!stats) {
+      setFinalRoundDeclined(true);
     }
-    
-    // Mark as recorded and hide the assistant
-    setFinalRoundStatsRecorded(true);
     setShowStatsCollection(false);
     playSound('phaseChange');
+  };
+
+  // Final-round assistant closed with X: keep what was entered, NOT recorded
+  const handleFinalRoundDismiss = (draft?: RoundValues) => {
+    if (draft && onSaveRoundDraft) {
+      onSaveRoundDraft(finalRound, draft);
+    }
+    setShowStatsCollection(false);
+  };
+
+  const openFinalRoundStats = () => {
+    playSound('buttonClick');
+    setShowFinalRoundPrompt(false);
+    setShowStatsCollection(true);
   };
   
   return (
@@ -201,13 +233,10 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
           </button>
           
           {/* NEW: Record Final Round Stats button - only show if not recorded yet */}
-          {!finalRoundStatsRecorded && animationComplete && (
+          {!finalRoundStatsRecorded && !matchDataSaved && animationComplete && (
             <EnhancedTooltip text="Record statistics for the final round before saving">
               <button
-                onClick={() => {
-                  playSound('buttonClick');
-                  setShowStatsCollection(true);
-                }}
+                onClick={openFinalRoundStats}
                 className={`px-6 py-3 rounded-lg text-white font-medium flex items-center mx-auto ${
                   winningTeam === Team.Titans 
                     ? 'bg-blue-700 hover:bg-blue-600' 
@@ -224,7 +253,7 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
           {animationComplete && (
             <EnhancedTooltip text={matchDataSaved ? "Match data saved successfully" : "Save match results to your statistics"}>
               <button
-                onClick={handleSaveMatchData}
+                onClick={() => handleSaveMatchData()}
                 disabled={isSavingMatchData || matchDataSaved}
                 className={`px-6 py-3 rounded-lg text-white font-medium flex items-center mx-auto
                   ${matchDataSaved
@@ -276,6 +305,33 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
           </div>
         )}
         
+        {/* Saving while the final round was never recorded */}
+        {showFinalRoundPrompt && !matchDataSaved && (
+          <div className="mt-4 p-4 bg-amber-900/80 border border-amber-500 rounded-lg max-w-md mx-auto text-left" role="alertdialog" aria-label="Final round stats not recorded">
+            <p className="font-semibold text-amber-100 flex items-center">
+              <AlertTriangle size={16} className="mr-2" />
+              Final round stats not recorded
+            </p>
+            <p className="text-sm text-amber-200 mt-1">
+              You were tracking stats, but the final round hasn't been recorded. Anything not logged for it will be missing from this match.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2 mt-3">
+              <button
+                onClick={openFinalRoundStats}
+                className="flex-1 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 text-white font-medium"
+              >
+                Record Final Round
+              </button>
+              <button
+                onClick={() => handleSaveMatchData(true)}
+                className="flex-1 px-4 py-2 rounded-lg bg-gray-600 hover:bg-gray-500 text-white font-medium"
+              >
+                Save Without Them
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Match Data Saved Confirmation - shown below the buttons */}
 
         
@@ -306,6 +362,7 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
         round={finalRound}
         initialValues={buildReviewValues(statLog, finalRound, players)}
         onComplete={handleFinalRoundStats}
+        onDismiss={handleFinalRoundDismiss}
         isVisible={showStatsCollection}
         trackingSettings={trackingSettings}
         onTrackingSettingsChange={onTrackingSettingsChange}

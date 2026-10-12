@@ -222,3 +222,39 @@ export function restoreStatLog(
   }
   return log;
 }
+
+/**
+ * Store values entered in a review that was closed (X) without saving, so they
+ * are not lost. Keeps the round's reviewed flag as it was.
+ */
+export function saveRoundDraft(log: GameStatLog, round: number, values: RoundValues): GameStatLog {
+  const existing = getRoundEntry(log, round);
+  return upsertRound(log, {
+    round,
+    reviewed: existing?.reviewed ?? false,
+    players: cleanRoundValues(values),
+  });
+}
+
+export interface FinalRoundStatus {
+  round: number;
+  reviewed: boolean;
+}
+
+/**
+ * Which round the final-round review applies to. If victory is declared at the
+ * very start of a round (turn 1, strategy phase, nothing logged yet) right
+ * after the previous round was reviewed, the game really ended with that
+ * reviewed round.
+ */
+export function getFinalRoundStatus(
+  log: GameStatLog,
+  state: { round: number; turn: number; currentPhase: string }
+): FinalRoundStatus {
+  const { round, turn, currentPhase } = state;
+  const nothingPlayedYet = turn === 1 && currentPhase === 'strategy' && !getRoundEntry(log, round);
+  if (nothingPlayedYet && round > 1 && isRoundReviewed(log, round - 1)) {
+    return { round: round - 1, reviewed: true };
+  }
+  return { round, reviewed: isRoundReviewed(log, round) };
+}

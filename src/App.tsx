@@ -23,9 +23,16 @@ import {
   applyTotalsToPlayers,
   commitRound,
   createEmptyStatLog,
+  getFinalRoundStatus,
   restoreStatLog,
+  saveRoundDraft,
 } from './shared/utils/gameStatLog';
-import { StatTrackingSettings, loadStatTrackingSettings, saveStatTrackingSettings } from './shared/utils/statTrackingSettings';
+import {
+  StatTrackingSettings,
+  isStatTrackingInUse,
+  loadStatTrackingSettings,
+  saveStatTrackingSettings,
+} from './shared/utils/statTrackingSettings';
 import {
   Hero,
   GameState,
@@ -549,6 +556,7 @@ function AppContent() {
     () => applyTotalsToPlayers(localPlayers, statLog),
     [localPlayers, statLog]
   );
+  const finalRoundStatus = getFinalRoundStatus(statLog, gameState);
   
   // Timer states
   const [strategyTimerActive, setStrategyTimerActive] = useState<boolean>(false);
@@ -1787,6 +1795,11 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
     setStatLog(prev => commitRound(prev, round, values));
   };
 
+  // Review closed with X: keep what was entered (not counted as reviewed)
+  const handleSaveRoundDraft = (round: number, values: RoundValues) => {
+    setStatLog(prev => saveRoundDraft(prev, round, values));
+  };
+
   // Handle strategy timer
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -2174,8 +2187,11 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
           gameLength={gameLength}
           doubleLanes={gameState.hasMultipleLanes}
           statLog={statLog}
-          finalRound={gameState.round}
+          finalRound={finalRoundStatus.round}
+          finalRoundReviewed={finalRoundStatus.reviewed}
+          statTrackingActive={isStatTrackingInUse(statLog, statTracking)}
           onUpdatePlayerStats={handleCommitRoundStats}
+          onSaveRoundDraft={handleSaveRoundDraft}
           trackingSettings={statTracking}
           onTrackingSettingsChange={setStatTracking}
         />

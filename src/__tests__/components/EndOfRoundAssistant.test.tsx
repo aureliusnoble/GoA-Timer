@@ -33,6 +33,7 @@ function renderAssistant(overrides: Partial<Props> = {}) {
     trackingSettings: defaultStatTrackingSettings(),
     onTrackingSettingsChange: vi.fn(),
     onComplete: vi.fn(),
+    onDismiss: vi.fn(),
     ...overrides,
   };
   const utils = render(<EndOfRoundAssistant {...props} />);
@@ -68,5 +69,21 @@ describe('EndOfRoundAssistant - remembered settings (4.3)', () => {
     expect(screen.getByText('Record player deaths.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Minion Kills' }));
     expect(props.onTrackingSettingsChange).toHaveBeenLastCalledWith(tracking({ deaths: true, minionKills: true }));
+  });
+});
+
+describe('EndOfRoundAssistant - X keeps the entered stats (4.1 / 4.5)', () => {
+  it('hands the entered values to onDismiss and does not complete', () => {
+    const { props } = renderAssistant({ trackingSettings: tracking({ kills: true }) });
+    fireEvent.click(screen.getAllByText('Got Kill')[0]);
+    fireEvent.click(screen.getByLabelText('Close'));
+    expect(props.onDismiss).toHaveBeenCalledWith({ 1: { kills: 1 }, 2: { kills: 0 }, 3: { kills: 0 } });
+    expect(props.onComplete).not.toHaveBeenCalled();
+  });
+
+  it('passes no draft when logging is off', () => {
+    const { props } = renderAssistant();
+    fireEvent.click(screen.getByLabelText('Close'));
+    expect(props.onDismiss).toHaveBeenCalledWith(undefined);
   });
 });
