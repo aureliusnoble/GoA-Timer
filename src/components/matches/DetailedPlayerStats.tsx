@@ -24,6 +24,8 @@ interface PlayerDetails {
   matches: any[];
   currentRating: number;
   rank: number;
+  // True when the rating was recalculated from the filtered matches only
+  ratingRecalculated: boolean;
   // Per-stat totals, tracked-game counts and averages
   statSummary: PlayerStatSummary;
 }
@@ -41,9 +43,8 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
   const {
     isViewModeLoading,
     getPlayer,
-    getAllPlayers,
     getAllMatches,
-    getCurrentTrueSkillRatings,
+    getPlayerRatingTable,
     getPlayerStats
   } = useDataSource();
 
@@ -93,26 +94,25 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
         const [
           player,
           playerStats,
-          currentRatings,
-          allPlayers
+          ratingTable
         ] = await Promise.all([
           getPlayer(playerId),
           getPlayerStats(playerId, gameLengthFilter, playerCountFilter),
-          getCurrentTrueSkillRatings(),
-          getAllPlayers()
+          // Same date-ordered replay and ranking as the Player Stats list
+          getPlayerRatingTable({
+            startDate: dateRange.startDate ?? undefined,
+            endDate: dateRange.endDate ?? undefined,
+            gameLengthFilter,
+            playerCountFilter,
+            recalculate: recalculateTrueSkill
+          })
         ]);
 
         if (!player) {
           throw new Error('Player not found');
         }
 
-        // Calculate rank among all players
-        const playersWithRatings = allPlayers
-          .map(p => ({ ...p, rating: currentRatings[p.id] || 0 }))
-          .filter(p => p.totalGames > 0)
-          .sort((a, b) => b.rating - a.rating);
-
-        const rank = playersWithRatings.findIndex(p => p.id === playerId) + 1;
+        const rank = ratingTable.ranks[playerId] ?? 0;
 
         // Get all matches to filter by date if needed
         let allMatchesData = await getAllMatches();
@@ -168,8 +168,9 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
           player,
           stats: filteredStats,
           matches: matches, // Use filtered matches
-          currentRating: currentRatings[playerId] || 0,
+          currentRating: ratingTable.ratings[playerId] ?? 0,
           rank,
+          ratingRecalculated: ratingTable.isRecalculated,
           statSummary
         });
       } catch (err) {
@@ -182,7 +183,7 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
     if (playerId && !isViewModeLoading) {
       loadPlayerDetails();
     }
-  }, [playerId, dateRange.startDate, dateRange.endDate, gameLengthFilter, playerCountFilter, isViewModeLoading, getPlayer, getPlayerStats, getCurrentTrueSkillRatings, getAllPlayers, getAllMatches]);
+  }, [playerId, dateRange.startDate, dateRange.endDate, gameLengthFilter, playerCountFilter, recalculateTrueSkill, isViewModeLoading, getPlayer, getPlayerStats, getPlayerRatingTable, getAllMatches]);
 
   const handleBack = () => {
     playSound('buttonClick');
@@ -242,7 +243,7 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
     );
   }
 
-  const { player, stats, currentRating, rank, statSummary } = playerDetails;
+  const { player, stats, currentRating, rank, ratingRecalculated, statSummary } = playerDetails;
 
   // Additional null check for TypeScript
   if (!player) {
@@ -318,7 +319,7 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
               <div className="flex items-center gap-2 mt-1 text-blue-400">
                 <TrendingUp size={20} />
                 <span className="text-lg font-semibold">
-                  Rank #{rank}
+                  {rank > 0 ? `Rank #${rank}` : 'Unranked'}
                 </span>
               </div>
             </div>
@@ -327,6 +328,9 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
           <div className="text-right">
             <div className="text-2xl font-bold text-blue-400">{currentRating}</div>
             <div className="text-sm text-gray-400">TrueSkill Rating</div>
+            {ratingRecalculated && (
+              <div className="text-xs text-amber-300">Recalculated for the selected filters</div>
+            )}
             <div className="text-xs text-gray-500 mt-1">
               {player.totalGames} games • Last played {new Date(player.lastPlayed).toLocaleDateString()}
             </div>

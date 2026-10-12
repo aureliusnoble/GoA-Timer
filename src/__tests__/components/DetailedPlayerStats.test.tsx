@@ -114,3 +114,39 @@ describe('DetailedPlayerStats combat averages', () => {
     expect(screen.getByText('per game · 1 of 3 games')).toBeTruthy(); // gold tracked once
   });
 });
+
+describe('DetailedPlayerStats rating header', () => {
+  it('shows the rating and rank from the date-ordered rating table', async () => {
+    mocks.state.ratingTable = { ratings: { Alice: 1234, Bob: 1300 }, ranks: { Bob: 1, Alice: 2 }, isRecalculated: false };
+    render(<DetailedPlayerStats playerId="Alice" onBack={() => {}} />);
+
+    expect(await screen.findByText('1234')).toBeTruthy();
+    expect(screen.getByText('Rank #2')).toBeTruthy();
+    expect(screen.queryByText('Recalculated for the selected filters')).toBeNull();
+  });
+
+  it('passes the active filters to the rating table and labels a recalculated rating', async () => {
+    mocks.state.playerStatsFilters = {
+      recencyMonths: 3,
+      minGamesRelationship: 3,
+      recalculateTrueSkill: true,
+      dateRange: {},
+      gameLengthFilter: 'long',
+      playerCountFilter: 6,
+    };
+    mocks.state.ratingTable = { ratings: { Alice: 1111 }, ranks: { Alice: 1 }, isRecalculated: true };
+    render(<DetailedPlayerStats playerId="Alice" onBack={() => {}} />);
+
+    expect(await screen.findByText('1111')).toBeTruthy();
+    expect(screen.getByText('Recalculated for the selected filters')).toBeTruthy();
+    const options = mocks.dataSource.getPlayerRatingTable.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect(options).toMatchObject({ gameLengthFilter: 'long', playerCountFilter: 6, recalculate: true });
+    expect(options.startDate).toBeInstanceOf(Date);
+  });
+
+  it('shows "Unranked" when the player has no rank in the filtered set', async () => {
+    mocks.state.ratingTable = { ratings: { Alice: 1200 }, ranks: {}, isRecalculated: false };
+    render(<DetailedPlayerStats playerId="Alice" onBack={() => {}} />);
+    expect(await screen.findByText('Unranked')).toBeTruthy();
+  });
+});

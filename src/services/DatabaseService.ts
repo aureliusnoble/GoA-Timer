@@ -6,6 +6,7 @@ import { CloudSyncService } from './supabase/CloudSyncService';
 import { filterMatches } from '../shared/utils/matchFilters';
 import { isRealHeroId, countHeroesPlayed } from '../shared/utils/heroIds';
 import { summarizePlayerStats } from '../shared/utils/trackedStats';
+import { replayRatings } from '../shared/utils/ratingReplay';
 import { HERO_LEVEL_MAX, HERO_LEVEL_MIN } from '../shared/constants/game';
 import { isTrackedStat, isValidHeroLevel } from '../shared/utils/statValues';
 import { fillMissingFields } from '../shared/utils/mergeFill';
@@ -1031,7 +1032,7 @@ class DatabaseService {
   /**
    * Get all match players from the database
    */
-  private async getAllMatchPlayers(): Promise<DBMatchPlayer[]> {
+  async getAllMatchPlayers(): Promise<DBMatchPlayer[]> {
     if (!this.db) await this.initialize();
     if (!this.db) return [];
 
@@ -2153,82 +2154,13 @@ class DatabaseService {
    */
   async getCurrentTrueSkillRatings(): Promise<{ [playerId: string]: number }> {
     try {
-      // Get all matches sorted by date
-      let allMatches = await this.getAllMatches();
-      allMatches.sort((a, b) => {
-        const dateA = new Date(a.date).getTime();
-        const dateB = new Date(b.date).getTime();
-        return dateA - dateB;
-      });
-      
-      // Initialize player ratings
-      const players = await this.getAllPlayers();
-      const playerRatings: { [playerId: string]: any } = {};
-      
-      // Initialize all players with default rating
-      for (const player of players) {
-        playerRatings[player.id] = rating();
-      }
-      
-      // Process each match chronologically to get final ratings
-      for (let matchIndex = 0; matchIndex < allMatches.length; matchIndex++) {
-        const match = allMatches[matchIndex];
-        const matchPlayers = await this.getMatchPlayers(match.id);
-        
-        // Separate into teams
-        const titanPlayers: string[] = [];
-        const titanRatings: any[] = [];
-        const atlanteanPlayers: string[] = [];
-        const atlanteanRatings: any[] = [];
-        
-        for (const mp of matchPlayers) {
-          if (mp.team === Team.Titans) {
-            titanPlayers.push(mp.playerId);
-            titanRatings.push(playerRatings[mp.playerId]);
-          } else {
-            atlanteanPlayers.push(mp.playerId);
-            atlanteanRatings.push(playerRatings[mp.playerId]);
-          }
-        }
-        
-        // Skip if either team is empty
-        if (titanRatings.length === 0 || atlanteanRatings.length === 0) {
-          continue;
-        }
-        
-        // Determine ranks based on winning team
-        let ranks: number[];
-        if (match.winningTeam === Team.Titans) {
-          ranks = [1, 2];
-        } else {
-          ranks = [2, 1];
-        }
-        
-        // Update ratings using OpenSkill
-        const result = rate([titanRatings, atlanteanRatings], {
-          rank: ranks,
-          beta: TRUESKILL_BETA,
-          tau: TRUESKILL_TAU
-        });
-        
-        // Update player ratings
-        for (let i = 0; i < titanPlayers.length; i++) {
-          playerRatings[titanPlayers[i]] = result[0][i];
-        }
-        for (let i = 0; i < atlanteanPlayers.length; i++) {
-          playerRatings[atlanteanPlayers[i]] = result[1][i];
-        }
-      }
-      
-      // Convert to display ratings
-      const currentRatings: { [playerId: string]: number } = {};
-      for (const playerId in playerRatings) {
-        const playerRating = playerRatings[playerId];
-        const ordinalValue = ordinal(playerRating);
-        currentRatings[playerId] = Math.round((ordinalValue + 25) * 40 + 200);
-      }
-      
-      return currentRatings;
+      const [matches, players, matchPlayers] = await Promise.all([
+        this.getAllMatches(),
+        this.getAllPlayers(),
+        this.getAllMatchPlayers()
+      ]);
+      // Same date-ordered replay as the Player Stats list, detail header and Rating Journey
+      return replayRatings(matches, matchPlayers, players.map(p => p.id)).displayRatings;
     } catch (error) {
       console.error('Error getting current TrueSkill ratings:', error);
       return {};

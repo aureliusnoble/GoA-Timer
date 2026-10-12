@@ -39,6 +39,7 @@ const mocks = vi.hoisted(() => {
     ],
     getAllMatches: async () => [],
     getFilteredPlayerStats: async () => ({ players: [], dateRange: null }),
+    getPlayerRatingTable: async () => ({ ratings, ranks: { Ana: 1, Ben: 2, Cleo: 3 }, isRecalculated: false }),
   };
   const statsFilter = { setPlayerStatsFilters: () => {} };
   return { ratings, dataSource, statsFilter };
@@ -48,7 +49,6 @@ vi.mock('../../hooks/useDataSource', () => ({ useDataSource: () => mocks.dataSou
 vi.mock('../../context/StatsFilterContext', () => ({ useStatsFilter: () => mocks.statsFilter }));
 vi.mock('../../context/SoundContext', () => ({ useSound: () => ({ playSound: () => {} }) }));
 vi.mock('../../services/DatabaseService', () => ({
-  default: { getCurrentTrueSkillRatings: async () => ({}) },
   getDisplayRating: (player: { id: string }) => mocks.ratings[player.id],
 }));
 vi.mock('../../components/matches/PlayerRelationshipGraph', () => ({ default: () => null }));

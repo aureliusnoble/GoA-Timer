@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ChevronLeft, Search, TrendingUp, Users, Swords, Info, Trophy, Medal, Hexagon, X, HelpCircle, User, Filter, ChevronDown, ChevronUp, Calendar, Network, Crown, Flag, Skull, Flame } from 'lucide-react';
 import { DBPlayer, DBMatch } from '../../services/DatabaseService';
-import dbService, { getDisplayRating } from '../../services/DatabaseService';
+import { getDisplayRating } from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
 import EnhancedTooltip from '../common/EnhancedTooltip';
 import PlayerRelationshipGraph from './PlayerRelationshipGraph';
@@ -299,7 +299,7 @@ const RankDisplay: React.FC<{ rank: number; skill: number }> = ({ rank, skill })
 
 const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, onViewPlayerDetails }) => {
   const { playSound } = useSound();
-  const { isViewMode, isViewModeLoading, getAllPlayers, getAllMatchPlayers, getAllMatches, getFilteredPlayerStats } = useDataSource();
+  const { isViewModeLoading, getAllPlayers, getAllMatchPlayers, getAllMatches, getFilteredPlayerStats, getPlayerRatingTable } = useDataSource();
   const { setPlayerStatsFilters } = useStatsFilter();
   const [players, setPlayers] = useState<PlayerWithStats[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -504,7 +504,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
               gamesWithGoldData: stats.gamesWithGoldData,
               hasCombatStats: stats.hasCombatStats,
               displayRating: stats.displayRating,
-              rank: 0,
+              rank: stats.rank,
               victoryTypeStats: calculateVictoryTypeStats(playerMatchIds, playerTeams),
               currentStreak: streaks.currentStreak,
               bestStreak: streaks.bestStreak
@@ -516,9 +516,9 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
           const allPlayers = await getAllPlayers();
           const allMatchPlayers = await getAllMatchPlayers();
 
-          // Get fresh TrueSkill ratings for consistency with SkillOverTime
-          // (not available in view mode, so use stored values)
-          const currentRatings = isViewMode ? {} : await dbService.getCurrentTrueSkillRatings();
+          // Ratings and ranks from the date-ordered replay (local and shared/view-only data alike),
+          // the same source as the player detail header and the Rating Journey
+          const ratingTable = await getPlayerRatingTable({ recalculate: recalculateTrueSkill });
 
           playersWithStats = await Promise.all(
             allPlayers.map(async (player) => {
@@ -547,8 +547,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
 
               const winRate = player.totalGames > 0 ? (player.wins / player.totalGames) * 100 : 0;
 
-              // Use fresh TrueSkill rating calculation (consistent with SkillOverTime)
-              const displayRating = currentRatings[player.id] || getDisplayRating(player);
+              const displayRating = ratingTable.ratings[player.id] ?? getDisplayRating(player);
 
               // Calculate victory type stats and streaks
               const playerMatchIds = playerMatches.map(pm => pm.matchId);
@@ -571,7 +570,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
                 gamesWithGoldData: statSummary.goldEarned.games,
                 hasCombatStats: statSummary.hasCombatStats,
                 displayRating,
-                rank: 0,
+                rank: ratingTable.ranks[player.id] ?? 0,
                 victoryTypeStats,
                 currentStreak: streaks.currentStreak,
                 bestStreak: streaks.bestStreak
@@ -582,26 +581,8 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
 
         const playersWithMatches = playersWithStats.filter(player => player.totalGames > 0);
 
-        const sortedByRating = [...playersWithMatches].sort((a, b) => b.displayRating - a.displayRating);
-
-        let currentRank = 1;
-        let currentRating = sortedByRating.length > 0 ? sortedByRating[0].displayRating : 0;
-        let tieCount = 0;
-
-        const playersWithRanks = sortedByRating.map((player, index) => {
-          if (player.displayRating !== currentRating) {
-            currentRank = index + 1;
-            currentRating = player.displayRating;
-            tieCount = 0;
-          } else {
-            tieCount++;
-          }
-
-          return {
-            ...player,
-            rank: currentRank
-          };
-        });
+        // Ranks come from the rating table (shared with the player detail header)
+        const playersWithRanks = [...playersWithMatches].sort((a, b) => b.displayRating - a.displayRating);
 
         setPlayers(playersWithRanks);
       } catch (error) {
@@ -614,7 +595,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
     // Don't load data while view mode is still being determined
     if (isViewModeLoading) return;
     loadPlayers();
-  }, [isViewModeLoading, dateRange.startDate, dateRange.endDate, recalculateTrueSkill, gameLengthFilter, playerCountFilter, isViewMode, getAllPlayers, getAllMatchPlayers, getAllMatches, getFilteredPlayerStats]);
+  }, [isViewModeLoading, dateRange.startDate, dateRange.endDate, recalculateTrueSkill, gameLengthFilter, playerCountFilter, getAllPlayers, getAllMatchPlayers, getAllMatches, getFilteredPlayerStats, getPlayerRatingTable]);
   
   const handleBack = () => {
     playSound('buttonClick');

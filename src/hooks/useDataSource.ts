@@ -8,6 +8,13 @@ import { rating, rate, ordinal } from 'openskill';
 import { filterMatches, MatchFilterOptions } from '../shared/utils/matchFilters';
 import { isRealHeroId, countHeroesPlayed } from '../shared/utils/heroIds';
 import { summarizePlayerStats } from '../shared/utils/trackedStats';
+import {
+  computePlayerRatingTable,
+  ratingQueryKey,
+  DEFAULT_DISPLAY_RATING,
+  PlayerRatingTable,
+  RatingQueryOptions,
+} from '../shared/utils/ratingReplay';
 import { cloudMatchPlayerRowToLocal, cloudMatchRowToLocal, cloudPlayerRowToLocal } from '../shared/utils/cloudMapping';
 import { formatLocalDate } from '../shared/utils/localDate';
 
@@ -20,6 +27,7 @@ let localImpactCache: {
 
 export type { MatchFilterOptions } from '../shared/utils/matchFilters';
 export { filterMatches } from '../shared/utils/matchFilters';
+export type { PlayerRatingTable, RatingQueryOptions } from '../shared/utils/ratingReplay';
 
 // TrueSkill constants (must match DatabaseService)
 const TRUESKILL_BETA = 25/6;
@@ -670,15 +678,47 @@ export function useDataSource() {
     return calculateHistoricalRatings(allMatches, allPlayers, getMatchPlayers);
   }, [getAllMatches, getAllPlayers, getMatchPlayers]);
 
-  // Get current TrueSkill ratings (view mode aware)
-  const getCurrentTrueSkillRatings = useCallback(async (): Promise<{ [playerId: string]: number }> => {
-    const allPlayers = await getAllPlayers();
-    const ratings: { [playerId: string]: number } = {};
-    for (const player of allPlayers) {
-      ratings[player.id] = getDisplayRating(player);
+  // Players, matches and match players for a rating replay (view mode aware).
+  // Local mode reads all match players in one IndexedDB request.
+  const loadReplayData = useCallback(async (): Promise<{
+    players: DBPlayer[];
+    matches: DBMatch[];
+    matchPlayers: DBMatchPlayer[];
+  }> => {
+    const [players, matches] = await Promise.all([getAllPlayers(), getAllMatches()]);
+    const matchPlayers = isViewMode && localMatchPlayers
+      ? localMatchPlayers
+      : await dbService.getAllMatchPlayers();
+    return { players, matches, matchPlayers };
+  }, [getAllPlayers, getAllMatches, isViewMode, localMatchPlayers]);
+
+  // Shared (view-only) data never changes while it is loaded, so replays are cached per
+  // option set. Local data can change at any time and is replayed on every call (cheap:
+  // three IndexedDB reads and one pass over the matches).
+  const ratingTableCache = useMemo(
+    () => new Map<string, PlayerRatingTable>(),
+    [localPlayers, localMatches, localMatchPlayers]
+  );
+
+  // Ratings and ranks from the date-ordered replay: the single source of truth for
+  // "current rating" (Player Stats list, player detail header). See computePlayerRatingTable.
+  const getPlayerRatingTable = useCallback(async (options: RatingQueryOptions = {}): Promise<PlayerRatingTable> => {
+    const cacheable = isViewMode && !!localMatchPlayers;
+    const key = ratingQueryKey(options);
+    if (cacheable) {
+      const cached = ratingTableCache.get(key);
+      if (cached) return cached;
     }
-    return ratings;
-  }, [getAllPlayers]);
+    const { players, matches, matchPlayers } = await loadReplayData();
+    const table = computePlayerRatingTable(players, matches, matchPlayers, options);
+    if (cacheable) ratingTableCache.set(key, table);
+    return table;
+  }, [isViewMode, localMatchPlayers, ratingTableCache, loadReplayData]);
+
+  // Get current TrueSkill ratings (view mode aware): all-time date-ordered replay
+  const getCurrentTrueSkillRatings = useCallback(async (): Promise<{ [playerId: string]: number }> => {
+    return (await getPlayerRatingTable()).ratings;
+  }, [getPlayerRatingTable]);
 
   // Get display rating for a player (view mode aware)
   const getPlayerDisplayRating = useCallback((player: DBPlayer): number => {
@@ -922,6 +962,7 @@ export function useDataSource() {
     favoriteHeroes: { heroId: number; heroName: string; count: number }[];
     favoriteRoles: { role: string; count: number }[];
     displayRating: number;
+    rank: number;
     lastPlayed: Date | null;
   }
 
@@ -1223,7 +1264,7 @@ export function useDataSource() {
     dateRange: { start: Date; end: Date } | null;
   }> => {
     const allPlayers = await getAllPlayers();
-    let allMatches = await getAllMatches();
+    const allMatchesRaw = await getAllMatches();
     const allMatchPlayersRaw = await getAllMatchPlayers();
 
     // Determine date range
@@ -1236,7 +1277,7 @@ export function useDataSource() {
     }
 
     // Apply all match filters (date range, game length, player count)
-    allMatches = filterMatches(allMatches, {
+    const allMatches = filterMatches(allMatchesRaw, {
       startDate, endDate, gameLengthFilter, playerCountFilter
     });
 
@@ -1249,81 +1290,10 @@ export function useDataSource() {
     // Create matches map for quick lookup
     const matchesMap = new Map(allMatches.map(m => [m.id, m]));
 
-    // Get TrueSkill ratings
-    let trueSkillRatings: Record<string, number> = {};
-    if (!recalculateTrueSkill) {
-      // Use stored ratings
-      for (const player of allPlayers) {
-        trueSkillRatings[player.id] = getDisplayRating(player);
-      }
-    } else {
-      // Recalculate TrueSkill using only filtered matches
-      const sortedMatches = [...allMatches].sort((a, b) => {
-        const dateA = new Date(a.date).getTime();
-        const dateB = new Date(b.date).getTime();
-        return dateA - dateB;
-      });
-
-      // Initialize all players with default rating
-      const playerRatings: { [playerId: string]: ReturnType<typeof rating> } = {};
-      for (const player of allPlayers) {
-        playerRatings[player.id] = rating();
-      }
-
-      // Process each match
-      for (const match of sortedMatches) {
-        const matchPlayers = filteredMatchPlayers.filter(mp => mp.matchId === match.id);
-
-        // Separate into teams
-        const titanPlayers: string[] = [];
-        const titanRatings: ReturnType<typeof rating>[] = [];
-        const atlanteanPlayers: string[] = [];
-        const atlanteanRatings: ReturnType<typeof rating>[] = [];
-
-        for (const mp of matchPlayers) {
-          if (!playerRatings[mp.playerId]) {
-            playerRatings[mp.playerId] = rating();
-          }
-          if (mp.team === 'titans') {
-            titanPlayers.push(mp.playerId);
-            titanRatings.push(playerRatings[mp.playerId]);
-          } else {
-            atlanteanPlayers.push(mp.playerId);
-            atlanteanRatings.push(playerRatings[mp.playerId]);
-          }
-        }
-
-        // Skip if either team is empty
-        if (titanRatings.length === 0 || atlanteanRatings.length === 0) {
-          continue;
-        }
-
-        // Determine ranks
-        const ranks = match.winningTeam === 'titans' ? [1, 2] : [2, 1];
-
-        // Update ratings
-        const result = rate([titanRatings, atlanteanRatings], {
-          rank: ranks,
-          beta: TRUESKILL_BETA,
-          tau: TRUESKILL_TAU
-        });
-
-        // Store updated ratings
-        for (let i = 0; i < titanPlayers.length; i++) {
-          playerRatings[titanPlayers[i]] = result[0][i];
-        }
-        for (let i = 0; i < atlanteanPlayers.length; i++) {
-          playerRatings[atlanteanPlayers[i]] = result[1][i];
-        }
-      }
-
-      // Convert to display ratings
-      for (const playerId in playerRatings) {
-        const playerRating = playerRatings[playerId];
-        const ordinalValue = ordinal(playerRating);
-        trueSkillRatings[playerId] = Math.round((ordinalValue + 25) * 40 + 200);
-      }
-    }
+    // Ratings and ranks from the date-ordered replay (same source as the player detail header)
+    const ratingTable = computePlayerRatingTable(allPlayers, allMatchesRaw, allMatchPlayersRaw, {
+      startDate, endDate, gameLengthFilter, playerCountFilter, recalculate: recalculateTrueSkill
+    });
 
     // Calculate stats for each player
     const playerStatsArray: FilteredPlayerStats[] = [];
@@ -1400,7 +1370,8 @@ export function useDataSource() {
         hasCombatStats: statSummary.hasCombatStats,
         favoriteHeroes,
         favoriteRoles,
-        displayRating: trueSkillRatings[player.id] || 1200,
+        displayRating: ratingTable.ratings[player.id] ?? DEFAULT_DISPLAY_RATING,
+        rank: ratingTable.ranks[player.id] ?? 0,
         lastPlayed: lastPlayedDate
       });
     }
@@ -1425,6 +1396,7 @@ export function useDataSource() {
     getHistoricalRatings,
     getHistoricalRatingsForPeriod,
     getCurrentTrueSkillRatings,
+    getPlayerRatingTable,
     getPlayerDisplayRating,
     getFilteredPlayerStats,
     getHeroWinRateOverTime,
