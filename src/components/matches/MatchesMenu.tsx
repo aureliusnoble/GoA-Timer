@@ -16,9 +16,12 @@ export type MatchesView = 'menu' | 'player-stats' | 'detailed-player-stats' | 'h
 interface MatchesMenuProps {
   onBack: () => void;
   onNavigate: (view: MatchesView) => void;
+  onPlayerRenamed?: (oldId: string, newId: string) => void;
+  /** Players on the setup screen; renaming one to another's name is refused. */
+  setupPlayers?: readonly { name: string }[];
 }
 
-const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
+const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate, onPlayerRenamed, setupPlayers }) => {
   const { playSound } = useSound();
   const { isViewMode, sharedData, isLoading: isViewModeLoading } = useViewMode();
   // LEGACY: P2P Connection State
@@ -37,7 +40,7 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
   
   // State for Edit Player Data modal
   const [showEditPlayerModal, setShowEditPlayerModal] = useState<boolean>(false);
-  const [hasZeroGamePlayers, setHasZeroGamePlayers] = useState<boolean>(false);
+  const [hasPlayers, setHasPlayers] = useState<boolean>(false);
   
   
   // Check if we have any match data (view mode aware)
@@ -53,14 +56,14 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
     }
   };
 
-  // Check if there are players with zero games
-  const checkForZeroGamePlayers = async () => {
+  // Check if there are any players to manage (rename/merge/delete)
+  const checkForPlayers = async () => {
     try {
-      const zeroGamePlayers = await dbService.getPlayersWithNoGames();
-      setHasZeroGamePlayers(zeroGamePlayers.length > 0);
+      const players = await dbService.getAllPlayers();
+      setHasPlayers(players.length > 0);
     } catch (error) {
-      console.error('Error checking for zero-game players:', error);
-      setHasZeroGamePlayers(false);
+      console.error('Error checking for players:', error);
+      setHasPlayers(false);
     }
   };
   
@@ -70,9 +73,9 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
     if (isViewModeLoading) return;
 
     checkForMatchData();
-    // Only check for zero game players in non-view mode (local data)
+    // Only check for players in non-view mode (local data)
     if (!isViewMode) {
-      checkForZeroGamePlayers();
+      checkForPlayers();
     }
   }, [isViewModeLoading, isViewMode, sharedData]);
   
@@ -112,9 +115,9 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
     setShowEditPlayerModal(false);
   };
 
-  // Handle player deletion - refresh zero game players state
+  // Handle player deletion - refresh player state
   const handlePlayerDeleted = () => {
-    checkForZeroGamePlayers();
+    checkForPlayers();
     checkForMatchData(); // Also refresh match data in case all players were deleted
   };
   
@@ -565,9 +568,9 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
                     </button>
                   </EnhancedTooltip>
                   
-                  {/* Edit Player Data Button - Only show if there are players with 0 games */}
-                  {hasZeroGamePlayers && (
-                    <EnhancedTooltip text="Manage players with no recorded matches. You can view their data and delete them if needed.">
+                  {/* Edit Player Data Button - rename/merge any player, delete players with 0 games */}
+                  {hasPlayers && (
+                    <EnhancedTooltip text="Rename or merge players (e.g. to fix a typo), and delete players with no recorded matches.">
                       <button
                         onClick={handleOpenEditPlayerModal}
                         className="px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded-lg flex items-center"
@@ -637,6 +640,8 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
         isOpen={showEditPlayerModal}
         onClose={handleCloseEditPlayerModal}
         onPlayerDeleted={handlePlayerDeleted}
+        onPlayerRenamed={onPlayerRenamed}
+        setupPlayers={setupPlayers}
       />
       
     </div>

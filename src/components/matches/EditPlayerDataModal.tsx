@@ -1,23 +1,28 @@
 // src/components/matches/EditPlayerDataModal.tsx
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Trash2, ChevronDown, ChevronRight, Users } from 'lucide-react';
+import { X, Trash2, ChevronDown, ChevronRight, Users, Pencil } from 'lucide-react';
 import { useSound } from '../../context/SoundContext';
 import dbService, { DBPlayer } from '../../services/DatabaseService';
 import EnhancedTooltip from '../common/EnhancedTooltip';
+import RenamePlayerDialog from './RenamePlayerDialog';
 
 interface EditPlayerDataModalProps {
   isOpen: boolean;
   onClose: () => void;
   onPlayerDeleted: () => void; // Refresh parent state
+  onPlayerRenamed?: (oldId: string, newId: string) => void;
+  /** Players on the setup screen; renaming one to another's name is refused. */
+  setupPlayers?: readonly { name: string }[];
 }
 
 interface PlayerCardProps {
   player: DBPlayer;
   onDelete: (playerId: string) => void;
+  onRename: (playerId: string) => void;
   isDeleting: boolean;
 }
 
-const PlayerCard: React.FC<PlayerCardProps> = ({ player, onDelete, isDeleting }) => {
+const PlayerCard: React.FC<PlayerCardProps> = ({ player, onDelete, onRename, isDeleting }) => {
   const { playSound } = useSound();
   const [showJSON, setShowJSON] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -61,7 +66,16 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, onDelete, isDeleting })
           </div>
         </div>
         
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {/* Rename / merge Button */}
+          <button
+            onClick={() => { playSound('buttonClick'); onRename(player.id); }}
+            className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded text-sm flex items-center"
+          >
+            <Pencil size={16} className="mr-1" />
+            Rename
+          </button>
+
           {/* JSON Toggle Button */}
           <EnhancedTooltip text="View player data in JSON format">
             <button
@@ -73,8 +87,8 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, onDelete, isDeleting })
             </button>
           </EnhancedTooltip>
 
-          {/* Delete Button */}
-          {!showDeleteConfirm ? (
+          {/* Delete Button - only for players with no recorded matches */}
+          {player.totalGames > 0 ? null : !showDeleteConfirm ? (
             <EnhancedTooltip text="Delete this player (only available for players with no matches)">
               <button
                 onClick={handleDeleteClick}
@@ -142,7 +156,9 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, onDelete, isDeleting })
 export const EditPlayerDataModal: React.FC<EditPlayerDataModalProps> = ({ 
   isOpen, 
   onClose,
-  onPlayerDeleted
+  onPlayerDeleted,
+  onPlayerRenamed,
+  setupPlayers
 }) => {
   const { playSound } = useSound();
   const modalRef = useRef<HTMLDivElement>(null);
@@ -150,26 +166,33 @@ export const EditPlayerDataModal: React.FC<EditPlayerDataModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deletingPlayerIds, setDeletingPlayerIds] = useState<Set<string>>(new Set());
+  const [renamingPlayerId, setRenamingPlayerId] = useState<string | null>(null);
   
-  // Load zero-game players when modal opens
+  // Load all players when modal opens
   useEffect(() => {
     if (isOpen) {
-      loadZeroGamePlayers();
+      loadPlayers();
     }
   }, [isOpen]);
 
-  const loadZeroGamePlayers = async () => {
+  const loadPlayers = async () => {
     try {
       setLoading(true);
       setError(null);
-      const zeroGamePlayers = await dbService.getPlayersWithNoGames();
-      setPlayers(zeroGamePlayers);
+      const allPlayers = await dbService.getAllPlayers();
+      setPlayers([...allPlayers].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })));
     } catch (err) {
-      console.error('Error loading zero-game players:', err);
+      console.error('Error loading players:', err);
       setError('Failed to load player data');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePlayerRenamed = async (oldId: string, newId: string) => {
+    setRenamingPlayerId(null);
+    await loadPlayers();
+    onPlayerRenamed?.(oldId, newId);
   };
 
   const handlePlayerDelete = async (playerId: string) => {
@@ -214,7 +237,7 @@ export const EditPlayerDataModal: React.FC<EditPlayerDataModalProps> = ({
   // Trap focus inside modal and add ESC key handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === 'Escape' && isOpen && !renamingPlayerId) {
         handleClose();
       }
     };
@@ -228,14 +251,14 @@ export const EditPlayerDataModal: React.FC<EditPlayerDataModalProps> = ({
       document.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = '';
     };
-  }, [isOpen]);
+  }, [isOpen, renamingPlayerId]);
   
   if (!isOpen) return null;
   
   return (
     <div 
       className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
-      onClick={handleBackdropClick}
+      onClick={renamingPlayerId ? undefined : handleBackdropClick}
     >
       <div 
         ref={modalRef}
@@ -246,7 +269,7 @@ export const EditPlayerDataModal: React.FC<EditPlayerDataModalProps> = ({
           <div>
             <h2 className="text-xl font-bold">Edit Player Database</h2>
             <p className="text-gray-400 text-sm">
-              Players with no recorded matches ({players.length} found)
+              Rename or merge players ({players.length} found)
             </p>
           </div>
           <button
@@ -274,10 +297,7 @@ export const EditPlayerDataModal: React.FC<EditPlayerDataModalProps> = ({
           {!loading && players.length === 0 && !error && (
             <div className="text-center py-8">
               <Users size={48} className="mx-auto mb-4 text-gray-500" />
-              <p className="text-gray-400">No players with zero games found</p>
-              <p className="text-sm text-gray-500 mt-2">
-                All players in your database have recorded match history.
-              </p>
+              <p className="text-gray-400">No players found</p>
             </div>
           )}
 
@@ -285,8 +305,8 @@ export const EditPlayerDataModal: React.FC<EditPlayerDataModalProps> = ({
             <div className="space-y-4">
               <div className="bg-amber-900/30 border border-amber-600 p-3 rounded-lg mb-4">
                 <p className="text-amber-300 text-sm">
-                  <strong>Note:</strong> Only players with no recorded matches can be deleted. 
-                  This is a safety measure to prevent accidental data loss.
+                  <strong>Note:</strong> Rename fixes a typo in a player's name everywhere. Renaming to an
+                  existing player's name merges the two. Only players with no recorded matches can be deleted.
                 </p>
               </div>
 
@@ -295,6 +315,7 @@ export const EditPlayerDataModal: React.FC<EditPlayerDataModalProps> = ({
                   key={player.id}
                   player={player}
                   onDelete={handlePlayerDelete}
+                  onRename={setRenamingPlayerId}
                   isDeleting={deletingPlayerIds.has(player.id)}
                 />
               ))}
@@ -312,6 +333,15 @@ export const EditPlayerDataModal: React.FC<EditPlayerDataModalProps> = ({
           </button>
         </div>
       </div>
+
+      {renamingPlayerId && (
+        <RenamePlayerDialog
+          playerId={renamingPlayerId}
+          setupPlayers={setupPlayers}
+          onClose={() => setRenamingPlayerId(null)}
+          onRenamed={handlePlayerRenamed}
+        />
+      )}
     </div>
   );
 };

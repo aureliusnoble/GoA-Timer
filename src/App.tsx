@@ -8,6 +8,7 @@ import FeatureAnnouncement from './components/common/FeatureAnnouncement';
 import AudioInitializer from './components/common/AudioInitializer';
 import ResumeGamePrompt from './components/common/ResumeGamePrompt';
 import { gameStorageService } from './services/GameStorageService';
+import { playerListHasBoth, renamePlayerInPlayerList } from './shared/utils/playerRename';
 import { loadTimerDurations, saveTimerDurations, resolveTimerDurations } from './shared/utils/timerDurations';
 import migrationService from './services/MigrationService';
 import { SoundProvider, useSound } from './context/SoundContext';
@@ -1886,6 +1887,22 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
     return shuffled;
   };
 
+  // Keep the setup list, the selected player and any saved game in step with a rename/merge
+  const handlePlayerRenamed = (oldId: string, newId: string) => {
+    setLocalPlayers(prev => {
+      // Safety net: the rename dialog refuses this case, but never create a duplicate here.
+      if (playerListHasBoth(prev, oldId, newId)) {
+        console.error(`Setup list already has both "${oldId}" and "${newId}"; leaving it unchanged.`);
+        return prev;
+      }
+      return renamePlayerInPlayerList(prev, oldId, newId) ?? prev;
+    });
+    setSelectedPlayerId(prev => (prev === oldId ? newId : prev));
+    gameStorageService.renamePlayerInSavedGame(oldId, newId).catch(error => {
+      console.error('Error renaming player in saved game:', error);
+    });
+  };
+
   // NEW: Handle view matches button
   const handleViewMatches = () => {
     playSound('buttonClick');
@@ -1955,6 +1972,8 @@ const handleSavePlayerStats = (roundStats: { [playerId: number]: PlayerRoundStat
       <MatchesMenu 
         onBack={handleBackFromMatchStatistics}
         onNavigate={handleMatchStatisticsNavigate}
+        onPlayerRenamed={handlePlayerRenamed}
+        setupPlayers={localPlayers}
       />
     )}
 {currentMatchView === 'skill-over-time' && (

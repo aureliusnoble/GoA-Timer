@@ -1,5 +1,6 @@
 // src/services/GameStorageService.ts
 import { GameState, Player } from '../types';
+import { playerListHasBoth, renamePlayerInPlayerList } from '../shared/utils/playerRename';
 
 // Interface for saved game data
 interface SavedGameData {
@@ -122,6 +123,39 @@ class GameStorageService {
       console.error('Error clearing game:', error);
       throw error;
     }
+  }
+
+  /**
+   * Rename a player in the saved in-progress game, if there is one, so that a
+   * resumed game records the new name. Every other saved field is kept as-is.
+   * Resolves to true when the saved game was changed.
+   */
+  async renamePlayerInSavedGame(oldName: string, newName: string): Promise<boolean> {
+    const db = await this.initDB();
+    const tx = db.transaction(this.storeName, 'readwrite');
+    const store = tx.objectStore(this.storeName);
+    let changed = false;
+
+    const request = store.get('current');
+    request.onsuccess = () => {
+      const saved = request.result as (SavedGameData & { id: string }) | undefined;
+      if (!saved || !Array.isArray(saved.players)) return;
+      // Safety net: the rename dialog refuses this case, but never create a duplicate here.
+      if (playerListHasBoth(saved.players, oldName, newName)) {
+        console.error(`Saved game already has both "${oldName}" and "${newName}"; leaving its players unchanged.`);
+        return;
+      }
+      const players = renamePlayerInPlayerList(saved.players, oldName, newName);
+      if (!players) return;
+      changed = true;
+      store.put({ ...saved, players });
+    };
+
+    return new Promise((resolve, reject) => {
+      tx.oncomplete = () => resolve(changed);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
   }
 
   // Check if IndexedDB is supported by the browser

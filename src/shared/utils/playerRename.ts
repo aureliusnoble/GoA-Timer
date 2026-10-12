@@ -160,6 +160,20 @@ export function renamePlayerInPlayerList<T extends { name: string }>(
   return changed ? renamed : null;
 }
 
+/**
+ * True when an in-memory player list (setup screen, saved game) holds both
+ * names. Renaming one to the other would leave two entries with the same name,
+ * and recording that game would then fail on the unique [playerId, matchId]
+ * index and lose the match, so such a rename/merge must not touch the list.
+ */
+export function playerListHasBoth(
+  players: readonly { name: string }[],
+  oldId: string,
+  newId: string
+): boolean {
+  return players.some(player => player.name === oldId) && players.some(player => player.name === newId);
+}
+
 /** User-facing text for a planning error. */
 export function describeRenameError(error: RenamePlayerError): string {
   switch (error.code) {

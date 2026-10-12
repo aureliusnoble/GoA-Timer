@@ -4,6 +4,7 @@ import {
   applyRenamePlan,
   describeRenameError,
   planPlayerRename,
+  playerListHasBoth,
   renamePlayerInPlayerList,
   RenamePlan,
 } from '../../shared/utils/playerRename';
@@ -170,6 +171,17 @@ describe('renamePlayerInPlayerList', () => {
 
   it('returns null when nobody has the old name', () => {
     expect(renamePlayerInPlayerList([{ name: 'Alice' }], 'Jhon', 'John')).toBeNull();
+  });
+});
+
+describe('playerListHasBoth', () => {
+  it('is true only when the list holds both exact names', () => {
+    const list = [{ name: 'Jhon' }, { name: 'Alice' }, { name: 'John' }];
+    expect(playerListHasBoth(list, 'Jhon', 'John')).toBe(true);
+    expect(playerListHasBoth(list, 'Jhon', 'Bob')).toBe(false);
+    expect(playerListHasBoth([{ name: 'John' }], 'Jhon', 'John')).toBe(false);
+    expect(playerListHasBoth([{ name: 'Jhon' }, { name: 'john' }], 'Jhon', 'John')).toBe(false);
+    expect(playerListHasBoth([], 'Jhon', 'John')).toBe(false);
   });
 });
 
