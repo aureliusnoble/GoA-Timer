@@ -4,6 +4,7 @@ import { heroes as allHeroes } from '../../data/heroes';
 import { HeroImpactResult, Team, GameLength } from '../../types';
 import { DBMatch, DBMatchPlayer, DBPlayer } from '../DatabaseService';
 import { computeHeroImpactAsync } from '../HeroSkillService';
+import { isRealHeroId } from '../../shared/utils/heroIds';
 
 // Victory type stats for heroes
 interface VictoryTypeStats {
@@ -173,6 +174,16 @@ class GlobalStatsServiceClass {
   }
 
   /**
+   * Transform database hero relationships to client format, leaving out unknown heroes
+   * (NO_HERO_ID rows from matches saved without a hero; the global views do not filter them)
+   */
+  private transformRelationships(rels: DBHeroRelationship[] | null | undefined): HeroRelationship[] {
+    return (rels || [])
+      .filter(r => isRealHeroId(r.related_hero_id))
+      .map(r => this.transformRelationship(r));
+  }
+
+  /**
    * Transform database hero stats to client format
    */
   private transformHeroStats(dbStats: DBHeroStats): GlobalHeroStats {
@@ -189,9 +200,9 @@ class GlobalStatsServiceClass {
       complexity: hero?.complexity || 1,
       roles: hero?.roles || [],
       expansion: hero?.expansion || 'Unknown',
-      bestTeammates: (dbStats.best_teammates || []).map(r => this.transformRelationship(r)),
-      bestAgainst: (dbStats.best_against || []).map(r => this.transformRelationship(r)),
-      worstAgainst: (dbStats.worst_against || []).map(r => this.transformRelationship(r)),
+      bestTeammates: this.transformRelationships(dbStats.best_teammates),
+      bestAgainst: this.transformRelationships(dbStats.best_against),
+      worstAgainst: this.transformRelationships(dbStats.worst_against),
       victoryTypeStats: dbStats.victory_type_stats ? {
         throne: {
           wins: dbStats.victory_type_stats.throne?.wins || 0,
@@ -267,8 +278,10 @@ class GlobalStatsServiceClass {
         return { success: true, data: [] };
       }
 
-      // Transform the data
-      const transformedData = (data as DBHeroStats[]).map(s => this.transformHeroStats(s));
+      // Transform the data, leaving out unknown heroes (NO_HERO_ID)
+      const transformedData = (data as DBHeroStats[])
+        .filter(s => isRealHeroId(s.hero_id))
+        .map(s => this.transformHeroStats(s));
 
       // Update cache
       this.cache = {
@@ -387,6 +400,8 @@ class GlobalStatsServiceClass {
       const matches = Array.from(matchMap.values());
       const players = Array.from(playerMap.values());
 
+      // Rows for unknown heroes (NO_HERO_ID) stay in: the player still counts towards the
+      // team's skill, and computeHeroImpactAsync produces no result for a non-real hero id.
       const results = await computeHeroImpactAsync(matches, matchPlayers, players);
 
       this.heroSkillCache = { data: results, timestamp: Date.now() };
@@ -534,6 +549,7 @@ class GlobalStatsServiceClass {
       // Enrich with hero icons and apply client-side minGames truncation
       // (ensures data starts from Nth game even if server doesn't filter correctly)
       const enrichedHeroes = responseData.heroes
+        .filter(hero => isRealHeroId(hero.heroId)) // no line for unknown heroes (NO_HERO_ID)
         .map(hero => {
           const heroData = allHeroes.find(h => h.id === hero.heroId);
           // Filter data points to only show from minGames-th game onwards
@@ -645,6 +661,9 @@ class GlobalStatsServiceClass {
       }>();
 
       for (const row of data) {
+        // Leave out pairs involving an unknown hero (NO_HERO_ID)
+        if (!isRealHeroId(row.hero_id) || !isRealHeroId(row.related_hero_id)) continue;
+
         const key = `${row.hero_id}-${row.related_hero_id}`;
 
         if (!relationshipMap.has(key)) {
@@ -716,6 +735,9 @@ class GlobalStatsServiceClass {
       const opponents: HeroRelationship[] = [];
 
       for (const row of (data || [])) {
+        // Leave out unknown heroes (NO_HERO_ID) as teammates or opponents
+        if (!isRealHeroId(row.hero_id) || !isRealHeroId(row.related_hero_id)) continue;
+
         const hero = allHeroes.find(h => h.id === row.related_hero_id);
         const rel: HeroRelationship = {
           heroId: row.related_hero_id,
