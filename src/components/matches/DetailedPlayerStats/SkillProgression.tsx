@@ -6,67 +6,15 @@ import {
 import { TrendingUp, Info, ArrowUp, ArrowDown } from 'lucide-react';
 import { useDataSource } from '../../../hooks/useDataSource';
 import EnhancedTooltip from '../../common/EnhancedTooltip';
+import { buildProgressionSeries, ProgressionSeries } from '../../../shared/utils/skillProgression';
 
 interface SkillProgressionProps {
   playerId: string;
   playerName: string;
   dateRange?: { startDate?: Date; endDate?: Date };
   recalculateTrueSkill?: boolean;
-}
-
-interface ChartDataPoint {
-  matchNumber: number;      // Global match number
-  date: string;
-  playerRating: number;
-  p10: number;              // 10th percentile (smoothed)
-  p25: number;              // 25th percentile (smoothed)
-  p50: number;              // Median (smoothed)
-  p75: number;              // 75th percentile (smoothed)
-  p90: number;              // 90th percentile (smoothed)
-  mean: number;             // Group mean (smoothed)
-}
-
-// LOESS (Locally Weighted Scatterplot Smoothing) implementation
-function loess(data: number[], bandwidth: number = 0.4): number[] {
-  const n = data.length;
-  if (n === 0) return [];
-  if (n === 1) return [...data];
-
-  const result: number[] = [];
-  const h = Math.max(Math.floor(n * bandwidth), 2);
-
-  for (let i = 0; i < n; i++) {
-    let sumWeights = 0;
-    let sumWeightedY = 0;
-
-    for (let j = 0; j < n; j++) {
-      const distance = Math.abs(i - j) / h;
-      if (distance < 1) {
-        // Tricube weight function: (1 - |d|^3)^3
-        const weight = Math.pow(1 - Math.pow(distance, 3), 3);
-        sumWeights += weight;
-        sumWeightedY += weight * data[j];
-      }
-    }
-
-    result.push(sumWeights > 0 ? sumWeightedY / sumWeights : data[i]);
-  }
-
-  return result;
-}
-
-// Calculate percentile from sorted array
-function percentile(sortedArr: number[], p: number): number {
-  if (sortedArr.length === 0) return 0;
-  if (sortedArr.length === 1) return sortedArr[0];
-
-  const index = (p / 100) * (sortedArr.length - 1);
-  const lower = Math.floor(index);
-  const upper = Math.ceil(index);
-  const fraction = index - lower;
-
-  if (lower === upper) return sortedArr[lower];
-  return sortedArr[lower] * (1 - fraction) + sortedArr[upper] * fraction;
+  gameLengthFilter?: 'all' | 'quick' | 'long';
+  playerCountFilter?: number | null;
 }
 
 // Helper functions for metric categorization
@@ -107,15 +55,19 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({
   playerId,
   playerName,
   dateRange,
-  recalculateTrueSkill = false
+  recalculateTrueSkill = false,
+  gameLengthFilter = 'all',
+  playerCountFilter = null
 }) => {
   const [loading, setLoading] = useState(true);
-  const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
+  const [series, setSeries] = useState<ProgressionSeries | null>(null);
   const [allCurrentRatings, setAllCurrentRatings] = useState<number[]>([]);
+  const [journeyRecalculated, setJourneyRecalculated] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const chartData = useMemo(() => series?.points ?? [], [series]);
 
   // Use view-mode-aware data source
-  const { isViewModeLoading, getHistoricalRatings, getHistoricalRatingsForPeriod, getCurrentTrueSkillRatings } = useDataSource();
+  const { isViewModeLoading, getPlayerRatingJourney } = useDataSource();
 
   // Detect mobile viewport
   useEffect(() => {
@@ -134,87 +86,18 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({
       try {
         setLoading(true);
 
-        // Use period-filtered ratings if dateRange or recalculateTrueSkill is set
-        let historicalRatings;
-        if (dateRange?.startDate || dateRange?.endDate || recalculateTrueSkill) {
-          historicalRatings = await getHistoricalRatingsForPeriod(
-            dateRange?.startDate,
-            dateRange?.endDate,
-            recalculateTrueSkill
-          );
-        } else {
-          historicalRatings = await getHistoricalRatings();
-        }
-
-        const currentRatings = await getCurrentTrueSkillRatings();
-
-        setAllCurrentRatings(Object.values(currentRatings));
-
-        // Step 1: Collect raw data for matches where player participated
-        const rawData: { matchNumber: number; date: string; playerRating: number; allRatings: number[] }[] = [];
-
-        for (const snapshot of historicalRatings) {
-          // Only include matches where this player participated
-          if (snapshot.participants.includes(playerId) && snapshot.matchNumber > 0) {
-            const allRatings = Object.values(snapshot.ratings).sort((a, b) => a - b);
-            rawData.push({
-              matchNumber: snapshot.matchNumber,
-              date: snapshot.date,
-              playerRating: snapshot.ratings[playerId],
-              allRatings
-            });
-          }
-        }
-
-        if (rawData.length === 0) {
-          setChartData([]);
-          setLoading(false);
-          return;
-        }
-
-        // Add match 0 (starting point at 1200) at the beginning
-        // Use the first match's date for the starting point
-        const firstMatchDate = rawData[0].date;
-        const startingAllRatings = rawData[0].allRatings.map(() => 1200); // Everyone starts at 1200
-        rawData.unshift({
-          matchNumber: 0,
-          date: firstMatchDate,
-          playerRating: 1200,
-          allRatings: startingAllRatings
+        // Same date-ordered replay and filters as the header rating and the Player Stats list
+        const journey = await getPlayerRatingJourney({
+          startDate: dateRange?.startDate,
+          endDate: dateRange?.endDate,
+          gameLengthFilter,
+          playerCountFilter,
+          recalculate: recalculateTrueSkill
         });
 
-        // Step 2: Calculate raw percentiles and mean for each data point
-        const rawP10 = rawData.map(d => percentile(d.allRatings, 10));
-        const rawP25 = rawData.map(d => percentile(d.allRatings, 25));
-        const rawP50 = rawData.map(d => percentile(d.allRatings, 50));
-        const rawP75 = rawData.map(d => percentile(d.allRatings, 75));
-        const rawP90 = rawData.map(d => percentile(d.allRatings, 90));
-        const rawMean = rawData.map(d =>
-          d.allRatings.reduce((sum, r) => sum + r, 0) / d.allRatings.length
-        );
-
-        // Step 3: Apply LOESS smoothing to percentile series and mean
-        const smoothP10 = loess(rawP10);
-        const smoothP25 = loess(rawP25);
-        const smoothP50 = loess(rawP50);
-        const smoothP75 = loess(rawP75);
-        const smoothP90 = loess(rawP90);
-        const smoothMean = loess(rawMean);
-
-        // Step 4: Build final chart data
-        const processedData: ChartDataPoint[] = rawData.map((d, i) => ({
-          matchNumber: d.matchNumber,
-          date: d.date,
-          playerRating: d.playerRating,
-          p10: Math.round(smoothP10[i]),
-          p25: Math.round(smoothP25[i]),
-          p50: Math.round(smoothP50[i]),
-          p75: Math.round(smoothP75[i]),
-          p90: Math.round(smoothP90[i]),
-          mean: Math.round(smoothMean[i])
-        }));
-
-        setChartData(processedData);
+        setAllCurrentRatings(Object.values(journey.finalRatings));
+        setJourneyRecalculated(journey.isRecalculated);
+        setSeries(buildProgressionSeries(journey, playerId));
       } catch (error) {
         console.error('Error loading skill progression:', error);
       } finally {
@@ -225,19 +108,20 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({
     if (!isViewModeLoading) {
       loadChartData();
     }
-  }, [playerId, isViewModeLoading, getHistoricalRatings, getHistoricalRatingsForPeriod, getCurrentTrueSkillRatings, dateRange?.startDate, dateRange?.endDate, recalculateTrueSkill]);
+  }, [playerId, isViewModeLoading, getPlayerRatingJourney, dateRange?.startDate, dateRange?.endDate, recalculateTrueSkill, gameLengthFilter, playerCountFilter]);
 
   // Calculate progression statistics
   const progressionStats = useMemo(() => {
-    if (chartData.length === 0) return null;
+    if (!series || chartData.length === 0) return null;
 
-    const startingRating = 1200; // Everyone starts at 1200
+    // Start = default rating for a fresh replay, or the real rating at the period start
+    const startingRating = chartData[0].playerRating;
     const lastRating = chartData[chartData.length - 1]?.playerRating || 0;
     const lastMedian = chartData[chartData.length - 1]?.p50 || 0;
 
-    // Calculate change from 1200 starting point
+    // Calculate change from the starting point
     const playerChange = lastRating - startingRating;
-    const groupChange = lastMedian - startingRating;
+    const groupChange = lastMedian - Math.round(series.startMedian);
     const relativeToGroup = playerChange - groupChange;
 
     const currentDifference = lastRating - lastMedian;
@@ -284,9 +168,10 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({
       trendCategory,
       volatilityInfo,
       recentSlope,
-      lastMedian
+      lastMedian,
+      startsAtPeriodStart: series.startsAtPeriodStart
     };
-  }, [chartData, allCurrentRatings]);
+  }, [series, chartData, allCurrentRatings]);
 
   // Calculate chart domains
   const yDomain = useMemo((): [number, number] => {
@@ -304,6 +189,14 @@ const SkillProgression: React.FC<SkillProgressionProps> = ({
     const matchNumbers = chartData.map(d => d.matchNumber);
     return [Math.min(...matchNumbers) - 0.5, Math.max(...matchNumbers) + 0.5];
   }, [chartData]);
+
+  // With game-length/player-count filters but no recalculation, the last shown match is not
+  // necessarily the player's latest match, so its rating may differ from the header rating.
+  const endRatingLabel = journeyRecalculated
+    ? 'Current Rating (recalculated)'
+    : (gameLengthFilter !== 'all' || playerCountFilter != null)
+      ? 'Rating after last shown match'
+      : 'Current Rating';
 
   if (loading || isViewModeLoading) {
     return (
@@ -610,11 +503,13 @@ Negative = improved slower than median`}
             <h4 className="font-semibold mb-2 text-gray-300">Rating Journey</h4>
             <div className="space-y-2">
               <div className="flex justify-between">
-                <span className="text-sm text-gray-400">Starting Rating</span>
+                <span className="text-sm text-gray-400">
+                  {progressionStats.startsAtPeriodStart ? 'Rating at period start' : 'Starting Rating'}
+                </span>
                 <span className="font-medium">{progressionStats.startRating}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-gray-400">Current Rating</span>
+                <span className="text-sm text-gray-400">{endRatingLabel}</span>
                 <span className="font-medium">{progressionStats.endRating}</span>
               </div>
               <div className="flex justify-between">

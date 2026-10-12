@@ -238,3 +238,60 @@ export function isOutOfOrderMatch(
   const newTime = new Date(newMatchDate).getTime();
   return existingMatches.some(m => new Date(m.date).getTime() >= newTime);
 }
+
+export interface RatingJourney {
+  /**
+   * Ratings just before the first shown match (participants is always []). For a fresh replay
+   * (no filters, or "recalculate for period") this is the initial snapshot: everyone at the
+   * default rating, matchNumber 0. With a start date and no recalculation it is the real
+   * all-time state after the last match before the start date.
+   */
+  baseline: RatingSnapshot;
+  /** One snapshot per shown match, oldest first. */
+  snapshots: RatingSnapshot[];
+  /** Final rating per player under the same options (equals PlayerRatingTable.ratings). */
+  finalRatings: { [playerId: string]: number };
+  isRecalculated: boolean;
+}
+
+export function buildRatingJourney(
+  players: readonly ReplayPlayer[],
+  matches: readonly ReplayMatch[],
+  matchPlayers: readonly ReplayMatchPlayer[],
+  options: RatingQueryOptions = {}
+): RatingJourney {
+  const filtersActive = hasActiveMatchFilters(options);
+  const isRecalculated = Boolean(options.recalculate) && filtersActive;
+  const filteredMatches = filtersActive ? filterMatches([...matches], options) : [...matches];
+  const playerIds = players.map(p => p.id);
+
+  if (isRecalculated) {
+    const { snapshots, displayRatings } = replayRatings(filteredMatches, matchPlayers, playerIds, {
+      includeSnapshots: true,
+    });
+    return { baseline: snapshots[0], snapshots: snapshots.slice(1), finalRatings: displayRatings, isRecalculated };
+  }
+
+  const { snapshots, displayRatings } = replayRatings(matches, matchPlayers, playerIds, { includeSnapshots: true });
+  const [initial, ...matchSnapshots] = snapshots;
+  const shownIds = new Set(filteredMatches.map(m => m.id));
+  const shown = matchSnapshots.filter(s => s.matchId !== undefined && shownIds.has(s.matchId));
+
+  let baseline = initial;
+  if (options.startDate) {
+    const startTime = options.startDate.getTime();
+    const matchTimes = new Map(matches.map(m => [m.id, new Date(m.date).getTime()]));
+    for (const snapshot of matchSnapshots) {
+      const time = snapshot.matchId !== undefined ? matchTimes.get(snapshot.matchId) : undefined;
+      if (time === undefined || time >= startTime) break;
+      baseline = snapshot;
+    }
+  }
+
+  return {
+    baseline: { ...baseline, participants: [] },
+    snapshots: shown,
+    finalRatings: displayRatings,
+    isRecalculated,
+  };
+}

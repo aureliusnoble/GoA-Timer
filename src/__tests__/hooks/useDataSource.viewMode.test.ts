@@ -153,3 +153,15 @@ describe('rating replay on local (IndexedDB) data', () => {
     expect(Object.keys(ratings).sort()).toEqual(['Alice', 'Bob', 'Ghost']);
   });
 });
+
+describe('getPlayerRatingJourney in view-only mode', () => {
+  it('builds the journey from the shared data with the given filters', async () => {
+    const { result } = renderHook(() => useDataSource());
+    const journey = await result.current.getPlayerRatingJourney({ startDate: new Date('2026-01-08T00:00:00.000Z') });
+    // m2 (5 Jan) is before the start date, so the baseline is the state after m2.
+    expect(journey.baseline.matchNumber).toBe(1);
+    expect(journey.snapshots.map(s => s.matchId)).toEqual(['m1']);
+    const table = await result.current.getPlayerRatingTable({ startDate: new Date('2026-01-08T00:00:00.000Z') });
+    expect(journey.finalRatings).toEqual(table.ratings);
+  });
+});

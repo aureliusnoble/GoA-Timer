@@ -10,9 +10,11 @@ import { isRealHeroId, countHeroesPlayed } from '../shared/utils/heroIds';
 import { summarizePlayerStats } from '../shared/utils/trackedStats';
 import {
   computePlayerRatingTable,
+  buildRatingJourney,
   ratingQueryKey,
   DEFAULT_DISPLAY_RATING,
   PlayerRatingTable,
+  RatingJourney,
   RatingQueryOptions,
 } from '../shared/utils/ratingReplay';
 import { cloudMatchPlayerRowToLocal, cloudMatchRowToLocal, cloudPlayerRowToLocal } from '../shared/utils/cloudMapping';
@@ -27,7 +29,7 @@ let localImpactCache: {
 
 export type { MatchFilterOptions } from '../shared/utils/matchFilters';
 export { filterMatches } from '../shared/utils/matchFilters';
-export type { PlayerRatingTable, RatingQueryOptions } from '../shared/utils/ratingReplay';
+export type { PlayerRatingTable, RatingJourney, RatingQueryOptions } from '../shared/utils/ratingReplay';
 
 // TrueSkill constants (must match DatabaseService)
 const TRUESKILL_BETA = 25/6;
@@ -715,6 +717,26 @@ export function useDataSource() {
     return table;
   }, [isViewMode, localMatchPlayers, ratingTableCache, loadReplayData]);
 
+  const ratingJourneyCache = useMemo(
+    () => new Map<string, RatingJourney>(),
+    [localPlayers, localMatches, localMatchPlayers]
+  );
+
+  // Rating snapshots for the Skill Progression chart under the given filters. The journey's
+  // final ratings equal getPlayerRatingTable(options).ratings. See buildRatingJourney.
+  const getPlayerRatingJourney = useCallback(async (options: RatingQueryOptions = {}): Promise<RatingJourney> => {
+    const cacheable = isViewMode && !!localMatchPlayers;
+    const key = ratingQueryKey(options);
+    if (cacheable) {
+      const cached = ratingJourneyCache.get(key);
+      if (cached) return cached;
+    }
+    const { players, matches, matchPlayers } = await loadReplayData();
+    const journey = buildRatingJourney(players, matches, matchPlayers, options);
+    if (cacheable) ratingJourneyCache.set(key, journey);
+    return journey;
+  }, [isViewMode, localMatchPlayers, ratingJourneyCache, loadReplayData]);
+
   // Get current TrueSkill ratings (view mode aware): all-time date-ordered replay
   const getCurrentTrueSkillRatings = useCallback(async (): Promise<{ [playerId: string]: number }> => {
     return (await getPlayerRatingTable()).ratings;
@@ -1397,6 +1419,7 @@ export function useDataSource() {
     getHistoricalRatingsForPeriod,
     getCurrentTrueSkillRatings,
     getPlayerRatingTable,
+    getPlayerRatingJourney,
     getPlayerDisplayRating,
     getFilteredPlayerStats,
     getHeroWinRateOverTime,

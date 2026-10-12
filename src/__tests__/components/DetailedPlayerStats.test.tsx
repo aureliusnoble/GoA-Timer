@@ -150,3 +150,20 @@ describe('DetailedPlayerStats rating header', () => {
     expect(await screen.findByText('Unranked')).toBeTruthy();
   });
 });
+
+describe('DetailedPlayerStats skill progression filters', () => {
+  it('passes the game-length and player-count filters to SkillProgression', async () => {
+    mocks.state.playerStatsFilters = {
+      recencyMonths: null,
+      minGamesRelationship: 3,
+      recalculateTrueSkill: false,
+      dateRange: {},
+      gameLengthFilter: 'quick',
+      playerCountFilter: 4,
+    };
+    render(<DetailedPlayerStats playerId="Alice" onBack={() => {}} />);
+
+    const props = await propsOf('skill-progression');
+    expect(props).toMatchObject({ gameLengthFilter: 'quick', playerCountFilter: 4, recalculateTrueSkill: false });
+  });
+});

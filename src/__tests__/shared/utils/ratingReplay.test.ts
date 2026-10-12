@@ -15,6 +15,7 @@ import {
   ReplayMatch,
   ReplayMatchPlayer,
   isOutOfOrderMatch,
+  buildRatingJourney,
 } from '../../../shared/utils/ratingReplay';
 import { GameLength } from '../../../types';
 
@@ -192,5 +193,54 @@ describe('isOutOfOrderMatch', () => {
 
   it('accepts ISO strings for stored dates', () => {
     expect(isOutOfOrderMatch(new Date(2026, 0, 7), [{ date: new Date(2026, 0, 8).toISOString() }])).toBe(true);
+  });
+});
+
+describe('buildRatingJourney', () => {
+  const all = ['Alice', 'Bob'].map(id => ({ id, totalGames: 3 }));
+
+  it('starts from the default ratings when no filter is active', () => {
+    const journey = buildRatingJourney(all, matches, matchPlayers, {});
+    expect(journey.baseline.matchNumber).toBe(0);
+    expect(journey.baseline.ratings).toEqual({ Alice: 1200, Bob: 1200 });
+    expect(journey.snapshots.map(s => s.matchId)).toEqual(['m2', 'm1', 'm3']);
+    expect(journey.finalRatings).toEqual(computePlayerRatingTable(all, matches, matchPlayers, {}).ratings);
+    expect(journey.isRecalculated).toBe(false);
+  });
+
+  it('starts from the real rating at the period start under a date filter without recalculation', () => {
+    const journey = buildRatingJourney(all, matches, matchPlayers, { startDate: new Date(2026, 0, 8) });
+    const full = replayRatings(matches, matchPlayers, ['Alice', 'Bob'], { includeSnapshots: true }).snapshots;
+    // m2 (5 Jan) is before the start; m1 and m3 are shown.
+    expect(journey.baseline.matchNumber).toBe(1);
+    expect(journey.baseline.ratings).toEqual(full[1].ratings);
+    expect(journey.baseline.participants).toEqual([]);
+    expect(journey.snapshots.map(s => s.matchId)).toEqual(['m1', 'm3']);
+    expect(journey.snapshots.map(s => s.matchNumber)).toEqual([2, 3]);
+    expect(journey.isRecalculated).toBe(false);
+  });
+
+  it('applies game-length and player-count filters to the shown matches', () => {
+    const quick = buildRatingJourney(all, matches, matchPlayers, { gameLengthFilter: 'quick' });
+    expect(quick.snapshots.map(s => s.matchId)).toEqual(['m2', 'm1']);
+    const sixPlayers = buildRatingJourney(all, matches, matchPlayers, { playerCountFilter: 6 });
+    expect(sixPlayers.snapshots).toEqual([]);
+  });
+
+  it('replays only the filtered matches from default ratings when recalculating', () => {
+    const journey = buildRatingJourney(all, matches, matchPlayers, {
+      startDate: new Date(2026, 0, 8),
+      recalculate: true,
+    });
+    expect(journey.isRecalculated).toBe(true);
+    expect(journey.baseline.matchNumber).toBe(0);
+    expect(journey.baseline.ratings).toEqual({ Alice: 1200, Bob: 1200 });
+    expect(journey.snapshots.map(s => s.matchNumber)).toEqual([1, 2]);
+    const table = computePlayerRatingTable(all, matches, matchPlayers, {
+      startDate: new Date(2026, 0, 8),
+      recalculate: true,
+    });
+    expect(journey.finalRatings).toEqual(table.ratings);
+    expect(journey.snapshots[journey.snapshots.length - 1].ratings.Alice).toBe(table.ratings.Alice);
   });
 });

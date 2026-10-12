@@ -375,6 +375,8 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
         playerName={player.name}
         dateRange={dateRange.startDate ? { startDate: dateRange.startDate, endDate: dateRange.endDate ?? undefined } : undefined}
         recalculateTrueSkill={recalculateTrueSkill}
+        gameLengthFilter={gameLengthFilter}
+        playerCountFilter={playerCountFilter}
       />
 
       {/* Relationship Statistics (Nemesis/BFF) */}
