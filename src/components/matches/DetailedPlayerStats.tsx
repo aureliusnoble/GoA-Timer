@@ -11,6 +11,7 @@ import RelationshipStats from './DetailedPlayerStats/RelationshipStats';
 import HeroPerformance from './DetailedPlayerStats/HeroPerformance';
 import MatchHistory from './DetailedPlayerStats/MatchHistory';
 import { countHeroesPlayed } from '../../shared/utils/heroIds';
+import { summarizePlayerStats, PlayerStatSummary } from '../../shared/utils/trackedStats';
 
 interface DetailedPlayerStatsProps {
   playerId: string;
@@ -23,23 +24,8 @@ interface PlayerDetails {
   matches: any[];
   currentRating: number;
   rank: number;
-  // Enhanced combat statistics
-  combatStats: {
-    kills: number;
-    deaths: number;
-    assists: number;
-    kdRatio: number;
-    averageKills: number;
-    averageDeaths: number;
-    averageAssists: number;
-    gamesWithCombatData: number;
-    gamesWithGoldData: number;
-    gamesWithMinionData: number;
-    averageGold: number;
-    averageMinionKills: number;
-    averageLevel: number;
-    hasCombatStats: boolean;
-  };
+  // Per-stat totals, tracked-game counts and averages
+  statSummary: PlayerStatSummary;
 }
 
 const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
@@ -149,29 +135,8 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
         if (validMatchIds) {
           matches = matches.filter(mp => validMatchIds!.has(mp.matchId));
         }
-        const kills = matches.reduce((sum: number, match: any) => sum + (match.kills ?? 0), 0);
-        const deaths = matches.reduce((sum: number, match: any) => sum + (match.deaths ?? 0), 0);
-        const assists = matches.reduce((sum: number, match: any) => sum + (match.assists ?? 0), 0);
-        const totalGold = matches.reduce((sum: number, match: any) => sum + (match.goldEarned ?? 0), 0);
-        const totalMinionKills = matches.reduce((sum: number, match: any) => sum + (match.minionKills ?? 0), 0);
-        const totalLevels = matches.reduce((sum: number, match: any) => sum + (match.level ?? 0), 0);
-        
-        // Calculate accurate averages using proper denominators
-        const gamesWithCombatData = matches.filter(match => 
-          match.kills !== undefined || match.deaths !== undefined || match.assists !== undefined
-        ).length;
-        const gamesWithGoldData = matches.filter(match => match.goldEarned !== undefined).length;
-        const gamesWithMinionData = matches.filter(match => match.minionKills !== undefined).length;
-        const gamesWithLevelData = matches.filter(match => match.level !== undefined).length;
-        
-        const kdRatio = deaths === 0 ? kills : kills / deaths;
-        const averageKills = gamesWithCombatData > 0 ? kills / gamesWithCombatData : 0;
-        const averageDeaths = gamesWithCombatData > 0 ? deaths / gamesWithCombatData : 0;
-        const averageAssists = gamesWithCombatData > 0 ? assists / gamesWithCombatData : 0;
-        const averageGold = gamesWithGoldData > 0 ? Math.round(totalGold / gamesWithGoldData) : 0;
-        const averageMinionKills = gamesWithMinionData > 0 ? totalMinionKills / gamesWithMinionData : 0;
-        const averageLevel = gamesWithLevelData > 0 ? totalLevels / gamesWithLevelData : 0;
-        const hasCombatStats = kills > 0 || deaths > 0 || assists > 0 || totalGold > 0;
+        // Per-stat averages: undefined/null = not tracked, 0 = tracked zero
+        const statSummary = summarizePlayerStats(matches);
 
         // Recalculate favorite heroes and roles from filtered matches
         // (countHeroesPlayed counts Arien, id 0, and skips matches without a hero)
@@ -205,22 +170,7 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
           matches: matches, // Use filtered matches
           currentRating: currentRatings[playerId] || 0,
           rank,
-          combatStats: {
-            kills,
-            deaths,
-            assists,
-            kdRatio: parseFloat(kdRatio.toFixed(2)),
-            averageKills,
-            averageDeaths,
-            averageAssists,
-            gamesWithCombatData,
-            gamesWithGoldData,
-            gamesWithMinionData,
-            averageGold,
-            averageMinionKills,
-            averageLevel,
-            hasCombatStats
-          }
+          statSummary
         });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load player details');
@@ -292,7 +242,7 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
     );
   }
 
-  const { player, stats, currentRating, rank, combatStats } = playerDetails;
+  const { player, stats, currentRating, rank, statSummary } = playerDetails;
 
   // Additional null check for TypeScript
   if (!player) {
@@ -411,21 +361,8 @@ const DetailedPlayerStats: React.FC<DetailedPlayerStatsProps> = ({
 
       {/* Detailed Combat Statistics */}
       <DetailedStats
-        kills={combatStats.kills}
-        deaths={combatStats.deaths}
-        assists={combatStats.assists}
-        kdRatio={combatStats.kdRatio}
-        averageKills={combatStats.averageKills}
-        averageDeaths={combatStats.averageDeaths}
-        averageAssists={combatStats.averageAssists}
-        gamesWithCombatData={combatStats.gamesWithCombatData}
-        gamesWithGoldData={combatStats.gamesWithGoldData}
-        gamesWithMinionData={combatStats.gamesWithMinionData}
-        averageGold={combatStats.averageGold}
-        averageMinionKills={combatStats.averageMinionKills}
-        averageLevel={combatStats.averageLevel}
+        summary={statSummary}
         totalGames={playerDetails.matches.length}
-        hasCombatStats={combatStats.hasCombatStats}
       />
 
       {/* TrueSkill Progression Chart */}

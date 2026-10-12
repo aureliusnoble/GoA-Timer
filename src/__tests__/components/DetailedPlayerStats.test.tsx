@@ -100,3 +100,17 @@ describe('DetailedPlayerStats heroes', () => {
     expect(screen.getByText('Heroes Played').previousElementSibling?.textContent).toBe('2');
   });
 });
+
+describe('DetailedPlayerStats combat averages', () => {
+  it('averages each stat over the games where it was tracked (null = untracked, 0 = tracked)', async () => {
+    mocks.state.matchesPlayed = [
+      matchRow('m1', 0, 'Arien', { kills: 3, deaths: 0, goldEarned: 10 }),
+      matchRow('m2', 1, 'Brogan', { kills: 0, deaths: 2, goldEarned: null }),
+      matchRow('m3', 2, 'Tigerclaw', { kills: null, deaths: null }),
+    ];
+    render(<DetailedPlayerStats playerId="Alice" onBack={() => {}} />);
+
+    expect(await screen.findByText('1.5 (2 games)')).toBeTruthy(); // kills: 3 / 2 tracked games
+    expect(screen.getByText('per game · 1 of 3 games')).toBeTruthy(); // gold tracked once
+  });
+});

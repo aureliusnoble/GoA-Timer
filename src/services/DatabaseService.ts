@@ -5,6 +5,7 @@ import NormalDistribution from 'normal-distribution';
 import { CloudSyncService } from './supabase/CloudSyncService';
 import { filterMatches } from '../shared/utils/matchFilters';
 import { isRealHeroId, countHeroesPlayed } from '../shared/utils/heroIds';
+import { summarizePlayerStats } from '../shared/utils/trackedStats';
 import { HERO_LEVEL_MAX, HERO_LEVEL_MIN } from '../shared/constants/game';
 import { isTrackedStat, isValidHeroLevel } from '../shared/utils/statValues';
 import { fillMissingFields } from '../shared/utils/mergeFill';
@@ -870,12 +871,6 @@ class DatabaseService {
         // Calculate wins and losses
         let wins = 0;
         let losses = 0;
-        let kills = 0;
-        let deaths = 0;
-        let assists = 0;
-        let totalGold = 0;
-        let totalMinionKills = 0;
-        let hasCombatStats = false;
         let lastPlayedDate: Date | null = null;
 
         const roleCount = new Map<string, number>();
@@ -897,24 +892,6 @@ class DatabaseService {
             losses++;
           }
 
-          // Combat stats
-          if (mp.kills !== undefined) {
-            kills += mp.kills;
-            hasCombatStats = true;
-          }
-          if (mp.deaths !== undefined) {
-            deaths += mp.deaths;
-          }
-          if (mp.assists !== undefined) {
-            assists += mp.assists;
-          }
-          if (mp.goldEarned !== undefined) {
-            totalGold += mp.goldEarned;
-          }
-          if (mp.minionKills !== undefined) {
-            totalMinionKills += mp.minionKills;
-          }
-
           // Favorite roles
           if (mp.heroRoles) {
             for (const role of mp.heroRoles) {
@@ -925,7 +902,8 @@ class DatabaseService {
 
         const gamesPlayed = playerMatches.length;
         const winRate = gamesPlayed > 0 ? (wins / gamesPlayed) * 100 : 0;
-        const kdRatio = deaths > 0 ? kills / deaths : kills;
+        // Per-stat totals and averages over tracked games only (undefined/null = not tracked)
+        const statSummary = summarizePlayerStats(playerMatches);
 
         // Sort favorite heroes and roles
         const favoriteHeroes = countHeroesPlayed(playerMatches).slice(0, 3);
@@ -942,15 +920,15 @@ class DatabaseService {
           wins,
           losses,
           winRate,
-          kills,
-          deaths,
-          assists,
-          kdRatio,
-          totalGold,
-          totalMinionKills,
-          averageGold: gamesPlayed > 0 ? totalGold / gamesPlayed : 0,
-          averageMinionKills: gamesPlayed > 0 ? totalMinionKills / gamesPlayed : 0,
-          hasCombatStats,
+          kills: statSummary.kills.total,
+          deaths: statSummary.deaths.total,
+          assists: statSummary.assists.total,
+          kdRatio: statSummary.kdRatio,
+          totalGold: statSummary.goldEarned.total,
+          totalMinionKills: statSummary.minionKills.total,
+          averageGold: Math.round(statSummary.goldEarned.average),
+          averageMinionKills: Math.round(statSummary.minionKills.average),
+          hasCombatStats: statSummary.hasCombatStats,
           favoriteHeroes,
           favoriteRoles,
           displayRating: trueSkillRatings[player.id] || 1200,

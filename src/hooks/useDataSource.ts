@@ -7,6 +7,7 @@ import { heroes as allHeroesData } from '../data/heroes';
 import { rating, rate, ordinal } from 'openskill';
 import { filterMatches, MatchFilterOptions } from '../shared/utils/matchFilters';
 import { isRealHeroId, countHeroesPlayed } from '../shared/utils/heroIds';
+import { summarizePlayerStats } from '../shared/utils/trackedStats';
 import { cloudMatchPlayerRowToLocal, cloudMatchRowToLocal, cloudPlayerRowToLocal } from '../shared/utils/cloudMapping';
 import { formatLocalDate } from '../shared/utils/localDate';
 
@@ -914,6 +915,8 @@ export function useDataSource() {
     totalMinionKills: number;
     averageGold: number;
     averageMinionKills: number;
+    gamesWithGoldData: number;
+    gamesWithMinionData: number;
     hasCombatStats: boolean;
     favoriteHeroes: { heroId: number; heroName: string; count: number }[];
     favoriteRoles: { role: string; count: number }[];
@@ -1334,12 +1337,6 @@ export function useDataSource() {
       // Calculate wins and losses
       let wins = 0;
       let losses = 0;
-      let kills = 0;
-      let deaths = 0;
-      let assists = 0;
-      let totalGold = 0;
-      let totalMinionKills = 0;
-      let hasCombatStats = false;
       let lastPlayedDate: Date | null = null;
 
       const roleCount = new Map<string, number>();
@@ -1361,24 +1358,6 @@ export function useDataSource() {
           losses++;
         }
 
-        // Combat stats
-        if (mp.kills !== undefined) {
-          kills += mp.kills;
-          hasCombatStats = true;
-        }
-        if (mp.deaths !== undefined) {
-          deaths += mp.deaths;
-        }
-        if (mp.assists !== undefined) {
-          assists += mp.assists;
-        }
-        if (mp.goldEarned !== undefined) {
-          totalGold += mp.goldEarned;
-        }
-        if (mp.minionKills !== undefined) {
-          totalMinionKills += mp.minionKills;
-        }
-
         // Favorite roles
         if (mp.heroRoles) {
           for (const role of mp.heroRoles) {
@@ -1389,7 +1368,8 @@ export function useDataSource() {
 
       const gamesPlayed = playerMatches.length;
       const winRate = gamesPlayed > 0 ? (wins / gamesPlayed) * 100 : 0;
-      const kdRatio = deaths > 0 ? kills / deaths : kills;
+      // Per-stat totals and averages over tracked games only (undefined/null = not tracked)
+      const statSummary = summarizePlayerStats(playerMatches);
 
       // Sort favorite heroes and roles
       const favoriteHeroes = countHeroesPlayed(playerMatches).slice(0, 3);
@@ -1406,15 +1386,17 @@ export function useDataSource() {
         wins,
         losses,
         winRate,
-        kills,
-        deaths,
-        assists,
-        kdRatio,
-        totalGold,
-        totalMinionKills,
-        averageGold: gamesPlayed > 0 ? totalGold / gamesPlayed : 0,
-        averageMinionKills: gamesPlayed > 0 ? totalMinionKills / gamesPlayed : 0,
-        hasCombatStats,
+        kills: statSummary.kills.total,
+        deaths: statSummary.deaths.total,
+        assists: statSummary.assists.total,
+        kdRatio: statSummary.kdRatio,
+        totalGold: statSummary.goldEarned.total,
+        totalMinionKills: statSummary.minionKills.total,
+        averageGold: Math.round(statSummary.goldEarned.average),
+        averageMinionKills: Math.round(statSummary.minionKills.average),
+        gamesWithGoldData: statSummary.goldEarned.games,
+        gamesWithMinionData: statSummary.minionKills.games,
+        hasCombatStats: statSummary.hasCombatStats,
         favoriteHeroes,
         favoriteRoles,
         displayRating: trueSkillRatings[player.id] || 1200,

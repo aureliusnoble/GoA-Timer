@@ -1,44 +1,19 @@
 // src/components/matches/DetailedPlayerStats/DetailedStats.tsx
 import React from 'react';
 import { Swords, TrendingUp, Coins, Target, Users } from 'lucide-react';
+import { PlayerStatSummary, formatTrackedGames } from '../../../shared/utils/trackedStats';
 
 interface DetailedStatsProps {
-  kills: number;
-  deaths: number;
-  assists: number;
-  kdRatio: number;
-  averageKills: number;
-  averageDeaths: number;
-  averageAssists: number;
-  gamesWithCombatData: number;
-  gamesWithGoldData: number;
-  gamesWithMinionData: number;
-  averageGold: number;
-  averageMinionKills: number;
-  averageLevel: number;
+  /** Per-stat totals, tracked-game counts and averages (see summarizePlayerStats). */
+  summary: PlayerStatSummary;
+  /** Number of matches in the current view (the denominator shown next to tracked counts). */
   totalGames: number;
-  hasCombatStats: boolean;
 }
 
-const DetailedStats: React.FC<DetailedStatsProps> = ({
-  kills,
-  deaths,
-  assists,
-  kdRatio,
-  averageKills,
-  averageDeaths,
-  averageAssists,
-  gamesWithCombatData,
-  gamesWithGoldData,
-  gamesWithMinionData,
-  averageGold,
-  averageMinionKills,
-  averageLevel,
-  totalGames,
-  hasCombatStats
-}) => {
-  // All calculations now done in parent component with proper denominators
-  if (!hasCombatStats) {
+const DetailedStats: React.FC<DetailedStatsProps> = ({ summary, totalGames }) => {
+  const { kills, deaths, assists, minionKills, goldEarned, level, kdRatio } = summary;
+
+  if (!summary.hasAnyTrackedStats) {
     return (
       <div className="bg-gray-700 rounded-lg p-6 mb-6">
         <h3 className="text-xl font-bold mb-4 flex items-center">
@@ -56,13 +31,16 @@ const DetailedStats: React.FC<DetailedStatsProps> = ({
     );
   }
 
+  const kdaGames = Math.max(kills.games, deaths.games, assists.games);
+  const tracked = (games: number) => formatTrackedGames(games, totalGames);
+
   return (
     <div className="bg-gray-700 rounded-lg p-6 mb-6">
       <h3 className="text-xl font-bold mb-4 flex items-center">
         <Swords size={20} className="mr-2 text-blue-400" />
         Detailed Combat Statistics
       </h3>
-      
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         {/* Total K/D/A */}
         <div className="bg-gray-800 p-4 rounded-lg">
@@ -71,10 +49,10 @@ const DetailedStats: React.FC<DetailedStatsProps> = ({
             <Swords size={16} className="text-red-400" />
           </div>
           <div className="text-lg font-bold text-white">
-            {kills}/{deaths}/{assists}
+            {kills.total}/{deaths.total}/{assists.total}
           </div>
           <div className="text-xs text-gray-500">
-            {totalGames} games played
+            tracked in {tracked(kdaGames)}
           </div>
         </div>
 
@@ -88,7 +66,7 @@ const DetailedStats: React.FC<DetailedStatsProps> = ({
             {kdRatio.toFixed(2)}
           </div>
           <div className="text-xs text-gray-500">
-            {deaths === 0 ? 'Perfect' : 'kill/death ratio'}
+            {deaths.total === 0 ? 'Perfect' : 'kill/death ratio'}
           </div>
         </div>
 
@@ -99,10 +77,10 @@ const DetailedStats: React.FC<DetailedStatsProps> = ({
             <TrendingUp size={16} className="text-purple-400" />
           </div>
           <div className="text-2xl font-bold text-purple-400">
-            {averageLevel.toFixed(1)}
+            {level.games > 0 ? level.average.toFixed(1) : 'N/A'}
           </div>
           <div className="text-xs text-gray-500">
-            end of game
+            end of game · {tracked(level.games)}
           </div>
         </div>
 
@@ -113,10 +91,10 @@ const DetailedStats: React.FC<DetailedStatsProps> = ({
             <Coins size={16} className="text-yellow-400" />
           </div>
           <div className="text-2xl font-bold text-yellow-400">
-            {averageGold.toLocaleString()}
+            {goldEarned.games > 0 ? Math.round(goldEarned.average).toLocaleString() : 'N/A'}
           </div>
           <div className="text-xs text-gray-500">
-            per game
+            per game · {tracked(goldEarned.games)}
           </div>
         </div>
 
@@ -127,10 +105,10 @@ const DetailedStats: React.FC<DetailedStatsProps> = ({
             <Users size={16} className="text-green-400" />
           </div>
           <div className="text-2xl font-bold text-green-400">
-            {averageMinionKills.toFixed(1)}
+            {minionKills.games > 0 ? minionKills.average.toFixed(1) : 'N/A'}
           </div>
           <div className="text-xs text-gray-500">
-            per game
+            per game · {tracked(minionKills.games)}
           </div>
         </div>
 
@@ -141,10 +119,10 @@ const DetailedStats: React.FC<DetailedStatsProps> = ({
             <Target size={16} className="text-blue-400" />
           </div>
           <div className="text-2xl font-bold text-blue-400">
-            {(averageKills + averageAssists).toFixed(1)}
+            {(kills.average + assists.average).toFixed(1)}
           </div>
           <div className="text-xs text-gray-500">
-            (K+A) per game ({gamesWithCombatData} games)
+            (K+A) per game
           </div>
         </div>
       </div>
@@ -158,19 +136,19 @@ const DetailedStats: React.FC<DetailedStatsProps> = ({
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-400">Kills per Game</span>
               <span className="font-medium">
-                {averageKills.toFixed(1)} ({gamesWithCombatData} games)
+                {kills.average.toFixed(1)} ({kills.games} games)
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-400">Deaths per Game</span>
               <span className="font-medium">
-                {averageDeaths.toFixed(1)} ({gamesWithCombatData} games)
+                {deaths.average.toFixed(1)} ({deaths.games} games)
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-400">Assists per Game</span>
               <span className="font-medium">
-                {averageAssists.toFixed(1)} ({gamesWithCombatData} games)
+                {assists.average.toFixed(1)} ({assists.games} games)
               </span>
             </div>
           </div>
@@ -183,13 +161,13 @@ const DetailedStats: React.FC<DetailedStatsProps> = ({
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-400">Total Gold Earned</span>
               <span className="font-medium">
-                {gamesWithGoldData > 0 ? (averageGold * gamesWithGoldData).toLocaleString() : 'N/A'}
+                {goldEarned.games > 0 ? goldEarned.total.toLocaleString() : 'N/A'}
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-400">Farming Efficiency</span>
               <span className="font-medium">
-                {gamesWithMinionData > 0 ? `${averageMinionKills.toFixed(1)} minions/game (${gamesWithMinionData} games)` : 'N/A'}
+                {minionKills.games > 0 ? `${minionKills.average.toFixed(1)} minions/game (${minionKills.games} games)` : 'N/A'}
               </span>
             </div>
           </div>

@@ -10,6 +10,7 @@ import { useDataSource } from '../../hooks/useDataSource';
 import { useStatsFilter } from '../../context/StatsFilterContext';
 import { Team } from '../../types';
 import { countHeroesPlayed } from '../../shared/utils/heroIds';
+import { summarizePlayerStats } from '../../shared/utils/trackedStats';
 
 
 interface PlayerStatsProps {
@@ -34,6 +35,7 @@ interface PlayerWithStats extends DBPlayer {
   kdRatio: number;
   averageGold: number;
   averageMinionKills: number;
+  gamesWithGoldData: number;
   hasCombatStats: boolean;
   rank: number;
   displayRating: number;
@@ -498,6 +500,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
               kdRatio: stats.kdRatio,
               averageGold: stats.averageGold,
               averageMinionKills: stats.averageMinionKills,
+              gamesWithGoldData: stats.gamesWithGoldData,
               hasCombatStats: stats.hasCombatStats,
               displayRating: stats.displayRating,
               rank: 0,
@@ -524,15 +527,10 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
               // Calculate hero and role stats from match players
               const roleCount: Record<string, number> = {};
 
-              let kills = 0, deaths = 0, assists = 0, gold = 0, minionKills = 0;
+              // Per-stat totals and averages over tracked games only (undefined/null = not tracked)
+              const statSummary = summarizePlayerStats(playerMatches);
 
               playerMatches.forEach(mp => {
-                kills += mp.kills || 0;
-                deaths += mp.deaths || 0;
-                assists += mp.assists || 0;
-                gold += mp.goldEarned || 0;
-                minionKills += mp.minionKills || 0;
-
                 // Track role usage
                 (mp.heroRoles || []).forEach(role => {
                   roleCount[role] = (roleCount[role] || 0) + 1;
@@ -546,9 +544,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
                 .sort((a, b) => b.count - a.count)
                 .slice(0, 3);
 
-              const kdRatio = deaths === 0 ? kills : kills / deaths;
               const winRate = player.totalGames > 0 ? (player.wins / player.totalGames) * 100 : 0;
-              const hasCombatStats = kills > 0 || deaths > 0 || assists > 0 || gold > 0;
 
               // Use fresh TrueSkill rating calculation (consistent with SkillOverTime)
               const displayRating = currentRatings[player.id] || getDisplayRating(player);
@@ -565,13 +561,14 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
                 favoriteHeroes,
                 favoriteRoles,
                 winRate,
-                kills,
-                deaths,
-                assists,
-                kdRatio: parseFloat(kdRatio.toFixed(2)),
-                averageGold: player.totalGames > 0 ? Math.round(gold / player.totalGames) : 0,
-                averageMinionKills: player.totalGames > 0 ? Math.round(minionKills / player.totalGames) : 0,
-                hasCombatStats,
+                kills: statSummary.kills.total,
+                deaths: statSummary.deaths.total,
+                assists: statSummary.assists.total,
+                kdRatio: statSummary.kdRatio,
+                averageGold: Math.round(statSummary.goldEarned.average),
+                averageMinionKills: Math.round(statSummary.minionKills.average),
+                gamesWithGoldData: statSummary.goldEarned.games,
+                hasCombatStats: statSummary.hasCombatStats,
                 displayRating,
                 rank: 0,
                 victoryTypeStats,
@@ -1249,7 +1246,12 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({ onBack, onViewSkillOverTime, 
                               <Users size={14} className="mr-1" />
                               <span>Avg Gold</span>
                             </div>
-                            <div className="font-medium text-center">{player.averageGold}</div>
+                            <div className="font-medium text-center">
+                              {player.gamesWithGoldData > 0 ? player.averageGold : 'N/A'}
+                            </div>
+                            <div className="text-xs text-gray-500 text-center">
+                              {player.gamesWithGoldData} {player.gamesWithGoldData === 1 ? 'game' : 'games'}
+                            </div>
                           </div>
                         </div>
                       )}
