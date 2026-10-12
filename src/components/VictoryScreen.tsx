@@ -7,6 +7,7 @@ import dbService from '../services/DatabaseService';
 import EnhancedTooltip from './common/EnhancedTooltip';
 import EndOfRoundAssistant from './EndOfRoundAssistant';
 import { GameStatLog, RoundValues, buildReviewValues } from '../shared/utils/gameStatLog';
+import { StatTrackingSettings } from '../shared/utils/statTrackingSettings';
 import VictoryTypeSelector from './common/VictoryTypeSelector';
 import { NO_HERO_ID } from '../shared/utils/heroIds';
 
@@ -22,6 +23,9 @@ interface VictoryScreenProps {
   finalRound: number;
   /** Save the reviewed final-round values. */
   onUpdatePlayerStats?: (round: number, values: RoundValues) => void;
+  /** Remembered stat-tracking settings (logging switch + categories). */
+  trackingSettings: StatTrackingSettings;
+  onTrackingSettingsChange?: (settings: StatTrackingSettings) => void;
 }
 
 const VictoryScreen: React.FC<VictoryScreenProps> = ({ 
@@ -32,7 +36,9 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
   doubleLanes,
   statLog,
   finalRound,
-  onUpdatePlayerStats
+  onUpdatePlayerStats,
+  trackingSettings,
+  onTrackingSettingsChange
 }) => {
   const [animationComplete, setAnimationComplete] = useState(false);
   const [isSavingMatchData, setSavingMatchData] = useState(false);
@@ -301,6 +307,8 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
         initialValues={buildReviewValues(statLog, finalRound, players)}
         onComplete={handleFinalRoundStats}
         isVisible={showStatsCollection}
+        trackingSettings={trackingSettings}
+        onTrackingSettingsChange={onTrackingSettingsChange}
       />
       
       {/* Add CSS animation */}

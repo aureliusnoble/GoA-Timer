@@ -26,16 +26,8 @@ import {
   StatKey,
   filterValuesToCategories,
 } from '../shared/utils/gameStatLog';
-
-// Default enabled stats (start with all disabled - user selects what to track)
-const DEFAULT_ENABLED_STATS: StatCategories = {
-  kills: false,
-  deaths: false,
-  assists: false,
-  goldEarned: false,
-  minionKills: false,
-  level: false
-};
+import { StatTrackingSettings } from '../shared/utils/statTrackingSettings';
+import StatCategoryToggles from './common/StatCategoryToggles';
 
 interface EndOfRoundAssistantProps {
   players: Player[];
@@ -46,6 +38,10 @@ interface EndOfRoundAssistantProps {
   initialValues: RoundValues;
   /** Save (& continue). stats is undefined when logging is off. */
   onComplete: (stats?: RoundValues) => void;
+  /** Logging switch + categories to start from when the assistant opens. */
+  trackingSettings: StatTrackingSettings;
+  /** Called whenever the user changes the logging switch or a category. */
+  onTrackingSettingsChange?: (settings: StatTrackingSettings) => void;
 }
 
 // Enum for stat tracking tabs - Updated to include Level
@@ -62,15 +58,17 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
   onComplete,
   isVisible,
   round,
-  initialValues
+  initialValues,
+  trackingSettings,
+  onTrackingSettingsChange
 }) => {
   const { playSound } = useSound();
   
   // State for tracking if logging is enabled
-  const [loggingEnabled, setLoggingEnabled] = useState<boolean>(false);
+  const [loggingEnabled, setLoggingEnabled] = useState<boolean>(trackingSettings.enabled);
   
   // State for individual stat category toggles
-  const [enabledStats, setEnabledStats] = useState<StatCategories>(DEFAULT_ENABLED_STATS);
+  const [enabledStats, setEnabledStats] = useState<StatCategories>({ ...trackingSettings.categories });
   
   // State for player stats this round
   const [playerStats, setPlayerStats] = useState<RoundValues>({});
@@ -100,6 +98,10 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
       });
       setPlayerStats(initialStats);
 
+      // Start from the remembered tracking settings
+      setLoggingEnabled(trackingSettings.enabled);
+      setEnabledStats({ ...trackingSettings.categories });
+
       // Reset checklist
       setChecklistItems({
         minionBattle: false,
@@ -117,7 +119,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
       playSound('phaseChange');
     }
     wasVisibleRef.current = isVisible;
-  }, [isVisible, players, initialValues, playSound]);
+  }, [isVisible, players, initialValues, trackingSettings, playSound]);
 
   // Handle stat changes with increment/decrement
   const adjustStat = (playerId: number, statName: StatKey, delta: number) => {
@@ -144,13 +146,19 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
     }));
   };
 
-  // Handle toggling individual stat categories
-  const handleStatToggle = (statKey: keyof StatCategories, enabled: boolean) => {
+  // Logging switch: update locally and report so the choice is remembered
+  const handleLoggingToggle = (enabled: boolean) => {
     playSound('toggleSwitch');
-    setEnabledStats(prev => ({
-      ...prev,
-      [statKey]: enabled
-    }));
+    setLoggingEnabled(enabled);
+    onTrackingSettingsChange?.({ enabled, categories: enabledStats });
+  };
+
+  // Handle toggling individual stat categories
+  const handleStatToggle = (statKey: StatKey, enabled: boolean) => {
+    playSound('toggleSwitch');
+    const next = { ...enabledStats, [statKey]: enabled };
+    setEnabledStats(next);
+    onTrackingSettingsChange?.({ enabled: loggingEnabled, categories: next });
   };
 
   // NEW: Handle checking all checklist items at once
@@ -372,10 +380,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
               type="checkbox" 
               id="enableLogging" 
               checked={loggingEnabled} 
-              onChange={e => {
-                playSound('toggleSwitch');
-                setLoggingEnabled(e.target.checked);
-              }}
+              onChange={e => handleLoggingToggle(e.target.checked)}
               className="mr-3 h-5 w-5"
             />
             <label htmlFor="enableLogging" className="text-xl font-medium">Log Player Stats (Optional)</label>
@@ -388,44 +393,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
               {/* Individual Stat Category Toggles */}
               <div className="mb-4 p-3 bg-gray-700/50 rounded-lg">
                 <h4 className="font-semibold mb-3 text-gray-300">Select Stats to Track</h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  <StatToggle 
-                    icon={<Swords size={16} />}
-                    label="Kills"
-                    enabled={enabledStats.kills}
-                    onChange={(enabled) => handleStatToggle('kills', enabled)}
-                  />
-                  <StatToggle 
-                    icon={<Skull size={16} />}
-                    label="Deaths"
-                    enabled={enabledStats.deaths}
-                    onChange={(enabled) => handleStatToggle('deaths', enabled)}
-                  />
-                  <StatToggle 
-                    icon={<Users size={16} />}
-                    label="Assists"
-                    enabled={enabledStats.assists}
-                    onChange={(enabled) => handleStatToggle('assists', enabled)}
-                  />
-                  <StatToggle 
-                    icon={<Coins size={16} />}
-                    label="Gold Earned"
-                    enabled={enabledStats.goldEarned}
-                    onChange={(enabled) => handleStatToggle('goldEarned', enabled)}
-                  />
-                  <StatToggle 
-                    icon={<Bot size={16} />}
-                    label="Minion Kills"
-                    enabled={enabledStats.minionKills}
-                    onChange={(enabled) => handleStatToggle('minionKills', enabled)}
-                  />
-                  <StatToggle 
-                    icon={<Shield size={16} />}
-                    label="Level"
-                    enabled={enabledStats.level}
-                    onChange={(enabled) => handleStatToggle('level', enabled)}
-                  />
-                </div>
+                <StatCategoryToggles categories={enabledStats} onToggle={handleStatToggle} />
               </div>
               
               {/* Dynamic tabs based on enabled stats */}
@@ -1195,32 +1163,5 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
     </div>
   );
 };
-
-// StatToggle component for individual stat category controls
-interface StatToggleProps {
-  icon: React.ReactNode;
-  label: string;
-  enabled: boolean;
-  onChange: (enabled: boolean) => void;
-}
-
-const StatToggle: React.FC<StatToggleProps> = ({ icon, label, enabled, onChange }) => (
-  <div 
-    className={`flex items-center p-2 rounded cursor-pointer transition-colors ${
-      enabled ? 'bg-blue-900/30 border border-blue-500/50' : 'bg-gray-600 border border-gray-500'
-    }`} 
-    onClick={() => onChange(!enabled)}
-  >
-    <div className={`mr-2 ${enabled ? 'text-blue-400' : 'text-gray-400'}`}>
-      {icon}
-    </div>
-    <span className={`text-sm flex-grow ${enabled ? 'text-blue-200' : 'text-gray-400'}`}>
-      {label}
-    </span>
-    <div className="ml-auto">
-      <div className={`w-4 h-4 rounded-full ${enabled ? 'bg-blue-500' : 'bg-gray-500'}`} />
-    </div>
-  </div>
-);
 
 export default EndOfRoundAssistant;

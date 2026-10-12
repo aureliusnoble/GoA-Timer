@@ -20,6 +20,7 @@ import EnhancedTooltip from './common/EnhancedTooltip';
 import { useSound } from '../context/SoundContext';
 import EndOfRoundAssistant from './EndOfRoundAssistant';
 import { GameStatLog, RoundValues, buildReviewValues } from '../shared/utils/gameStatLog';
+import { StatTrackingSettings } from '../shared/utils/statTrackingSettings';
 
 interface GameTimerProps {
   gameState: GameState;
@@ -52,6 +53,9 @@ interface GameTimerProps {
   statLog: GameStatLog;
   /** Save the reviewed values for a round. */
   onSavePlayerStats?: (round: number, values: RoundValues) => void;
+  /** Remembered stat-tracking settings (logging switch + categories). */
+  trackingSettings: StatTrackingSettings;
+  onTrackingSettingsChange: (settings: StatTrackingSettings) => void;
 }
 
 const GameTimer: React.FC<GameTimerProps> = ({
@@ -82,7 +86,9 @@ const GameTimer: React.FC<GameTimerProps> = ({
   strategyTimerEnabled,
   moveTimerEnabled,
   statLog,
-  onSavePlayerStats
+  onSavePlayerStats,
+  trackingSettings,
+  onTrackingSettingsChange
 }) => {
   const { playSound } = useSound();
   
@@ -698,6 +704,8 @@ const GameTimer: React.FC<GameTimerProps> = ({
         round={gameState.round}
         initialValues={buildReviewValues(statLog, gameState.round, players)}
         onComplete={handleEndOfRoundComplete}
+        trackingSettings={trackingSettings}
+        onTrackingSettingsChange={onTrackingSettingsChange}
       />
     </div>
   );

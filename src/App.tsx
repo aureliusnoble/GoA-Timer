@@ -25,6 +25,7 @@ import {
   createEmptyStatLog,
   restoreStatLog,
 } from './shared/utils/gameStatLog';
+import { StatTrackingSettings, loadStatTrackingSettings, saveStatTrackingSettings } from './shared/utils/statTrackingSettings';
 import {
   Hero,
   GameState,
@@ -500,6 +501,11 @@ function AppContent() {
   const [victorTeam, setVictorTeam] = useState<Team | null>(null);
   // In-game stats: one entry per round; player totals are derived from it
   const [statLog, setStatLog] = useState<GameStatLog>(createEmptyStatLog);
+  // Which stats are tracked - remembered between games
+  const [statTracking, setStatTracking] = useState<StatTrackingSettings>(loadStatTrackingSettings);
+  useEffect(() => {
+    saveStatTrackingSettings(statTracking);
+  }, [statTracking]);
   
   // NEW: Match statistics states
   const [showMatchStatistics, setShowMatchStatistics] = useState<boolean>(false);
@@ -2152,6 +2158,8 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
           onFlipCoin={flipCoin}
           statLog={statLog}
           onSavePlayerStats={handleCommitRoundStats}
+          trackingSettings={statTracking}
+          onTrackingSettingsChange={setStatTracking}
         />
       )}
       </Suspense>
@@ -2168,6 +2176,8 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
           statLog={statLog}
           finalRound={gameState.round}
           onUpdatePlayerStats={handleCommitRoundStats}
+          trackingSettings={statTracking}
+          onTrackingSettingsChange={setStatTracking}
         />
       )}
       </Suspense>

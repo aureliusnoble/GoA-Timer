@@ -5,6 +5,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import EndOfRoundAssistant from '../../components/EndOfRoundAssistant';
 import { Hero, Player, Team } from '../../types';
 import { buildReviewValues, createEmptyStatLog, RoundValues } from '../../shared/utils/gameStatLog';
+import { StatTrackingSettings, defaultStatTrackingSettings } from '../../shared/utils/statTrackingSettings';
 
 const hero = (id: number, name: string): Hero => ({
   id, name, icon: '', complexity: 1, roles: [], expansion: 'base', description: '',
@@ -16,6 +17,11 @@ const PLAYERS: Player[] = [
   { id: 3, team: Team.Atlanteans, hero: hero(12, 'Tigerclaw'), name: 'Cat' },
 ];
 
+const tracking = (categories: Partial<StatTrackingSettings['categories']>, enabled = true): StatTrackingSettings => ({
+  enabled,
+  categories: { ...defaultStatTrackingSettings().categories, ...categories },
+});
+
 type Props = React.ComponentProps<typeof EndOfRoundAssistant>;
 
 function renderAssistant(overrides: Partial<Props> = {}) {
@@ -24,6 +30,8 @@ function renderAssistant(overrides: Partial<Props> = {}) {
     isVisible: true,
     round: 1,
     initialValues: buildReviewValues(createEmptyStatLog(), 1, PLAYERS),
+    trackingSettings: defaultStatTrackingSettings(),
+    onTrackingSettingsChange: vi.fn(),
     onComplete: vi.fn(),
     ...overrides,
   };
@@ -50,5 +58,15 @@ describe('EndOfRoundAssistant - explicit zeros (4.4)', () => {
     rerender(<EndOfRoundAssistant {...props} initialValues={{ ...initialValues }} />);
     fireEvent.click(screen.getByText('Save Stats & Continue'));
     expect(props.onComplete).toHaveBeenCalledWith({ 1: { kills: 2 }, 2: { kills: 0 }, 3: { kills: 1 } });
+  });
+});
+
+describe('EndOfRoundAssistant - remembered settings (4.3)', () => {
+  it('opens with the remembered settings and reports changes', () => {
+    const { props } = renderAssistant({ trackingSettings: tracking({ deaths: true }) });
+    expect((screen.getByLabelText('Log Player Stats (Optional)') as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByText('Record player deaths.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Minion Kills' }));
+    expect(props.onTrackingSettingsChange).toHaveBeenLastCalledWith(tracking({ deaths: true, minionKills: true }));
   });
 });
