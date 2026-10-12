@@ -7,6 +7,7 @@ import { computeHeroImpactAsync } from '../services/HeroSkillService';
 import { heroes as allHeroesData } from '../data/heroes';
 import { rating, rate, ordinal } from 'openskill';
 import { filterMatches, MatchFilterOptions } from '../shared/utils/matchFilters';
+import { formatLocalDate } from '../shared/utils/localDate';
 
 const LOCAL_IMPACT_CACHE_TTL = 5 * 60 * 1000;
 let localImpactCache: {
@@ -1048,7 +1049,7 @@ export function useDataSource() {
         }
 
         const heroData = heroTracking.get(heroId)!;
-        const matchDate = new Date(match.date).toISOString().split('T')[0]; // YYYY-MM-DD
+        const matchDate = formatLocalDate(new Date(match.date)); // local calendar day, YYYY-MM-DD
         const won = matchPlayer.team === match.winningTeam;
 
         heroData.matches.push({ date: matchDate, won });

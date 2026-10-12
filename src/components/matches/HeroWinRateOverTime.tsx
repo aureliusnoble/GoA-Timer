@@ -6,6 +6,11 @@ import { GlobalStatsService } from '../../services/supabase/GlobalStatsService';
 import { isSupabaseConfigured } from '../../services/supabase/SupabaseClient';
 import { useSound } from '../../context/SoundContext';
 import { useDataSource } from '../../hooks/useDataSource';
+import { formatLocalDate, parseLocalDate, endOfLocalDay } from '../../shared/utils/localDate';
+
+// Data points are calendar-day keys ("YYYY-MM-DD"). Plot them at LOCAL midnight so the axis
+// labels (formatted in local time) show the same day; `new Date(key)` would be UTC midnight.
+const dayKeyToTime = (day: string): number => (parseLocalDate(day) ?? new Date(day)).getTime();
 
 interface HeroWinRateOverTimeProps {
   onBack: () => void;
@@ -71,8 +76,8 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
   const dateRange = useMemo(() => {
     if (inheritedDateRange?.startDate && inheritedDateRange?.endDate) {
       return {
-        start: inheritedDateRange.startDate.toISOString().split('T')[0],
-        end: inheritedDateRange.endDate.toISOString().split('T')[0]
+        start: formatLocalDate(inheritedDateRange.startDate),
+        end: formatLocalDate(inheritedDateRange.endDate)
       };
     }
     return { start: null, end: null };
@@ -106,8 +111,8 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
       if (statsMode === 'local') {
         setLoading(true);
         try {
-          const startDate = dateRange.start ? new Date(dateRange.start) : undefined;
-          const endDate = dateRange.end ? new Date(dateRange.end + 'T23:59:59') : undefined;
+          const startDate = dateRange.start ? parseLocalDate(dateRange.start) ?? undefined : undefined;
+          const endDate = dateRange.end ? endOfLocalDay(dateRange.end) ?? undefined : undefined;
 
           const data = await getHeroWinRateOverTime(undefined, minGames, startDate, endDate, inheritedGameLengthFilter, inheritedPlayerCountFilter);
           setHeroData(data);
@@ -135,8 +140,8 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
         setGlobalLoading(true);
         setGlobalError(null);
         try {
-          const startDate = dateRange.start ? new Date(dateRange.start) : null;
-          const endDate = dateRange.end ? new Date(dateRange.end + 'T23:59:59') : null;
+          const startDate = dateRange.start ? parseLocalDate(dateRange.start) : null;
+          const endDate = dateRange.end ? endOfLocalDay(dateRange.end) : null;
 
           const result = await GlobalStatsService.getGlobalHeroStatsOverTime(
             undefined,
@@ -236,13 +241,13 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
 
     // Convert dates to numeric timestamps for x-axis
     const lineData = hero.dataPoints.map(dp => ({
-      x: new Date(dp.date).getTime(),
+      x: dayKeyToTime(dp.date),
       y: dp.winRate
     }));
 
     // Scatter points at each data point (for the dots)
     const scatterData = hero.dataPoints.map(dp => ({
-      x: new Date(dp.date).getTime(),
+      x: dayKeyToTime(dp.date),
       y: dp.winRate,
       gamesOnDate: dp.gamesPlayedOnDate
     }));
@@ -285,7 +290,7 @@ const HeroWinRateOverTime: React.FC<HeroWinRateOverTimeProps> = ({
       .filter(h => selectedHeroes.has(h.heroId))
       .forEach(hero => {
         hero.dataPoints.forEach(dp => {
-          allDates.push(new Date(dp.date).getTime());
+          allDates.push(dayKeyToTime(dp.date));
         });
       });
 

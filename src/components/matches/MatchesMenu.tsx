@@ -9,6 +9,7 @@ import { EditPlayerDataModal } from './EditPlayerDataModal';
 import dbService from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
 import { useViewMode } from '../../context/ViewModeContext';
+import { formatLocalDate } from '../../shared/utils/localDate';
 // LEGACY: P2P Connection Context - kept for potential future use
 // import { useConnection } from '../../context/ConnectionContext';
 export type MatchesView = 'menu' | 'player-stats' | 'detailed-player-stats' | 'hero-stats' | 'detailed-hero-stats' | 'match-history' | 'match-maker' | 'record-match' | 'hero-info' | 'skill-over-time';
@@ -136,7 +137,7 @@ const MatchesMenu: React.FC<MatchesMenuProps> = ({ onBack, onNavigate }) => {
       // Create a temporary link element and trigger download
       const link = document.createElement('a');
       link.href = url;
-      link.download = `guards-of-atlantis-stats-${new Date().toISOString().split('T')[0]}.json`;
+      link.download = `guards-of-atlantis-stats-${formatLocalDate(new Date())}.json`;
       document.body.appendChild(link);
       link.click();
       

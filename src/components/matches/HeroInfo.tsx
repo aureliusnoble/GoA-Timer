@@ -6,6 +6,7 @@ import { heroes as allHeroes, getAllExpansions } from '../../data/heroes';
 import { useSound } from '../../context/SoundContext';
 import EnhancedTooltip from '../common/EnhancedTooltip';
 import html2canvas from 'html2canvas';
+import { formatLocalDate } from '../../shared/utils/localDate';
 import HeroRoleExplanation from '../HeroRoleExplanation';
 
 interface HeroInfoProps {
@@ -205,7 +206,7 @@ const HeroInfo: React.FC<HeroInfoProps> = ({ onBack }) => {
       // Convert canvas to data URL and trigger download
       const dataUrl = canvas.toDataURL('image/png');
       const link = document.createElement('a');
-      link.download = `guards-of-atlantis-hero-guide-${new Date().toISOString().slice(0, 10)}.png`;
+      link.download = `guards-of-atlantis-hero-guide-${formatLocalDate(new Date())}.png`;
       link.href = dataUrl;
       link.click();
       

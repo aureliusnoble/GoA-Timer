@@ -16,6 +16,7 @@ import {
 } from '../../services/supabase/ShareService';
 import { useSound } from '../../context/SoundContext';
 import ShareLinkCard from './ShareLinkCard';
+import { formatLocalDate, parseLocalDate } from '../../shared/utils/localDate';
 
 type ExpirationPreset = 'never' | '1day' | '7days' | '30days' | 'custom';
 
@@ -59,7 +60,8 @@ const SharePanel: React.FC = () => {
       case '30days':
         return new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
       case 'custom':
-        return customExpirationDate ? new Date(customExpirationDate) : undefined;
+        // Local midnight at the start of the chosen day (new Date('YYYY-MM-DD') would be UTC)
+        return customExpirationDate ? parseLocalDate(customExpirationDate) ?? undefined : undefined;
       default:
         return undefined;
     }
@@ -128,7 +130,7 @@ const SharePanel: React.FC = () => {
   const getMinDate = () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow.toISOString().split('T')[0];
+    return formatLocalDate(tomorrow);
   };
 
   if (isLoading) {

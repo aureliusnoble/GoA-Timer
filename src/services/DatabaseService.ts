@@ -4,6 +4,7 @@ import { rating, rate, ordinal } from 'openskill';
 import NormalDistribution from 'normal-distribution';
 import { CloudSyncService } from './supabase/CloudSyncService';
 import { filterMatches } from '../shared/utils/matchFilters';
+import { formatLocalDate } from '../shared/utils/localDate';
 
 // Database configuration
 const DB_NAME = 'GuardsOfAtlantisStats';
@@ -639,7 +640,7 @@ class DatabaseService {
         }
 
         const heroData = heroTracking.get(heroId)!;
-        const matchDate = new Date(match.date).toISOString().split('T')[0]; // YYYY-MM-DD
+        const matchDate = formatLocalDate(new Date(match.date)); // local calendar day, YYYY-MM-DD
         const won = matchPlayer.team === match.winningTeam;
 
         heroData.matches.push({ date: matchDate, won });

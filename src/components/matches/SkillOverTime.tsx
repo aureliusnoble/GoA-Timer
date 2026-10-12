@@ -7,6 +7,7 @@ import {
 import { useSound } from '../../context/SoundContext';
 import { useDataSource } from '../../hooks/useDataSource';
 import { useStatsFilter } from '../../context/StatsFilterContext';
+import { formatLocalDate, parseLocalDate, endOfLocalDay } from '../../shared/utils/localDate';
 
 interface SkillOverTimeProps {
   onBack: () => void;
@@ -58,8 +59,8 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
   const dateRange = useMemo(() => {
     if (playerStatsFilters?.dateRange?.startDate && playerStatsFilters?.dateRange?.endDate) {
       return {
-        start: playerStatsFilters.dateRange.startDate.toISOString().split('T')[0],
-        end: playerStatsFilters.dateRange.endDate.toISOString().split('T')[0]
+        start: formatLocalDate(playerStatsFilters.dateRange.startDate),
+        end: formatLocalDate(playerStatsFilters.dateRange.endDate)
       };
     }
     return { start: null, end: null };
@@ -95,8 +96,8 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
       setLoading(true);
       try {
         // Use recalculated TrueSkill if enabled in PlayerStats context
-        const startDate = dateRange.start ? new Date(dateRange.start) : undefined;
-        const endDate = dateRange.end ? new Date(dateRange.end + 'T23:59:59') : undefined;
+        const startDate = dateRange.start ? parseLocalDate(dateRange.start) ?? undefined : undefined;
+        const endDate = dateRange.end ? endOfLocalDay(dateRange.end) ?? undefined : undefined;
 
         let history;
         const hasMatchFilters = inheritedGameLengthFilter !== 'all' || inheritedPlayerCountFilter != null;
@@ -189,10 +190,12 @@ const SkillOverTime: React.FC<SkillOverTimeProps> = ({ onBack }) => {
   const filteredChartData = useMemo(() => {
     if (!dateRange.start && !dateRange.end) return chartData;
 
+    const rangeStart = dateRange.start ? parseLocalDate(dateRange.start) : null;
+    const rangeEnd = dateRange.end ? endOfLocalDay(dateRange.end) : null;
     return chartData.filter(point => {
       const pointDate = new Date(point.date);
-      if (dateRange.start && pointDate < new Date(dateRange.start)) return false;
-      if (dateRange.end && pointDate > new Date(dateRange.end + 'T23:59:59')) return false;
+      if (rangeStart && pointDate < rangeStart) return false;
+      if (rangeEnd && pointDate > rangeEnd) return false;
       return true;
     });
   }, [chartData, dateRange]);

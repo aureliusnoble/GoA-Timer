@@ -6,6 +6,7 @@ import * as d3 from 'd3-force';
 import { DBPlayer } from '../../services/DatabaseService';
 import { useSound } from '../../context/SoundContext';
 import { useDataSource } from '../../hooks/useDataSource';
+import { formatLocalDate, parseLocalDate, endOfLocalDay } from '../../shared/utils/localDate';
 
 interface PlayerRelationshipGraphProps {
   onBack: () => void;
@@ -155,8 +156,8 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
   const [dateRange, setDateRange] = useState<{ start: string | null; end: string | null }>(() => {
     if (inheritedDateRange?.startDate && inheritedDateRange?.endDate) {
       return {
-        start: inheritedDateRange.startDate.toISOString().split('T')[0],
-        end: inheritedDateRange.endDate.toISOString().split('T')[0]
+        start: formatLocalDate(inheritedDateRange.startDate),
+        end: formatLocalDate(inheritedDateRange.endDate)
       };
     }
     return { start: null, end: null };
@@ -248,8 +249,8 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
         const allPlayerIds = playersWithGames.map(p => p.id);
 
         // Get relationships to filter to only players with data
-        const startDate = dateRange.start ? new Date(dateRange.start) : undefined;
-        const endDate = dateRange.end ? new Date(dateRange.end + 'T23:59:59') : undefined;
+        const startDate = dateRange.start ? parseLocalDate(dateRange.start) ?? undefined : undefined;
+        const endDate = dateRange.end ? endOfLocalDay(dateRange.end) ?? undefined : undefined;
         const relationships = await getPlayerRelationshipNetwork(allPlayerIds, minGames, startDate, endDate, inheritedGameLengthFilter, inheritedPlayerCountFilter);
         const playerIdsWithData = new Set<string>();
         relationships.forEach(rel => {
@@ -402,8 +403,8 @@ const PlayerRelationshipGraph: React.FC<PlayerRelationshipGraphProps> = ({
 
       setLoading(true);
       try {
-        const startDate = dateRange.start ? new Date(dateRange.start) : undefined;
-        const endDate = dateRange.end ? new Date(dateRange.end + 'T23:59:59') : undefined;
+        const startDate = dateRange.start ? parseLocalDate(dateRange.start) ?? undefined : undefined;
+        const endDate = dateRange.end ? endOfLocalDay(dateRange.end) ?? undefined : undefined;
         const relationships = await getPlayerRelationshipNetwork(playerIds, minGames, startDate, endDate, inheritedGameLengthFilter, inheritedPlayerCountFilter);
         const data = buildGraphData(playerIds, relationships);
         setGraphData(data);
