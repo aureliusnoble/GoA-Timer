@@ -7,7 +7,8 @@ import { createFakeRenameDb } from '../helpers/fakeRenameDb';
 const cloud = vi.hoisted(() => ({
   triggerAutoUpload: vi.fn(),
   deleteMatchFromCloud: vi.fn(async () => ({ success: true })),
-  queuePlayerRename: vi.fn(async () => true),
+  enqueuePlayerRename: vi.fn(() => true),
+  flushQueuedPlayerRenames: vi.fn(async () => true),
 }));
 vi.mock('../../services/supabase/CloudSyncService', () => ({ CloudSyncService: cloud }));
 
@@ -61,7 +62,43 @@ describe('DatabaseService.renamePlayer', () => {
     expect(after.matchPlayers.find(mp => mp.id === 'mp-2')).toMatchObject({ playerId: 'Alicia', kills: 2, deaths: 1 });
     expect(after.matchPlayers).toHaveLength(4);
     expect(recalc).toHaveBeenCalledTimes(1);
-    expect(cloud.queuePlayerRename).toHaveBeenCalledWith('Alice', 'Alicia');
+    expect(cloud.enqueuePlayerRename).toHaveBeenCalledWith('Alice', 'Alicia');
+    expect(cloud.flushQueuedPlayerRenames).toHaveBeenCalledTimes(1);
+    const [enqueued] = cloud.enqueuePlayerRename.mock.invocationCallOrder;
+    const [recalculated] = recalc.mock.invocationCallOrder;
+    const [flushed] = cloud.flushQueuedPlayerRenames.mock.invocationCallOrder;
+    expect(enqueued).toBeLessThan(recalculated);
+    expect(recalculated).toBeLessThan(flushed);
+  });
+
+  it('queues the cloud rename as soon as the local rename commits and syncs it once stats are recalculated', async () => {
+    const { recalc } = useFakeDb();
+    let finishRecalc = () => {};
+    recalc.mockImplementation(() => new Promise<void>(resolve => { finishRecalc = () => resolve(); }));
+
+    const renaming = dbService.renamePlayer('Alice', 'Alicia', 'rename');
+    await vi.waitFor(() => expect(recalc).toHaveBeenCalled());
+
+    expect(cloud.enqueuePlayerRename).toHaveBeenCalledWith('Alice', 'Alicia');
+    expect(cloud.flushQueuedPlayerRenames).not.toHaveBeenCalled();
+
+    finishRecalc();
+    await renaming;
+    expect(cloud.flushQueuedPlayerRenames).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the rename and still syncs it when recalculating stats fails', async () => {
+    const { fake, recalc } = useFakeDb();
+    recalc.mockRejectedValue(new Error('recalc failed'));
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await dbService.renamePlayer('Alice', 'Alicia', 'rename');
+
+    expect(result.ok).toBe(true);
+    expect(fake.snapshot().players.map(p => p.id).sort()).toEqual(['Alicia', 'Jhon', 'John']);
+    expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('recalculating stats failed'), expect.any(Error));
+    expect(cloud.enqueuePlayerRename).toHaveBeenCalledWith('Alice', 'Alicia');
+    expect(cloud.flushQueuedPlayerRenames).toHaveBeenCalledTimes(1);
   });
 
   it('merges into an existing player', async () => {
@@ -73,7 +110,8 @@ describe('DatabaseService.renamePlayer', () => {
     const after = fake.snapshot();
     expect(after.players.map(p => p.id).sort()).toEqual(['Alice', 'John']);
     expect(after.matchPlayers.filter(mp => mp.playerId === 'John').map(mp => mp.id).sort()).toEqual(['mp-1', 'mp-3', 'mp-4']);
-    expect(cloud.queuePlayerRename).toHaveBeenCalledWith('Jhon', 'John');
+    expect(cloud.enqueuePlayerRename).toHaveBeenCalledWith('Jhon', 'John');
+    expect(cloud.flushQueuedPlayerRenames).toHaveBeenCalledTimes(1);
   });
 
   it('writes nothing when the confirmed kind no longer matches', async () => {
@@ -84,7 +122,8 @@ describe('DatabaseService.renamePlayer', () => {
     expect(result).toEqual({ ok: false, error: { code: 'KIND_CHANGED', expected: 'rename', actual: 'merge' } });
     expect(fake.snapshot()).toEqual({ players: seed.players, matchPlayers: seed.matchPlayers });
     expect(recalc).not.toHaveBeenCalled();
-    expect(cloud.queuePlayerRename).not.toHaveBeenCalled();
+    expect(cloud.enqueuePlayerRename).not.toHaveBeenCalled();
+    expect(cloud.flushQueuedPlayerRenames).not.toHaveBeenCalled();
   });
 
   it('writes nothing when both players are in the same match', async () => {
@@ -94,6 +133,8 @@ describe('DatabaseService.renamePlayer', () => {
 
     expect(result).toEqual({ ok: false, error: { code: 'PLAYERS_SHARE_MATCHES', matchIds: ['m-1'] } });
     expect(fake.snapshot()).toEqual({ players: seed.players, matchPlayers: seed.matchPlayers });
+    expect(cloud.enqueuePlayerRename).not.toHaveBeenCalled();
+    expect(cloud.flushQueuedPlayerRenames).not.toHaveBeenCalled();
   });
 
   it('rolls back everything when a write fails part-way', async () => {
@@ -103,7 +144,8 @@ describe('DatabaseService.renamePlayer', () => {
 
     expect(fake.snapshot()).toEqual({ players: seed.players, matchPlayers: seed.matchPlayers });
     expect(recalc).not.toHaveBeenCalled();
-    expect(cloud.queuePlayerRename).not.toHaveBeenCalled();
+    expect(cloud.enqueuePlayerRename).not.toHaveBeenCalled();
+    expect(cloud.flushQueuedPlayerRenames).not.toHaveBeenCalled();
   });
 });
 

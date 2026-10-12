@@ -478,8 +478,20 @@ class CloudSyncServiceClass {
     if (!isSupabaseConfigured() || !supabase) return false;
 
     // Queue before any await: callers don't wait, so the page may close right after
+    this.enqueuePlayerRename(oldId, newId);
+    return this.flushQueuedPlayerRenames();
+  }
+
+  /**
+   * Add a rename to the local queue right now, with no network call, stamped
+   * with the account of the stored session (if any). Apply it later with
+   * flushQueuedPlayerRenames(). Returns true when the entry was stored.
+   */
+  enqueuePlayerRename(oldId: string, newId: string): boolean {
+    if (!isSupabaseConfigured() || !supabase) return false;
+
     const ownerId = getStoredSessionUserId();
-    this.savePendingPlayerRenames(
+    return this.savePendingPlayerRenames(
       appendPendingRename(this.getPendingPlayerRenames(), {
         oldId,
         newId,
@@ -487,7 +499,13 @@ class CloudSyncServiceClass {
         ...(ownerId ? { ownerId } : {}),
       })
     );
+  }
 
+  /**
+   * Apply queued renames to the cloud now, then schedule an auto-upload.
+   * Resolves to true when this account's pending renames were all applied now.
+   */
+  async flushQueuedPlayerRenames(): Promise<boolean> {
     const applied = await this.flushPendingPlayerRenamesNow();
     this.triggerAutoUpload();
     return applied;

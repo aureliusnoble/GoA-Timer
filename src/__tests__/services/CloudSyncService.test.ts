@@ -171,6 +171,39 @@ describe('CloudSyncService player renames', () => {
     await pending;
   });
 
+  it('enqueues a rename synchronously without any network call', () => {
+    storeSession('owner-1');
+    const getUser = vi.spyOn(fakeSupabase.client.auth, 'getUser');
+
+    const stored = CloudSyncService.enqueuePlayerRename('Jhon', 'John');
+
+    expect(stored).toBe(true);
+    expect(CloudSyncService.getPendingPlayerRenames()).toMatchObject([{ oldId: 'Jhon', newId: 'John', ownerId: 'owner-1' }]);
+    expect(fakeSupabase.calls).toHaveLength(0);
+    expect(getUser).not.toHaveBeenCalled();
+    expect(CloudSyncService.triggerAutoUpload).not.toHaveBeenCalled();
+  });
+
+  it('reports a rename it could not store in the queue', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota exceeded'); });
+
+    expect(CloudSyncService.enqueuePlayerRename('Jhon', 'John')).toBe(false);
+    expect(CloudSyncService.getPendingPlayerRenames()).toEqual([]);
+  });
+
+  it('applies an already queued rename to the cloud and then schedules an upload', async () => {
+    CloudSyncService.enqueuePlayerRename('Jhon', 'John');
+
+    const applied = await CloudSyncService.flushQueuedPlayerRenames();
+
+    expect(applied).toBe(true);
+    expect(fakeSupabase.callsTo('cloud_match_players', 'update').map(call => call.payload)).toEqual([{ player_id: 'John' }]);
+    expect(fakeSupabase.callsTo('cloud_players', 'delete')).toHaveLength(1);
+    expect(CloudSyncService.getPendingPlayerRenames()).toEqual([]);
+    expect(CloudSyncService.triggerAutoUpload).toHaveBeenCalledTimes(1);
+  });
+
   it('stamps the owner from the stored session without asking the auth server', async () => {
     storeSession('owner-1');
     vi.spyOn(fakeSupabase.client.auth, 'getUser').mockResolvedValue({ data: { user: null } });

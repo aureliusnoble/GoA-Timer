@@ -2579,14 +2579,18 @@ class DatabaseService {
     });
 
     if (result.ok) {
+      // Queue the cloud rename now, so it is kept even if the page closes during the recalculation
+      CloudSyncService.enqueuePlayerRename(result.plan.oldId, result.plan.newId);
+
       try {
         await this.recalculatePlayerStats();
       } catch (error) {
         console.error('[DatabaseService] Player renamed, but recalculating stats failed:', error);
       }
 
-      CloudSyncService.queuePlayerRename(result.plan.oldId, result.plan.newId).catch(error => {
-        console.error('[DatabaseService] Could not queue the rename for cloud sync:', error);
+      // Sync after recalculating, so the upload that follows sends the updated stats
+      CloudSyncService.flushQueuedPlayerRenames().catch(error => {
+        console.error('[DatabaseService] Could not sync the queued rename to the cloud:', error);
       });
     }
 
