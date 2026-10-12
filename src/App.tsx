@@ -697,16 +697,6 @@ const addPlayer = (team: Team) => {
                         (localPlayers.length === 5 && useDoubleLaneFor6Players && gameLength === GameLength.Long);
   
   if (hasDoubleLane) {
-    // If we're adding the 7th or 8th player, or 6th with double lane enabled, assign lanes to everyone
-    if (localPlayers.length === 6) {
-      // We need to assign lanes to the first 6 players too
-      const updatedPlayers = localPlayers.map((player, index) => ({
-        ...player,
-        lane: index < 3 ? Lane.Top : Lane.Bottom
-      }));
-      setLocalPlayers(updatedPlayers);
-    } 
-    
     // For the new player, assign to top or bottom lane
     if (localPlayers.length === 5 && useDoubleLaneFor6Players && gameLength === GameLength.Long) {
       lane = Lane.Top; // 6th player with double lane goes to top lane
