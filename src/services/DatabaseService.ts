@@ -6,7 +6,7 @@ import { CloudSyncService } from './supabase/CloudSyncService';
 import { filterMatches } from '../shared/utils/matchFilters';
 import { isRealHeroId, countHeroesPlayed } from '../shared/utils/heroIds';
 import { summarizePlayerStats } from '../shared/utils/trackedStats';
-import { replayRatings } from '../shared/utils/ratingReplay';
+import { replayRatings, isOutOfOrderMatch } from '../shared/utils/ratingReplay';
 import { HERO_LEVEL_MAX, HERO_LEVEL_MIN } from '../shared/constants/game';
 import { isTrackedStat, isValidHeroLevel } from '../shared/utils/statValues';
 import { fillMissingFields } from '../shared/utils/mergeFill';
@@ -1245,6 +1245,7 @@ class DatabaseService {
         totalGames: number;
         wins: number;
         losses: number;
+        lastPlayed: Date | null;
       }>();
       
       // Initialize stats map with zeros
@@ -1252,7 +1253,8 @@ class DatabaseService {
         playerStatsMap.set(player.id, {
           totalGames: 0,
           wins: 0,
-          losses: 0
+          losses: 0,
+          lastPlayed: null
         });
       }
       
@@ -1332,6 +1334,10 @@ class DatabaseService {
           } else {
             stats.losses += 1;
           }
+          const matchDate = new Date(match.date);
+          if (!stats.lastPlayed || matchDate > stats.lastPlayed) {
+            stats.lastPlayed = matchDate;
+          }
         }
       }
       
@@ -1351,8 +1357,8 @@ class DatabaseService {
           ordinal: ordinal(playerRating),
           // Convert ordinal to a user-friendly scale (similar to Elo range)
           elo: Math.round((ordinal(playerRating) + 25) * 40 + 200),
-          // Keep existing lastPlayed date if no games played
-          lastPlayed: stats.totalGames > 0 ? new Date() : player.lastPlayed
+          // Date of the player's latest match; keep the existing value if no games played
+          lastPlayed: stats.lastPlayed ?? player.lastPlayed
         };
         
         await this.savePlayer(updatedPlayer);
@@ -1491,6 +1497,10 @@ class DatabaseService {
       const allPlayers = await this.getAllPlayers();
       this.initializeTrueSkillRatings(allPlayers);
     }
+
+    // A match dated at or before the latest existing match changes the replay order, so the
+    // incremental rating update below would disagree with the date-ordered replay.
+    const needsFullRecalculation = isOutOfOrderMatch(matchData.date, await this.getAllMatches());
 
     // First, ensure all players exist in the database
     const playerPromises = playerData.map(async (playerInfo) => {
@@ -1645,6 +1655,16 @@ class DatabaseService {
     });
     
     await Promise.all(playerUpdatePromises);
+
+    if (needsFullRecalculation) {
+      try {
+        // Re-derive every player's stored rating in date order
+        await this.recalculatePlayerStats();
+      } catch (error) {
+        // The match is saved; displayed ratings come from the replay anyway
+        console.error('Full rating recalculation after out-of-order match failed:', error);
+      }
+    }
 
     // Trigger auto-upload to cloud if enabled
     CloudSyncService.triggerAutoUpload();

@@ -14,6 +14,7 @@ import {
   DEFAULT_DISPLAY_RATING,
   ReplayMatch,
   ReplayMatchPlayer,
+  isOutOfOrderMatch,
 } from '../../../shared/utils/ratingReplay';
 import { GameLength } from '../../../types';
 
@@ -170,5 +171,26 @@ describe('computePlayerRatingTable', () => {
     );
     expect(table.ranks.Ghost).toBeUndefined();
     expect(Object.values(table.ranks).sort()).toEqual([1, 2]);
+  });
+});
+
+describe('isOutOfOrderMatch', () => {
+  const existing = [{ date: new Date(2026, 0, 5) }, { date: new Date(2026, 0, 10, 20, 0) }];
+
+  it('is false when the new match is later than every existing match', () => {
+    expect(isOutOfOrderMatch(new Date(2026, 0, 10, 21, 0), existing)).toBe(false);
+    expect(isOutOfOrderMatch(new Date(2026, 0, 1), [])).toBe(false);
+  });
+
+  it('is true when the new match is dated before the latest existing match', () => {
+    expect(isOutOfOrderMatch(new Date(2026, 0, 7), existing)).toBe(true);
+  });
+
+  it('is true for an exact tie, because the replay order of equal dates is not the recording order', () => {
+    expect(isOutOfOrderMatch(new Date(2026, 0, 10, 20, 0), existing)).toBe(true);
+  });
+
+  it('accepts ISO strings for stored dates', () => {
+    expect(isOutOfOrderMatch(new Date(2026, 0, 7), [{ date: new Date(2026, 0, 8).toISOString() }])).toBe(true);
   });
 });

@@ -225,3 +225,16 @@ export function computePlayerRatingTable(
   );
   return { ratings: displayRatings, ranks, isRecalculated };
 }
+
+/**
+ * True when a new match is not strictly later than every existing match. Recording it with
+ * an incremental rating update would then disagree with the date-ordered replay, so the
+ * caller must run a full recalculation.
+ */
+export function isOutOfOrderMatch(
+  newMatchDate: Date | string,
+  existingMatches: ReadonlyArray<{ date: Date | string }>
+): boolean {
+  const newTime = new Date(newMatchDate).getTime();
+  return existingMatches.some(m => new Date(m.date).getTime() >= newTime);
+}
