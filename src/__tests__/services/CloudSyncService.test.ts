@@ -98,11 +98,15 @@ describe('CloudSyncService.uploadLocalData', () => {
 
 describe('CloudSyncService player renames', () => {
   const PENDING_KEY = 'cloudSync_pendingPlayerRenames';
+  const AUTH_KEY = 'goa-timer-auth';
+  const storeSession = (userId: string) =>
+    localStorage.setItem(AUTH_KEY, JSON.stringify({ access_token: 'token', user: { id: userId } }));
 
   beforeEach(() => {
     fakeSupabase.reset();
     vi.clearAllMocks();
     localStorage.removeItem(PENDING_KEY);
+    localStorage.removeItem(AUTH_KEY);
     vi.spyOn(CloudSyncService, 'triggerAutoUpload').mockImplementation(() => {});
     db.exportData.mockResolvedValue({ players: [], matches: [], matchPlayers: [], exportDate: new Date(), version: 4 });
     db.mergeData.mockResolvedValue(true);
@@ -111,6 +115,7 @@ describe('CloudSyncService player renames', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     localStorage.removeItem(PENDING_KEY);
+    localStorage.removeItem(AUTH_KEY);
   });
 
   it('re-keys cloud match players, deletes the old cloud player and empties the queue', async () => {
@@ -157,25 +162,38 @@ describe('CloudSyncService player renames', () => {
     expect(CloudSyncService.getPendingPlayerRenames()[0]).not.toHaveProperty('ownerId');
   });
 
-  it('stamps a queued rename with the signed-in account', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    fakeSupabase.respondWith(call =>
-      call.table === 'cloud_match_players' && call.op === 'update'
-        ? { error: { message: 'network down' } }
-        : { data: [], error: null }
-    );
+  it('queues the rename before any network call, so it is kept if the page closes straight away', async () => {
+    storeSession('owner-1');
+
+    const pending = CloudSyncService.queuePlayerRename('Jhon', 'John');
+
+    expect(CloudSyncService.getPendingPlayerRenames()).toMatchObject([{ oldId: 'Jhon', newId: 'John', ownerId: 'owner-1' }]);
+    await pending;
+  });
+
+  it('stamps the owner from the stored session without asking the auth server', async () => {
+    storeSession('owner-1');
+    vi.spyOn(fakeSupabase.client.auth, 'getUser').mockResolvedValue({ data: { user: null } });
 
     await CloudSyncService.queuePlayerRename('Jhon', 'John');
 
     expect(CloudSyncService.getPendingPlayerRenames()).toMatchObject([{ oldId: 'Jhon', newId: 'John', ownerId: 'owner-1' }]);
   });
 
-  it('stamps the account from the stored session when the auth server cannot be reached', async () => {
-    vi.spyOn(fakeSupabase.client.auth, 'getUser').mockResolvedValue({ data: { user: null } });
+  it('queues the rename without an owner when the stored session is missing or unreadable', async () => {
+    fakeSupabase.setUser(null);
 
-    await CloudSyncService.queuePlayerRename('Jhon', 'John');
+    for (const stored of [null, 'not json', JSON.stringify({ user: { id: 5 } }), JSON.stringify({ user: { id: '' } })]) {
+      localStorage.removeItem(PENDING_KEY);
+      if (stored === null) localStorage.removeItem(AUTH_KEY);
+      else localStorage.setItem(AUTH_KEY, stored);
 
-    expect(CloudSyncService.getPendingPlayerRenames()).toMatchObject([{ oldId: 'Jhon', newId: 'John', ownerId: 'owner-1' }]);
+      await CloudSyncService.queuePlayerRename('Jhon', 'John');
+
+      const queue = CloudSyncService.getPendingPlayerRenames();
+      expect(queue, String(stored)).toMatchObject([{ oldId: 'Jhon', newId: 'John' }]);
+      expect(queue[0], String(stored)).not.toHaveProperty('ownerId');
+    }
   });
 
   it("leaves another account's rename queued and still downloads", async () => {

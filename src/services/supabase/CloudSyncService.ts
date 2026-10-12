@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from './SupabaseClient';
+import { getStoredSessionUserId } from './authStorage';
 import dbService from '../DatabaseService';
 import type { ExportData } from '../DatabaseService';
 import type { RealtimeChannel } from '@supabase/supabase-js';
@@ -471,12 +472,13 @@ class CloudSyncServiceClass {
    * being offline or signed out; every upload/download drains the queue first.
    * The entry is stamped with the signed-in account so only that account (or,
    * when signed out, the next account to sync) applies it.
-   * Resolves to true when the queue was fully applied now.
+   * Resolves to true when this account's pending renames were all applied now.
    */
   async queuePlayerRename(oldId: string, newId: string): Promise<boolean> {
     if (!isSupabaseConfigured() || !supabase) return false;
 
-    const ownerId = await this.getSignedInUserId();
+    // Queue before any await: callers don't wait, so the page may close right after
+    const ownerId = getStoredSessionUserId();
     this.savePendingPlayerRenames(
       appendPendingRename(this.getPendingPlayerRenames(), {
         oldId,
@@ -489,20 +491,6 @@ class CloudSyncServiceClass {
     const applied = await this.flushPendingPlayerRenamesNow();
     this.triggerAutoUpload();
     return applied;
-  }
-
-  /**
-   * Id of the signed-in account from the locally stored session, so a rename made
-   * offline is still stamped (getUser() needs the auth server and is null offline).
-   */
-  private async getSignedInUserId(): Promise<string | undefined> {
-    if (!supabase) return undefined;
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      return session?.user?.id || undefined;
-    } catch {
-      return undefined;
-    }
   }
 
   getPendingPlayerRenames(): PendingPlayerRename[] {

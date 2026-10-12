@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { SUPABASE_AUTH_STORAGE_KEY } from './authStorage';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -15,7 +16,7 @@ export const supabase: SupabaseClient | null =
         auth: {
           autoRefreshToken: true,
           persistSession: true,
-          storageKey: 'goa-timer-auth',
+          storageKey: SUPABASE_AUTH_STORAGE_KEY,
           storage: localStorage,
         },
         realtime: {
