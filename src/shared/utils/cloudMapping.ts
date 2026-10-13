@@ -11,6 +11,7 @@
 // list and PostgREST then writes NULL into rows that lack a key.
 import type { DBMatch, DBMatchPlayer, DBPlayer } from '../../services/DatabaseService';
 import { GameLength, Team, VictoryType } from '../../types';
+import { sanitizeRoundStats } from './roundStats';
 
 export interface CloudPlayerRow {
   local_id?: string | null;
@@ -54,6 +55,8 @@ export interface CloudMatchPlayerRow {
   gold_earned?: number | null;
   minion_kills?: number | null;
   level?: number | null;
+  /** JSONB round log; absent/null for rows recorded without one (and anonymized shares). */
+  round_stats?: unknown;
   device_id?: string | null;
 }
 
@@ -160,6 +163,7 @@ export function cloudMatchPlayerRowToLocal(row: CloudMatchPlayerRow): DBMatchPla
     goldEarned: toOptionalNumber(row.gold_earned),
     minionKills: toOptionalNumber(row.minion_kills),
     level: toOptionalNumber(row.level),
+    roundStats: sanitizeRoundStats(row.round_stats),
     deviceId: toOptionalString(row.device_id),
   };
 }
@@ -222,6 +226,8 @@ export function localMatchPlayerToCloudRow(mp: DBMatchPlayer, ctx: CloudUploadCo
     gold_earned: mp.goldEarned,
     minion_kills: mp.minionKills,
     level: mp.level,
+    // Omitted when there is no log (see omitMissing), so an existing cloud log is never wiped
+    round_stats: mp.roundStats,
     device_id: mp.deviceId || ctx.deviceId,
     sync_source: 'local',
     synced_at: ctx.syncedAt,

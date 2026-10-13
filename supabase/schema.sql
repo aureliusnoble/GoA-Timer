@@ -127,6 +127,7 @@ CREATE TABLE cloud_match_players (
   gold_earned INTEGER,
   minion_kills INTEGER,
   level INTEGER,
+  round_stats JSONB,
   device_id TEXT,
   sync_source TEXT NOT NULL,
   synced_at TIMESTAMPTZ DEFAULT NOW(),

@@ -120,6 +120,23 @@ describe('cloudMatchPlayerRowToLocal', () => {
   it('defaults missing hero roles to an empty array', () => {
     expect(cloudMatchPlayerRowToLocal({ ...baseMatchPlayerRow, hero_roles: null }).heroRoles).toEqual([]);
   });
+
+  it('maps round_stats and treats null as no log', () => {
+    const row = { ...baseMatchPlayerRow, round_stats: [{ round: 1, kills: 2 }] };
+    expect(cloudMatchPlayerRowToLocal(row).roundStats).toEqual([{ round: 1, kills: 2 }]);
+    expect(cloudMatchPlayerRowToLocal({ ...row, round_stats: null }).roundStats).toBeUndefined();
+    expect(cloudMatchPlayerRowToLocal(baseMatchPlayerRow).roundStats).toBeUndefined();
+  });
+
+  it('validates round_stats, dropping malformed entries instead of throwing', () => {
+    const mp = cloudMatchPlayerRowToLocal({
+      ...baseMatchPlayerRow,
+      round_stats: [{ round: 2, deaths: 1, kills: -3 }, { round: 0, kills: 1 }, 'junk', { round: 1, goldEarned: 0 }],
+    });
+    expect(mp.roundStats).toEqual([{ round: 1, goldEarned: 0 }, { round: 2, deaths: 1 }]);
+    expect(cloudMatchPlayerRowToLocal({ ...baseMatchPlayerRow, round_stats: { round: 1, kills: 1 } }).roundStats).toBeUndefined();
+    expect(cloudMatchPlayerRowToLocal({ ...baseMatchPlayerRow, round_stats: [] }).roundStats).toBeUndefined();
+  });
 });
 
 describe('cloudPlayerRowToLocal', () => {
@@ -199,6 +216,17 @@ describe('localMatchPlayerToCloudRow', () => {
   it('omits stats stored as null by older versions', () => {
     const legacy = { ...mp, deaths: null } as unknown as DBMatchPlayer;
     expect('deaths' in localMatchPlayerToCloudRow(legacy, ctx)).toBe(false);
+  });
+
+  it('sends the round log as round_stats', () => {
+    const roundStats = [{ round: 1, kills: 0, deaths: 1 }, { round: 2, kills: 2, level: 3 }];
+    expect(localMatchPlayerToCloudRow({ ...mp, roundStats }, ctx).round_stats).toEqual(roundStats);
+  });
+
+  it('omits round_stats when there is no log, so the cloud copy is never wiped', () => {
+    expect('round_stats' in localMatchPlayerToCloudRow(mp, ctx)).toBe(false);
+    const legacy = { ...mp, roundStats: null } as unknown as DBMatchPlayer;
+    expect('round_stats' in localMatchPlayerToCloudRow(legacy, ctx)).toBe(false);
   });
 });
 

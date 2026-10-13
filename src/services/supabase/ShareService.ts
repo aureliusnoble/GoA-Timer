@@ -82,6 +82,8 @@ export interface CloudMatchPlayer {
   gold_earned: number;
   minion_kills: number;
   level: number;
+  /** JSONB round log; absent/null for older rows and anonymized shares. */
+  round_stats?: unknown;
   device_id: string | null;
 }
 

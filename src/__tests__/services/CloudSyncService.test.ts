@@ -94,6 +94,62 @@ describe('CloudSyncService.uploadLocalData', () => {
       expect(payload, table).toMatchObject({ owner_id: 'owner-1' });
     }
   });
+
+  it('sends round_stats only for match players that have a round log, one row per upsert', async () => {
+    const roundStats = [{ round: 1, kills: 1 }, { round: 2, kills: 0, deaths: 2 }];
+    db.exportData.mockResolvedValue({
+      ...localData(),
+      matchPlayers: [
+        { id: 'mp-1', matchId: 'match-1', playerId: 'Alice', team: Team.Titans, heroId: 1, heroName: 'Arien', heroRoles: [], kills: 1, deaths: 2, roundStats },
+        { id: 'mp-2', matchId: 'match-1', playerId: 'Bob', team: Team.Atlanteans, heroId: 2, heroName: 'Brogan', heroRoles: [], kills: 2 },
+      ],
+    });
+
+    await CloudSyncService.uploadLocalData();
+
+    const upserts = fakeSupabase.callsTo('cloud_match_players', 'upsert');
+    expect(upserts.map(call => Array.isArray(call.payload))).toEqual([false, false]);
+    expect(upserts[0].payload).toMatchObject({ id: 'mp-1', round_stats: roundStats });
+    expect(upserts[1].payload).toMatchObject({ id: 'mp-2' });
+    expect(upserts[1].payload).not.toHaveProperty('round_stats');
+  });
+});
+
+describe('CloudSyncService.downloadOwnCloudData', () => {
+  beforeEach(() => {
+    fakeSupabase.reset();
+    vi.clearAllMocks();
+    db.mergeData.mockResolvedValue(true);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('downloads round_stats as roundStats and treats null as no log', async () => {
+    const matchRow = {
+      id: 'match-1', owner_id: 'owner-1', date: '2026-09-01T18:30:00.000Z', winning_team: 'titans',
+      game_length: 'quick', double_lanes: false, titan_players: 1, atlantean_players: 1, device_id: 'device-other',
+    };
+    const playerRow = (id: string, round_stats: unknown) => ({
+      id, owner_id: 'owner-1', match_id: 'match-1', player_id: id, team: 'titans', hero_id: 1,
+      hero_name: 'Arien', hero_roles: [], kills: 1, device_id: 'device-other', round_stats,
+    });
+    fakeSupabase.respondWith(call => {
+      if (call.op !== 'select') return { data: [], error: null };
+      if (call.table === 'cloud_matches') return { data: [matchRow], error: null };
+      if (call.table === 'cloud_match_players') {
+        return { data: [playerRow('mp-1', [{ round: 1, kills: 1 }]), playerRow('mp-2', null)], error: null };
+      }
+      return { data: [], error: null };
+    });
+
+    const result = await CloudSyncService.downloadOwnCloudData();
+
+    expect(result.success).toBe(true);
+    const [imported] = db.mergeData.mock.calls[0] as [ExportData];
+    expect(imported.matchPlayers.map(mp => mp.roundStats)).toEqual([[{ round: 1, kills: 1 }], undefined]);
+  });
 });
 
 describe('CloudSyncService player renames', () => {
