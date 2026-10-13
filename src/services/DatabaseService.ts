@@ -1,5 +1,5 @@
 // src/services/DatabaseService.ts
-import { Team, GameLength, VictoryType } from '../types';
+import { Team, GameLength, VictoryType, RoundStatEntry } from '../types';
 import { rating, rate, ordinal } from 'openskill';
 import NormalDistribution from 'normal-distribution';
 import { CloudSyncService } from './supabase/CloudSyncService';
@@ -12,6 +12,7 @@ import { isTrackedStat, isValidHeroLevel } from '../shared/utils/statValues';
 import { fillMissingFields } from '../shared/utils/mergeFill';
 import { applyRenamePlan, normalisePlayerName, planPlayerRename, RenameKind, RenamePlanResult } from '../shared/utils/playerRename';
 import { formatLocalDate } from '../shared/utils/localDate';
+import { withSanitizedRoundStats } from '../shared/utils/roundStats';
 
 // Database configuration
 const DB_NAME = 'GuardsOfAtlantisStats';
@@ -81,6 +82,8 @@ export interface DBMatchPlayer {
   minionKills?: number;
   level?: number;
   deviceId?: string;
+  /** Optional round-by-round log recorded during a live game (informational; totals are the fields above). */
+  roundStats?: RoundStatEntry[];
 }
 
 // Export data model
@@ -1487,6 +1490,7 @@ class DatabaseService {
       goldEarned?: number;
       minionKills?: number;
       level?: number;
+      roundStats?: RoundStatEntry[];
     }[]
   ): Promise<string> {
     if (!this.db) await this.initialize();
@@ -1648,7 +1652,8 @@ class DatabaseService {
         goldEarned: playerInfo.goldEarned,
         minionKills: playerInfo.minionKills,
         level: playerInfo.level,
-        deviceId: this.getDeviceId()
+        deviceId: this.getDeviceId(),
+        ...(playerInfo.roundStats && playerInfo.roundStats.length > 0 ? { roundStats: playerInfo.roundStats } : {})
       };
       
       await this.saveMatchPlayer(matchPlayer);
@@ -2001,7 +2006,7 @@ class DatabaseService {
         }
         
         for (const matchPlayer of data.matchPlayers) {
-          await this.saveMatchPlayer(matchPlayer);
+          await this.saveMatchPlayer(withSanitizedRoundStats(matchPlayer));
         }
       } else {
         await this.mergeData(data);
@@ -2087,7 +2092,7 @@ class DatabaseService {
             matchPlayer.deviceId = `imported_${deviceId}`;
           }
           
-          await this.saveMatchPlayer(matchPlayer);
+          await this.saveMatchPlayer(withSanitizedRoundStats(matchPlayer));
         }
       }
       
@@ -2127,7 +2132,8 @@ class DatabaseService {
       const localMatchPlayer = localById.get(importedMatchPlayer.id);
       if (!localMatchPlayer) continue;
 
-      const playerFill = fillMissingFields(localMatchPlayer, importedMatchPlayer);
+      // An imported round log is validated before it can fill a missing local one
+      const playerFill = fillMissingFields(localMatchPlayer, withSanitizedRoundStats(importedMatchPlayer));
       if (playerFill.filledKeys.length > 0) {
         await this.saveMatchPlayer(playerFill.merged);
       }

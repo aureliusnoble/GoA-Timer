@@ -165,3 +165,16 @@ export interface DraftingState {
   pickBanSequence: PickBanStep[]; // For Pick and Ban drafting
   isComplete: boolean;
 }
+
+// One round of a player's stats in a saved match (informational log).
+// A field is present only if that stat was tracked that round. level is the
+// level at the end of the round, not a delta.
+export interface RoundStatEntry {
+  round: number;
+  kills?: number;
+  deaths?: number;
+  assists?: number;
+  goldEarned?: number;
+  minionKills?: number;
+  level?: number;
+}

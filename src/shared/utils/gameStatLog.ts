@@ -3,7 +3,7 @@
 // round; game totals are always derived from the rounds, never stored twice.
 // The live quick-log and the end-of-round review both write to the SAME round
 // entry, so nothing is double counted. No React, no storage in this module.
-import type { Player, PlayerStats } from '../../types';
+import type { Player, PlayerStats, RoundStatEntry } from '../../types';
 
 export const COUNT_STAT_KEYS = ['kills', 'deaths', 'assists', 'goldEarned', 'minionKills'] as const;
 export type CountStatKey = (typeof COUNT_STAT_KEYS)[number];
@@ -264,4 +264,30 @@ export function getFinalRoundStatus(
     return { round: round - 1, reviewed: true };
   }
   return { round, reviewed: isRoundReviewed(log, round) };
+}
+
+/**
+ * The per-round log to store on the saved match for one player, or undefined
+ * when there is nothing to store or the log is incomplete (legacy baseline).
+ * Entries hold the round number and stat counts only - never player names or
+ * ids (a player rename re-keys the match-player row, not its log).
+ */
+export function toMatchRoundStats(log: GameStatLog, playerId: number): RoundStatEntry[] | undefined {
+  if (log.baseline) return undefined;
+  const entries: RoundStatEntry[] = [];
+  for (const roundEntry of log.rounds) {
+    const values = roundEntry.players[playerId];
+    if (!values) continue;
+    const entry: RoundStatEntry = { round: roundEntry.round };
+    let hasValue = false;
+    for (const key of STAT_KEYS) {
+      const value = values[key];
+      if (isFiniteNumber(value)) {
+        entry[key] = value;
+        hasValue = true;
+      }
+    }
+    if (hasValue) entries.push(entry);
+  }
+  return entries.length > 0 ? entries : undefined;
 }

@@ -8,7 +8,7 @@ vi.mock('../../services/DatabaseService', () => ({ default: { recordMatch } }));
 
 import VictoryScreen from '../../components/VictoryScreen';
 import { GameLength, Hero, Player, Team } from '../../types';
-import { commitRound, createEmptyStatLog } from '../../shared/utils/gameStatLog';
+import { commitRound, createEmptyStatLog, GameStatLog } from '../../shared/utils/gameStatLog';
 import { defaultStatTrackingSettings } from '../../shared/utils/statTrackingSettings';
 
 const hero = (id: number, name: string): Hero => ({
@@ -179,5 +179,29 @@ describe('VictoryScreen victory type pre-select (4.6)', () => {
     await clickAndFlush(screen.getByText('Save Match Data'));
     expect(recordMatch).not.toHaveBeenCalled();
     expect(screen.getByText('Please select how the match was won')).toBeTruthy();
+  });
+});
+
+describe('VictoryScreen saves the round log (4.4 / 4.7)', () => {
+  it('passes explicit-zero totals and roundStats to recordMatch', async () => {
+    let statLog: GameStatLog = commitRound(createEmptyStatLog(), 1, { 1: { kills: 0 }, 2: { kills: 2 } });
+    statLog = commitRound(statLog, 2, { 1: { kills: 1 }, 2: { kills: 0 } });
+    const players = PLAYERS.map(p => ({ ...p, stats: { totalKills: p.id === 1 ? 1 : 2 } }));
+    renderVictory({ statLog, players });
+    fireEvent.click(screen.getByText('Throne'));
+    await clickAndFlush(screen.getByText('Save Match Data'));
+    const playerData = recordMatch.mock.calls[0][1];
+    expect(playerData[0]).toMatchObject({ id: 'Ann', kills: 1, roundStats: [{ round: 1, kills: 0 }, { round: 2, kills: 1 }] });
+    expect(playerData[1]).toMatchObject({ id: 'Cat', kills: 2, roundStats: [{ round: 1, kills: 2 }, { round: 2, kills: 0 }] });
+  });
+
+  it('saves no round log for an untracked game', async () => {
+    const statLog = commitRound(createEmptyStatLog(), 3, { 1: {}, 2: {} });
+    renderVictory({ statLog });
+    fireEvent.click(screen.getByText('Throne'));
+    await clickAndFlush(screen.getByText('Save Match Data'));
+    const playerData = recordMatch.mock.calls[0][1];
+    expect(playerData[0].roundStats).toBeUndefined();
+    expect(playerData[1].roundStats).toBeUndefined();
   });
 });

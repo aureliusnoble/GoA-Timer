@@ -13,6 +13,9 @@ import {
   isRoundReviewed,
   saveRoundDraft,
   getFinalRoundStatus,
+  toMatchRoundStats,
+  STAT_KEYS,
+  GameStatLog,
   StatCategories,
 } from '../../shared/utils/gameStatLog';
 import { Player, Team } from '../../types';
@@ -154,5 +157,49 @@ describe('saveRoundDraft / getFinalRoundStatus', () => {
 
   it('does not step back when the previous round was not reviewed', () => {
     expect(getFinalRoundStatus(createEmptyStatLog(), { round: 3, turn: 1, currentPhase: 'strategy' })).toEqual({ round: 3, reviewed: false });
+  });
+});
+
+describe('toMatchRoundStats', () => {
+  it('lists each round the player has values for, in order', () => {
+    let log = commitRound(createEmptyStatLog(), 2, { 1: { kills: 0, level: 2 } });
+    log = commitRound(log, 1, { 1: { kills: 1 }, 2: { kills: 0 } });
+    log = commitRound(log, 3, { 2: { kills: 1 } });
+    expect(toMatchRoundStats(log, 1)).toEqual([
+      { round: 1, kills: 1 },
+      { round: 2, kills: 0, level: 2 },
+    ]);
+  });
+
+  it('is undefined when nothing was logged or the log is incomplete', () => {
+    expect(toMatchRoundStats(createEmptyStatLog(), 1)).toBeUndefined();
+    const legacy = commitRound(createLegacyStatLog([makePlayer(1, Team.Titans, { totalKills: 1 })]), 3, { 1: { kills: 1 } });
+    expect(toMatchRoundStats(legacy, 1)).toBeUndefined();
+  });
+
+  it('skips rounds where the player has no values', () => {
+    let log = commitRound(createEmptyStatLog(), 1, { 1: { kills: 1 }, 2: {} });
+    log = commitRound(log, 2, { 1: {}, 2: {} });
+    expect(toMatchRoundStats(log, 1)).toEqual([{ round: 1, kills: 1 }]);
+  });
+
+  it('is undefined for an untracked game whose rounds hold only empty values', () => {
+    let log = commitRound(createEmptyStatLog(), 1, { 1: {}, 2: {} });
+    log = saveRoundDraft(log, 2, { 1: {}, 2: {} });
+    expect(toMatchRoundStats(log, 1)).toBeUndefined();
+    expect(toMatchRoundStats(log, 2)).toBeUndefined();
+  });
+
+  it('stores counts only: no player names or ids in the persisted entries', () => {
+    // A log carrying foreign keys (e.g. from a corrupted autosave) must not leak them.
+    const log = {
+      rounds: [{ round: 1, reviewed: true, players: { 1: { kills: 2, name: 'Ann', playerId: 1, id: 1 } } }],
+    } as unknown as GameStatLog;
+    const entries = toMatchRoundStats(log, 1) ?? [];
+    expect(entries).toEqual([{ round: 1, kills: 2 }]);
+    const allowedKeys: string[] = ['round', ...STAT_KEYS];
+    for (const entry of entries) {
+      expect(Object.keys(entry).filter(key => !allowedKeys.includes(key))).toEqual([]);
+    }
   });
 });

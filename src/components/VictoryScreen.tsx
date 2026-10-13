@@ -6,7 +6,7 @@ import { useSound } from '../context/SoundContext';
 import dbService from '../services/DatabaseService';
 import EnhancedTooltip from './common/EnhancedTooltip';
 import EndOfRoundAssistant from './EndOfRoundAssistant';
-import { GameStatLog, RoundValues, buildReviewValues } from '../shared/utils/gameStatLog';
+import { GameStatLog, RoundValues, buildReviewValues, toMatchRoundStats } from '../shared/utils/gameStatLog';
 import { StatTrackingSettings, getCategoriesInUse } from '../shared/utils/statTrackingSettings';
 import VictoryTypeSelector from './common/VictoryTypeSelector';
 import { NO_HERO_ID } from '../shared/utils/heroIds';
@@ -131,7 +131,8 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
         assists: player.stats?.totalAssists,
         goldEarned: player.stats?.totalGoldEarned,
         minionKills: player.stats?.totalMinionKills,
-        level: player.stats?.level
+        level: player.stats?.level,
+        roundStats: toMatchRoundStats(statLog, player.id)
       }));
       
       // Save match data
