@@ -33,6 +33,8 @@ interface VictoryScreenProps {
   trackingSettings: StatTrackingSettings;
   /** Called once the match has been written to the database. */
   onMatchSaved?: () => void;
+  /** Pre-selected victory type guessed from the game state. */
+  suggestedVictoryType?: VictoryType;
 }
 
 const VictoryScreen: React.FC<VictoryScreenProps> = ({ 
@@ -48,7 +50,8 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
   onUpdatePlayerStats,
   onSaveRoundDraft,
   trackingSettings,
-  onMatchSaved
+  onMatchSaved,
+  suggestedVictoryType
 }) => {
   const [animationComplete, setAnimationComplete] = useState(false);
   const [isSavingMatchData, setSavingMatchData] = useState(false);
@@ -60,7 +63,7 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
   const [showFinalRoundPrompt, setShowFinalRoundPrompt] = useState<boolean>(false);
   const finalRoundStatsRecorded = finalRoundReviewed;
   // State for victory type selection
-  const [victoryType, setVictoryType] = useState<VictoryType | undefined>(undefined);
+  const [victoryType, setVictoryType] = useState<VictoryType | undefined>(suggestedVictoryType);
   const [victoryTypeError, setVictoryTypeError] = useState<string | null>(null);
   const { playSound } = useSound();
   
@@ -294,6 +297,9 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
               }}
               required={true}
             />
+            {suggestedVictoryType && victoryType === suggestedVictoryType && (
+              <p className="mt-2 text-xs text-gray-400">Pre-selected from the game state — change it if needed.</p>
+            )}
             {victoryTypeError && (
               <div className="mt-2 text-red-400 text-sm flex items-center justify-center">
                 <AlertTriangle size={14} className="mr-1" />

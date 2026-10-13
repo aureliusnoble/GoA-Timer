@@ -158,3 +158,26 @@ describe('VictoryScreen keeps the finished game until saved (4.1)', () => {
     expect(screen.getByText('Record Final Round Stats')).toBeTruthy();
   });
 });
+
+describe('VictoryScreen victory type pre-select (4.6)', () => {
+  it('saves the suggested type without the user picking one', async () => {
+    renderVictory({ suggestedVictoryType: 'kills' });
+    expect(screen.getByText('Pre-selected from the game state — change it if needed.')).toBeTruthy();
+    await clickAndFlush(screen.getByText('Save Match Data'));
+    expect(recordMatch.mock.calls[0][0].victoryType).toBe('kills');
+  });
+
+  it('the user can still change it', async () => {
+    renderVictory({ suggestedVictoryType: 'kills' });
+    fireEvent.click(screen.getByText('Wave'));
+    await clickAndFlush(screen.getByText('Save Match Data'));
+    expect(recordMatch.mock.calls[0][0].victoryType).toBe('wave');
+  });
+
+  it('still requires a choice when nothing is suggested', async () => {
+    renderVictory();
+    await clickAndFlush(screen.getByText('Save Match Data'));
+    expect(recordMatch).not.toHaveBeenCalled();
+    expect(screen.getByText('Please select how the match was won')).toBeTruthy();
+  });
+});

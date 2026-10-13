@@ -33,6 +33,7 @@ import {
   loadStatTrackingSettings,
   saveStatTrackingSettings,
 } from './shared/utils/statTrackingSettings';
+import { suggestVictoryType } from './shared/utils/victoryTypeSuggestion';
 import {
   Hero,
   GameState,
@@ -2217,6 +2218,7 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
           onSaveRoundDraft={handleSaveRoundDraft}
           trackingSettings={statTracking}
           onMatchSaved={handleMatchRecorded}
+          suggestedVictoryType={suggestVictoryType(gameState, victorTeam)}
         />
       )}
       </Suspense>
