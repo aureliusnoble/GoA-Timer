@@ -104,6 +104,17 @@ function generateUUID(): string {
   });
 }
 
+/** Match players grouped by matchId, each group in its original order. */
+function groupByMatchId(matchPlayers: DBMatchPlayer[]): Map<string, DBMatchPlayer[]> {
+  const groups = new Map<string, DBMatchPlayer[]>();
+  for (const matchPlayer of matchPlayers) {
+    const group = groups.get(matchPlayer.matchId);
+    if (group) group.push(matchPlayer);
+    else groups.set(matchPlayer.matchId, [matchPlayer]);
+  }
+  return groups;
+}
+
 /**
  * Database service for managing match statistics
  */
@@ -644,6 +655,9 @@ class DatabaseService {
         const match = matchesMap.get(matchPlayer.matchId);
         if (!match) continue;
 
+        const matchDate = formatLocalDate(new Date(match.date)); // local calendar day, YYYY-MM-DD
+        if (!matchDate) continue; // unreadable date: an empty day would break the chart's x-axis
+
         if (!heroTracking.has(heroId)) {
           heroTracking.set(heroId, {
             heroName: matchPlayer.heroName,
@@ -653,7 +667,6 @@ class DatabaseService {
         }
 
         const heroData = heroTracking.get(heroId)!;
-        const matchDate = formatLocalDate(new Date(match.date)); // local calendar day, YYYY-MM-DD
         const won = matchPlayer.team === match.winningTeam;
 
         heroData.matches.push({ date: matchDate, won });
@@ -1631,7 +1644,7 @@ class DatabaseService {
         ordinal: ordinal(updatedRating),
         // Convert ordinal to user-friendly scale
         elo: Math.round((ordinal(updatedRating) + 25) * 40 + 200),
-        lastPlayed: new Date(),
+        lastPlayed: matchData.date,
         level: playerInfo.level || player.level
       };
       
@@ -2059,23 +2072,21 @@ class DatabaseService {
       
       const existingMatches = await this.getAllMatches();
       const existingMatchesById = new Map(existingMatches.map(m => [m.id, m]));
+      // One read for the whole merge instead of one per existing match
+      const localMatchPlayersMap = groupByMatchId(await this.getAllMatchPlayers());
+      const importedMatchPlayersMap = groupByMatchId(importedData.matchPlayers);
       
-      const importedMatchPlayersMap = new Map<string, DBMatchPlayer[]>();
-      for (const mp of importedData.matchPlayers) {
-        if (!importedMatchPlayersMap.has(mp.matchId)) {
-          importedMatchPlayersMap.set(mp.matchId, []);
-        }
-        importedMatchPlayersMap.get(mp.matchId)!.push(mp);
-      }
-      
-      for (const importedMatch of importedData.matches) {
+      for (const rawImportedMatch of importedData.matches) {
+        // The edit marker belongs to the device that edited the match: never store another device's
+        const { locallyEditedAt: _editedOnOtherDevice, ...importedMatch } = rawImportedMatch;
         const localMatch = existingMatchesById.get(importedMatch.id);
         if (localMatch) {
           // Known match: only fill in fields this device is missing
           await this.fillMissingMatchData(
             localMatch,
             importedMatch,
-            importedMatchPlayersMap.get(importedMatch.id) || []
+            importedMatchPlayersMap.get(importedMatch.id) || [],
+            localMatchPlayersMap.get(importedMatch.id) || []
           );
           continue;
         }
@@ -2114,7 +2125,8 @@ class DatabaseService {
   private async fillMissingMatchData(
     localMatch: DBMatch,
     importedMatch: DBMatch,
-    importedMatchPlayers: DBMatchPlayer[]
+    importedMatchPlayers: DBMatchPlayer[],
+    localMatchPlayers: DBMatchPlayer[]
   ): Promise<void> {
     if (localMatch.locallyEditedAt) return;
 
@@ -2125,7 +2137,6 @@ class DatabaseService {
 
     if (importedMatchPlayers.length === 0) return;
 
-    const localMatchPlayers = await this.getMatchPlayers(localMatch.id);
     const localById = new Map(localMatchPlayers.map(mp => [mp.id, mp]));
 
     for (const importedMatchPlayer of importedMatchPlayers) {

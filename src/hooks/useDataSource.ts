@@ -1049,6 +1049,9 @@ export function useDataSource() {
         const match = matchesMap.get(matchPlayer.matchId);
         if (!match) continue;
 
+        const matchDate = formatLocalDate(new Date(match.date)); // local calendar day, YYYY-MM-DD
+        if (!matchDate) continue; // unreadable date: an empty day would break the chart's x-axis
+
         if (!heroTracking.has(heroId)) {
           heroTracking.set(heroId, {
             heroName: matchPlayer.heroName,
@@ -1058,7 +1061,6 @@ export function useDataSource() {
         }
 
         const heroData = heroTracking.get(heroId)!;
-        const matchDate = formatLocalDate(new Date(match.date)); // local calendar day, YYYY-MM-DD
         const won = matchPlayer.team === match.winningTeam;
 
         heroData.matches.push({ date: matchDate, won });

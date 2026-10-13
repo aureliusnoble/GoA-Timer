@@ -58,19 +58,22 @@ afterEach(() => {
   (dbService as unknown as { db: unknown }).db = null;
 });
 
+function stubStorage(localMatches: DBMatch | DBMatch[], localRows: DBMatchPlayer[]) {
+  connectFakeDb();
+  vi.spyOn(dbService, 'getAllPlayers').mockResolvedValue([alice]);
+  vi.spyOn(dbService, 'getAllMatches').mockResolvedValue(Array.isArray(localMatches) ? localMatches : [localMatches]);
+  vi.spyOn(dbService, 'savePlayer').mockResolvedValue();
+  vi.spyOn(dbService, 'recalculatePlayerStats').mockResolvedValue();
+  return {
+    getAllMatchPlayers: vi.spyOn(dbService, 'getAllMatchPlayers').mockResolvedValue(localRows),
+    getMatchPlayers: vi.spyOn(dbService, 'getMatchPlayers')
+      .mockImplementation(async matchId => localRows.filter(row => row.matchId === matchId)),
+    saveMatch: vi.spyOn(dbService, 'saveMatch').mockResolvedValue('match-1'),
+    saveMatchPlayer: vi.spyOn(dbService, 'saveMatchPlayer').mockResolvedValue('mp-1'),
+  };
+}
+
 describe('mergeData on a match that already exists locally', () => {
-  function stubStorage(localMatch: DBMatch, localRows: DBMatchPlayer[]) {
-    connectFakeDb();
-    vi.spyOn(dbService, 'getAllPlayers').mockResolvedValue([alice]);
-    vi.spyOn(dbService, 'getAllMatches').mockResolvedValue([localMatch]);
-    vi.spyOn(dbService, 'getMatchPlayers').mockResolvedValue(localRows);
-    vi.spyOn(dbService, 'savePlayer').mockResolvedValue();
-    vi.spyOn(dbService, 'recalculatePlayerStats').mockResolvedValue();
-    return {
-      saveMatch: vi.spyOn(dbService, 'saveMatch').mockResolvedValue('match-1'),
-      saveMatchPlayer: vi.spyOn(dbService, 'saveMatchPlayer').mockResolvedValue('mp-1'),
-    };
-  }
 
   it('fills the missing victory type and stats without overwriting local values', async () => {
     const { saveMatch, saveMatchPlayer } = stubStorage(match, [aliceRow, bobRow]);
@@ -123,6 +126,91 @@ describe('mergeData on a match that already exists locally', () => {
     }));
 
     expect(saveMatchPlayer).not.toHaveBeenCalled();
+  });
+
+  it("does not copy another device's local edit marker when filling", async () => {
+    const { saveMatch } = stubStorage(match, [aliceRow, bobRow]);
+    const editedElsewhere = new Date('2026-10-01T12:00:00Z');
+
+    await dbService.mergeData(exportData({
+      matches: [{ ...match, victoryType: 'wave', locallyEditedAt: editedElsewhere }],
+    }));
+
+    expect(saveMatch).toHaveBeenCalledTimes(1);
+    expect(saveMatch.mock.calls[0][0]).toMatchObject({ id: 'match-1', victoryType: 'wave' });
+    expect(saveMatch.mock.calls[0][0]).not.toHaveProperty('locallyEditedAt');
+  });
+
+  it('writes nothing when the only new field is the edit marker', async () => {
+    const { saveMatch } = stubStorage(match, [aliceRow, bobRow]);
+
+    await dbService.mergeData(exportData({ matches: [{ ...match, locallyEditedAt: new Date('2026-10-01T12:00:00Z') }] }));
+
+    expect(saveMatch).not.toHaveBeenCalled();
+  });
+
+  it('reads the local match players once for the whole merge, not once per match', async () => {
+    const match2: DBMatch = { ...match, id: 'match-2', date: new Date('2026-09-02T18:30:00Z') };
+    const carolRow: DBMatchPlayer = { ...bobRow, id: 'mp-3', matchId: 'match-2', playerId: 'Carol' };
+    const { getAllMatchPlayers, getMatchPlayers, saveMatchPlayer } = stubStorage([match, match2], [aliceRow, bobRow, carolRow]);
+
+    await dbService.mergeData(exportData({
+      matches: [match, match2],
+      matchPlayers: [{ ...aliceRow, deaths: 2 }, { ...carolRow, kills: 4 }, { ...carolRow, id: 'mp-1', matchId: 'match-2', kills: 7 }],
+    }));
+
+    expect(getAllMatchPlayers).toHaveBeenCalledTimes(1);
+    expect(getMatchPlayers).not.toHaveBeenCalled();
+    expect(saveMatchPlayer.mock.calls.map(call => call[0])).toEqual([
+      { ...aliceRow, deaths: 2 },
+      { ...carolRow, kills: 4 },
+    ]);
+  });
+});
+
+describe('mergeData on a new match', () => {
+  it("does not store another device's local edit marker", async () => {
+    const { saveMatch, saveMatchPlayer } = stubStorage([], []);
+
+    const ok = await dbService.mergeData(exportData({
+      matches: [{ ...match, victoryType: 'kills', locallyEditedAt: new Date('2026-10-01T12:00:00Z') }],
+      matchPlayers: [aliceRow],
+    }));
+
+    expect(ok).toBe(true);
+    expect(saveMatch).toHaveBeenCalledTimes(1);
+    expect(saveMatch.mock.calls[0][0]).toEqual({ ...match, victoryType: 'kills' });
+    expect(saveMatchPlayer).toHaveBeenCalledWith(aliceRow);
+  });
+});
+
+describe('recordMatch', () => {
+  it("sets the players' last-played date to the match date", async () => {
+    connectFakeDb();
+    vi.spyOn(dbService, 'getAllPlayers').mockResolvedValue([alice]);
+    vi.spyOn(dbService, 'getAllMatches').mockResolvedValue([match]); // the new match is later: in order
+    vi.spyOn(dbService, 'getPlayer').mockImplementation(async id => (id === 'Alice' ? { ...alice } : null));
+    const savePlayer = vi.spyOn(dbService, 'savePlayer').mockResolvedValue();
+    vi.spyOn(dbService, 'saveMatch').mockResolvedValue('match-2');
+    vi.spyOn(dbService, 'saveMatchPlayer').mockResolvedValue('mp');
+    const recalculate = vi.spyOn(dbService, 'recalculatePlayerStats').mockResolvedValue();
+    const date = new Date('2026-10-01T18:00:00Z');
+
+    await dbService.recordMatch(
+      { date, winningTeam: Team.Titans, gameLength: GameLength.Quick, doubleLanes: false, victoryType: 'throne' },
+      [
+        { id: 'Alice', team: Team.Titans, heroId: 1, heroName: 'Brogan', heroRoles: [] },
+        { id: 'Bob', team: Team.Atlanteans, heroId: 2, heroName: 'Tigerclaw', heroRoles: [] },
+      ]
+    );
+
+    expect(recalculate).not.toHaveBeenCalled();
+    const lastSaved = (id: string) => {
+      const saved = savePlayer.mock.calls.map(call => call[0]).filter(player => player.id === id);
+      return saved[saved.length - 1];
+    };
+    expect(lastSaved('Alice').lastPlayed).toEqual(date);
+    expect(lastSaved('Bob').lastPlayed).toEqual(date);
   });
 });
 

@@ -120,6 +120,7 @@ describe('importing round logs', () => {
     connectFakeDb();
     vi.spyOn(dbService, 'getAllPlayers').mockResolvedValue([]);
     vi.spyOn(dbService, 'getAllMatches').mockResolvedValue([]);
+    vi.spyOn(dbService, 'getAllMatchPlayers').mockResolvedValue([]);
     vi.spyOn(dbService, 'savePlayer').mockResolvedValue();
     vi.spyOn(dbService, 'saveMatch').mockResolvedValue('match-1');
     vi.spyOn(dbService, 'recalculatePlayerStats').mockResolvedValue();
@@ -140,7 +141,7 @@ describe('importing round logs', () => {
       connectFakeDb();
       vi.spyOn(dbService, 'getAllPlayers').mockResolvedValue([]);
       vi.spyOn(dbService, 'getAllMatches').mockResolvedValue([match]);
-      vi.spyOn(dbService, 'getMatchPlayers').mockResolvedValue(localRows);
+      vi.spyOn(dbService, 'getAllMatchPlayers').mockResolvedValue(localRows);
       vi.spyOn(dbService, 'saveMatch').mockResolvedValue('match-1');
       vi.spyOn(dbService, 'recalculatePlayerStats').mockResolvedValue();
       return vi.spyOn(dbService, 'saveMatchPlayer').mockResolvedValue('mp');

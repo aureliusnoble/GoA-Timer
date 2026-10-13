@@ -71,3 +71,17 @@ describe('getHeroWinRateOverTime groups matches by local calendar day', () => {
     });
   });
 });
+
+describe('getHeroWinRateOverTime with a corrupt match date', () => {
+  it('skips the match instead of adding an empty date to the chart', async () => {
+    stubData(
+      [makeMatch('a', new Date(2026, 9, 12, 10, 0)), makeMatch('bad', new Date(NaN))],
+      [makeMatchPlayer('a', Team.Titans), makeMatchPlayer('bad', Team.Titans)]
+    );
+    const result = await dbService.getHeroWinRateOverTime(undefined, 1);
+    expect(result.heroes[0].dataPoints).toEqual([
+      { date: '2026-10-12', gamesPlayedTotal: 1, winsTotal: 1, winRate: 100, gamesPlayedOnDate: 1 },
+    ]);
+    expect(result.dateRange).toEqual({ firstMatch: '2026-10-12', lastMatch: '2026-10-12' });
+  });
+});

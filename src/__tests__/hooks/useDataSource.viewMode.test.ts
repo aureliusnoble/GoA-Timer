@@ -5,6 +5,7 @@ import { useDataSource } from '../../hooks/useDataSource';
 import dbService, { DBMatch, DBMatchPlayer, DBPlayer } from '../../services/DatabaseService';
 import { computePlayerRatingTable } from '../../shared/utils/ratingReplay';
 import { Team, GameLength } from '../../types';
+import { withTimeZone } from '../helpers/timeZone';
 
 // Shared (view-only) data: two duels between Alice and Bob. The stored ordinals are
 // deliberately wrong (as after out-of-order recording) so the test can tell them apart
@@ -163,5 +164,28 @@ describe('getPlayerRatingJourney in view-only mode', () => {
     expect(journey.snapshots.map(s => s.matchId)).toEqual(['m1']);
     const table = await result.current.getPlayerRatingTable({ startDate: new Date('2026-01-08T00:00:00.000Z') });
     expect(journey.finalRatings).toEqual(table.ratings);
+  });
+});
+
+describe('getHeroWinRateOverTime in view-only mode', () => {
+  withTimeZone('UTC');
+
+  it('skips a shared match whose date cannot be read instead of adding an empty date to the chart', async () => {
+    const shared = mocks.viewMode.sharedData;
+    const { matches, matchPlayers } = shared;
+    shared.matches = [...matches, { ...matches[0], id: 'm-bad', date: 'not a date' }];
+    shared.matchPlayers = [...matchPlayers, { ...matchPlayers[1], id: 'm-bad-Bob', match_id: 'm-bad' }];
+    try {
+      const { result } = renderHook(() => useDataSource());
+      const { heroes, dateRange } = await result.current.getHeroWinRateOverTime(undefined, 1);
+
+      const brogan = heroes.find(hero => hero.heroName === 'Brogan')!;
+      expect(brogan.totalGames).toBe(2);
+      expect(brogan.dataPoints.map(point => point.date)).toEqual(['2026-01-05', '2026-01-10']);
+      expect(dateRange).toEqual({ firstMatch: '2026-01-05', lastMatch: '2026-01-10' });
+    } finally {
+      shared.matches = matches;
+      shared.matchPlayers = matchPlayers;
+    }
   });
 });
