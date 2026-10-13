@@ -233,3 +233,21 @@ export function localMatchPlayerToCloudRow(mp: DBMatchPlayer, ctx: CloudUploadCo
     synced_at: ctx.syncedAt,
   });
 }
+
+/**
+ * True when Supabase rejected a match-player row because cloud_match_players.round_stats does not
+ * exist yet (migration 013 not applied): PostgREST's PGRST204 "column not found in the schema cache",
+ * or any error naming the round_stats column.
+ */
+export function isMissingRoundStatsColumnError(
+  error: { code?: string; message?: string } | null | undefined
+): boolean {
+  if (!error) return false;
+  return error.code === 'PGRST204' || (error.message ?? '').includes('round_stats');
+}
+
+/** Copy of a match-player upload row without its round log (for clouds that lack the column). */
+export function withoutRoundStats(row: CloudRowPayload): CloudRowPayload {
+  const { round_stats: _roundStats, ...rest } = row;
+  return rest;
+}

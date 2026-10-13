@@ -113,6 +113,83 @@ describe('CloudSyncService.uploadLocalData', () => {
     expect(upserts[1].payload).toMatchObject({ id: 'mp-2' });
     expect(upserts[1].payload).not.toHaveProperty('round_stats');
   });
+
+  describe('when the cloud has no round_stats column yet', () => {
+    const roundStats = [{ round: 1, kills: 1 }];
+    const missingColumn = {
+      code: 'PGRST204',
+      message: "Could not find the 'round_stats' column of 'cloud_match_players' in the schema cache",
+    };
+    const rejectRoundStats = () => fakeSupabase.respondWith(call =>
+      call.table === 'cloud_match_players' && call.op === 'upsert' && 'round_stats' in (call.payload as object)
+        ? { error: missingColumn }
+        : { data: [], error: null }
+    );
+
+    beforeEach(() => {
+      db.exportData.mockResolvedValue({
+        ...localData(),
+        matchPlayers: [
+          { id: 'mp-1', matchId: 'match-1', playerId: 'Alice', team: Team.Titans, heroId: 1, heroName: 'Arien', heroRoles: [], kills: 1, roundStats },
+          { id: 'mp-2', matchId: 'match-1', playerId: 'Bob', team: Team.Atlanteans, heroId: 2, heroName: 'Brogan', heroRoles: [], kills: 0, roundStats },
+          { id: 'mp-3', matchId: 'match-1', playerId: 'Cara', team: Team.Atlanteans, heroId: 3, heroName: 'Cutter', heroRoles: [] },
+        ],
+      });
+    });
+
+    it('retries the rejected row without round_stats and leaves it out for the rest of the run', async () => {
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      rejectRoundStats();
+
+      const result = await CloudSyncService.uploadLocalData();
+
+      const upserts = fakeSupabase.callsTo('cloud_match_players', 'upsert');
+      expect(upserts.map(call => (call.payload as { id: string }).id)).toEqual(['mp-1', 'mp-1', 'mp-2', 'mp-3']);
+      expect(upserts.map(call => Array.isArray(call.payload))).toEqual([false, false, false, false]);
+      expect(upserts.map(call => 'round_stats' in (call.payload as object))).toEqual([true, false, false, false]);
+      expect(upserts[1].payload).toMatchObject({ id: 'mp-1', kills: 1, owner_id: 'owner-1' });
+      expect(result).toMatchObject({ success: true, recordsAdded: 4, error: undefined });
+      expect(consoleError).not.toHaveBeenCalled();
+      expect(consoleWarn).toHaveBeenCalledTimes(1);
+      expect(consoleWarn.mock.calls[0][0]).toMatch(/round logs/i);
+    });
+
+    it('tries round_stats again on the next upload', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      rejectRoundStats();
+      await CloudSyncService.uploadLocalData();
+
+      fakeSupabase.reset();
+      await CloudSyncService.uploadLocalData();
+
+      const upserts = fakeSupabase.callsTo('cloud_match_players', 'upsert');
+      expect(upserts.map(call => 'round_stats' in (call.payload as object))).toEqual([true, true, false]);
+    });
+
+    it('does not retry other errors and counts the row as failed', async () => {
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      fakeSupabase.respondWith(call =>
+        call.table === 'cloud_match_players' && call.op === 'upsert' && (call.payload as { id: string }).id === 'mp-1'
+          ? { error: { code: '23503', message: 'violates foreign key constraint' } }
+          : { data: [], error: null }
+      );
+
+      const result = await CloudSyncService.uploadLocalData();
+
+      const upserts = fakeSupabase.callsTo('cloud_match_players', 'upsert');
+      expect(upserts.map(call => (call.payload as { id: string }).id)).toEqual(['mp-1', 'mp-2', 'mp-3']);
+      expect(upserts.map(call => 'round_stats' in (call.payload as object))).toEqual([true, true, false]);
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/1 record failed/);
+      expect(consoleError).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to upload match player mp-1 (match match-1)'),
+        'violates foreign key constraint'
+      );
+      expect(consoleWarn).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('CloudSyncService.downloadOwnCloudData', () => {

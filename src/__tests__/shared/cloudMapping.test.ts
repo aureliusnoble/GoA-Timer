@@ -4,11 +4,13 @@ import {
   cloudMatchPlayerRowToLocal,
   cloudMatchRowToLocal,
   cloudPlayerRowToLocal,
+  isMissingRoundStatsColumnError,
   localMatchPlayerToCloudRow,
   localMatchToCloudRow,
   localPlayerToCloudRow,
   toOptionalNumber,
   toVictoryType,
+  withoutRoundStats,
   CloudUploadContext,
 } from '../../shared/utils/cloudMapping';
 import type { DBMatch, DBMatchPlayer, DBPlayer } from '../../services/DatabaseService';
@@ -227,6 +229,33 @@ describe('localMatchPlayerToCloudRow', () => {
     expect('round_stats' in localMatchPlayerToCloudRow(mp, ctx)).toBe(false);
     const legacy = { ...mp, roundStats: null } as unknown as DBMatchPlayer;
     expect('round_stats' in localMatchPlayerToCloudRow(legacy, ctx)).toBe(false);
+  });
+});
+
+describe('missing round_stats cloud column (migration 013 not applied yet)', () => {
+  it('recognises the PostgREST and Postgres missing-column errors', () => {
+    expect(isMissingRoundStatsColumnError({
+      code: 'PGRST204',
+      message: "Could not find the 'round_stats' column of 'cloud_match_players' in the schema cache",
+    })).toBe(true);
+    expect(isMissingRoundStatsColumnError({ code: 'PGRST204', message: '' })).toBe(true);
+    expect(isMissingRoundStatsColumnError({
+      code: '42703',
+      message: 'column "round_stats" of relation "cloud_match_players" does not exist',
+    })).toBe(true);
+  });
+
+  it('ignores other errors', () => {
+    expect(isMissingRoundStatsColumnError(null)).toBe(false);
+    expect(isMissingRoundStatsColumnError(undefined)).toBe(false);
+    expect(isMissingRoundStatsColumnError({ message: 'network down' })).toBe(false);
+    expect(isMissingRoundStatsColumnError({ code: '23503', message: 'violates foreign key constraint' })).toBe(false);
+  });
+
+  it('drops only the round_stats key, without changing the original row', () => {
+    const row = { id: 'mp-1', kills: 0, round_stats: [{ round: 1, kills: 0 }] };
+    expect(withoutRoundStats(row)).toEqual({ id: 'mp-1', kills: 0 });
+    expect(row).toHaveProperty('round_stats');
   });
 });
 

@@ -8,9 +8,11 @@ import {
   cloudMatchRowToLocal,
   cloudPlayerRowToLocal,
   CloudUploadContext,
+  isMissingRoundStatsColumnError,
   localMatchPlayerToCloudRow,
   localMatchToCloudRow,
   localPlayerToCloudRow,
+  withoutRoundStats,
 } from '../../shared/utils/cloudMapping';
 import {
   appendPendingRename,
@@ -169,13 +171,27 @@ class CloudSyncServiceClass {
 
       // Upload match players (excluding those from tombstoned matches)
       this.updateStatus({ status: 'uploading', progress: 70, message: `Uploading ${matchPlayersToUpload.length} match details...` });
+      // Cleared for the rest of this run if the cloud has no round_stats column (migration 013 not applied yet)
+      let roundStatsColumnAvailable = true;
       for (let i = 0; i < matchPlayersToUpload.length; i++) {
         const mp = matchPlayersToUpload[i];
-        const { error } = await supabase
+        const fullRow = localMatchPlayerToCloudRow(mp, uploadContext);
+        const row = roundStatsColumnAvailable ? fullRow : withoutRoundStats(fullRow);
+        let { error } = await supabase
           .from('cloud_match_players')
-          .upsert(localMatchPlayerToCloudRow(mp, uploadContext), {
-            onConflict: 'owner_id,id',
-          });
+          .upsert(row, { onConflict: 'owner_id,id' });
+
+        if (error && 'round_stats' in row && isMissingRoundStatsColumnError(error)) {
+          roundStatsColumnAvailable = false;
+          console.warn(
+            '[CloudSyncService] The cloud database has no round_stats column yet, so round logs could not be uploaded. ' +
+              'Uploading match players without them; round logs stay on this device until an upload after the migration.',
+            error.message
+          );
+          ({ error } = await supabase
+            .from('cloud_match_players')
+            .upsert(withoutRoundStats(row), { onConflict: 'owner_id,id' }));
+        }
 
         if (error) {
           failedCount++;

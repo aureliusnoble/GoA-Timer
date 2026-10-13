@@ -1,7 +1,7 @@
 // src/__tests__/helpers/fakeSupabase.ts
 // Minimal stand-in for the Supabase client used by CloudSyncService tests.
 // Every from(table) call is recorded; awaiting a query resolves through respondWith().
-export type FakeError = { message: string };
+export type FakeError = { message: string; code?: string };
 export interface FakeResult {
   data?: unknown;
   error: FakeError | null;
