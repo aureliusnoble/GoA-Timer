@@ -2226,7 +2226,7 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
           onSaveRoundDraft={handleSaveRoundDraft}
           trackingSettings={statTracking}
           onMatchSaved={handleMatchRecorded}
-          suggestedVictoryType={suggestVictoryType(gameState, victorTeam)}
+          victoryTypeSuggestion={suggestVictoryType(gameState, victorTeam)}
         />
       )}
       </Suspense>

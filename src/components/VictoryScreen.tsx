@@ -10,6 +10,7 @@ import { GameStatLog, RoundValues, buildReviewValues, toMatchRoundStats } from '
 import { StatTrackingSettings, getCategoriesInUse } from '../shared/utils/statTrackingSettings';
 import VictoryTypeSelector from './common/VictoryTypeSelector';
 import { NO_HERO_ID } from '../shared/utils/heroIds';
+import type { VictoryTypeSuggestion } from '../shared/utils/victoryTypeSuggestion';
 
 interface VictoryScreenProps {
   winningTeam: Team;
@@ -33,8 +34,8 @@ interface VictoryScreenProps {
   trackingSettings: StatTrackingSettings;
   /** Called once the match has been written to the database. */
   onMatchSaved?: () => void;
-  /** Pre-selected victory type guessed from the game state. */
-  suggestedVictoryType?: VictoryType;
+  /** Victory type to pre-select, guessed from the game state, with its evidence. */
+  victoryTypeSuggestion?: VictoryTypeSuggestion;
 }
 
 const VictoryScreen: React.FC<VictoryScreenProps> = ({ 
@@ -51,7 +52,7 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
   onSaveRoundDraft,
   trackingSettings,
   onMatchSaved,
-  suggestedVictoryType
+  victoryTypeSuggestion
 }) => {
   const [animationComplete, setAnimationComplete] = useState(false);
   const [isSavingMatchData, setSavingMatchData] = useState(false);
@@ -62,8 +63,10 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
   // Shown when saving while the final round's stats were never recorded
   const [showFinalRoundPrompt, setShowFinalRoundPrompt] = useState<boolean>(false);
   const finalRoundStatsRecorded = finalRoundReviewed;
-  // State for victory type selection
-  const [victoryType, setVictoryType] = useState<VictoryType | undefined>(suggestedVictoryType);
+  // State for victory type selection. The note explains the suggestion made when the screen opened,
+  // not later recomputations of the prop.
+  const [initialSuggestion] = useState<VictoryTypeSuggestion | undefined>(victoryTypeSuggestion);
+  const [victoryType, setVictoryType] = useState<VictoryType | undefined>(initialSuggestion?.type);
   const [victoryTypeError, setVictoryTypeError] = useState<string | null>(null);
   const { playSound } = useSound();
   
@@ -298,8 +301,12 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
               }}
               required={true}
             />
-            {suggestedVictoryType && victoryType === suggestedVictoryType && (
-              <p className="mt-2 text-xs text-gray-400">Pre-selected from the game state — change it if needed.</p>
+            {initialSuggestion && victoryType === initialSuggestion.type && (
+              <p className="mt-2 text-xs text-gray-400">
+                {initialSuggestion.reason === 'no-lives'
+                  ? `Pre-selected because the ${winningTeam === Team.Titans ? 'Atlanteans' : 'Titans'} had no lives left — change it if needed.`
+                  : 'Pre-selected because the final minion wave was in play — change it if the win was by Throne or Kills.'}
+              </p>
             )}
             {victoryTypeError && (
               <div className="mt-2 text-red-400 text-sm flex items-center justify-center">

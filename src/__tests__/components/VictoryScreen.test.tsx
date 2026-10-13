@@ -160,22 +160,53 @@ describe('VictoryScreen keeps the finished game until saved (4.1)', () => {
 });
 
 describe('VictoryScreen victory type pre-select (4.6)', () => {
+  const KILLS_NOTE_ATLANTEANS = 'Pre-selected because the Atlanteans had no lives left — change it if needed.';
+  const WAVE_NOTE = 'Pre-selected because the final minion wave was in play — change it if the win was by Throne or Kills.';
+
   it('saves the suggested type without the user picking one', async () => {
-    renderVictory({ suggestedVictoryType: 'kills' });
-    expect(screen.getByText('Pre-selected from the game state — change it if needed.')).toBeTruthy();
+    renderVictory({ victoryTypeSuggestion: { type: 'kills', reason: 'no-lives' } });
     await clickAndFlush(screen.getByText('Save Match Data'));
     expect(recordMatch.mock.calls[0][0].victoryType).toBe('kills');
   });
 
-  it('the user can still change it', async () => {
-    renderVictory({ suggestedVictoryType: 'kills' });
-    fireEvent.click(screen.getByText('Wave'));
+  it('says a kills pre-selection is because the losing team had no lives left', () => {
+    renderVictory({ victoryTypeSuggestion: { type: 'kills', reason: 'no-lives' } });
+    expect(screen.getByText(KILLS_NOTE_ATLANTEANS)).toBeTruthy();
+  });
+
+  it('names the Titans when they are the team that ran out of lives', () => {
+    renderVictory({ winningTeam: Team.Atlanteans, victoryTypeSuggestion: { type: 'kills', reason: 'no-lives' } });
+    expect(screen.getByText('Pre-selected because the Titans had no lives left — change it if needed.')).toBeTruthy();
+  });
+
+  it('says a wave pre-selection is because the final minion wave was in play', async () => {
+    renderVictory({ victoryTypeSuggestion: { type: 'wave', reason: 'final-wave' } });
+    expect(screen.getByText(WAVE_NOTE)).toBeTruthy();
     await clickAndFlush(screen.getByText('Save Match Data'));
     expect(recordMatch.mock.calls[0][0].victoryType).toBe('wave');
   });
 
+  it('the user can still change it, and the note goes away', async () => {
+    renderVictory({ victoryTypeSuggestion: { type: 'kills', reason: 'no-lives' } });
+    fireEvent.click(screen.getByText('Wave'));
+    expect(screen.queryByText(KILLS_NOTE_ATLANTEANS)).toBeNull();
+    expect(screen.queryByText(/^Pre-selected because/)).toBeNull();
+    await clickAndFlush(screen.getByText('Save Match Data'));
+    expect(recordMatch.mock.calls[0][0].victoryType).toBe('wave');
+  });
+
+  it('keeps explaining the initial suggestion when the live suggestion changes', () => {
+    const { props, rerender } = renderVictory({ victoryTypeSuggestion: { type: 'kills', reason: 'no-lives' } });
+    rerender(<VictoryScreen {...props} victoryTypeSuggestion={undefined} />);
+    expect(screen.getByText(KILLS_NOTE_ATLANTEANS)).toBeTruthy();
+    rerender(<VictoryScreen {...props} victoryTypeSuggestion={{ type: 'wave', reason: 'final-wave' }} />);
+    expect(screen.getByText(KILLS_NOTE_ATLANTEANS)).toBeTruthy();
+    expect(screen.queryByText(WAVE_NOTE)).toBeNull();
+  });
+
   it('still requires a choice when nothing is suggested', async () => {
     renderVictory();
+    expect(screen.queryByText(/^Pre-selected because/)).toBeNull();
     await clickAndFlush(screen.getByText('Save Match Data'));
     expect(recordMatch).not.toHaveBeenCalled();
     expect(screen.getByText('Please select how the match was won')).toBeTruthy();
