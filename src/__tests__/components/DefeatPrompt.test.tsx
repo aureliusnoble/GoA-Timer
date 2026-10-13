@@ -41,4 +41,27 @@ describe('DefeatPrompt', () => {
     fireEvent.click(screen.getByText('Arien'));
     expect(onLog).toHaveBeenCalledWith(1, 3);
   });
+
+  it('labels the skip button for the one pending defeat', () => {
+    const onSkip = vi.fn();
+    render(<DefeatPrompt team={Team.Titans} pending={1} players={PLAYERS} categories={categories({ deaths: true })} onLog={vi.fn()} onSkip={onSkip} />);
+    fireEvent.click(screen.getByLabelText('Skip logging this defeat'));
+    expect(onSkip).toHaveBeenCalledTimes(1);
+  });
+
+  it('labels the skip button for all pending defeats when there are several', () => {
+    render(<DefeatPrompt team={Team.Titans} pending={3} players={PLAYERS} categories={categories({ deaths: true })} onLog={vi.fn()} onSkip={vi.fn()} />);
+    expect(screen.getByLabelText('Skip logging these defeats')).toBeTruthy();
+    expect(screen.queryByLabelText('Skip logging this defeat')).toBeNull();
+  });
+
+  it('gives the skip button and the hero chips at least a 44px touch target', () => {
+    render(<DefeatPrompt team={Team.Titans} pending={1} players={PLAYERS} categories={categories({ kills: true, deaths: true })} onLog={vi.fn()} onSkip={vi.fn()} />);
+    const skip = screen.getByLabelText('Skip logging this defeat');
+    expect(skip.className).toContain('min-w-[44px]');
+    expect(skip.className).toContain('min-h-[44px]');
+    for (const chip of ['Arien', 'Tigerclaw', 'Other']) {
+      expect(screen.getByText(chip).className, chip).toContain('min-w-[44px]');
+    }
+  });
 });

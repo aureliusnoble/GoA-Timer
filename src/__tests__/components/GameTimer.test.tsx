@@ -281,6 +281,15 @@ describe('GameTimer defeat prompt on lives "-" (4.8)', () => {
     expect(screen.queryByRole('group', { name: 'Log defeat' })).toBeNull();
   });
 
+  it('skipping several pending defeats skips them all, and says so', () => {
+    renderTimer({ trackingSettings: tracking({ kills: true }) });
+    fireEvent.click(screen.getByLabelText('Remove a Titans life'));
+    fireEvent.click(screen.getByLabelText('Remove a Titans life'));
+    expect(screen.getByText('Log defeat (2 pending)')).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Skip logging these defeats'));
+    expect(screen.queryByRole('group', { name: 'Log defeat' })).toBeNull();
+  });
+
   it('does not appear when the team has no lives left to lose', () => {
     renderTimer({
       gameState: gameState({ teamLives: { [Team.Titans]: 0, [Team.Atlanteans]: 4 } }),

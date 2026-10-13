@@ -20,7 +20,7 @@ interface DefeatPromptProps {
 }
 
 const chipClass = (selected: boolean) =>
-  `h-9 px-3 rounded-full text-sm font-medium bg-gray-700 hover:bg-gray-600 ${selected ? 'ring-2 ring-white' : ''}`;
+  `h-9 min-w-[44px] px-3 rounded-full text-sm font-medium bg-gray-700 hover:bg-gray-600 ${selected ? 'ring-2 ring-white' : ''}`;
 
 const DefeatPrompt: React.FC<DefeatPromptProps> = ({ team, pending, players, categories, onLog, onSkip }) => {
   const [victimId, setVictimId] = useState<number | undefined>(undefined);
@@ -56,7 +56,13 @@ const DefeatPrompt: React.FC<DefeatPromptProps> = ({ team, pending, players, cat
     <div className="mt-3 p-2 rounded-lg bg-black/30 text-left text-sm" role="group" aria-label="Log defeat">
       <div className="flex justify-between items-center mb-2">
         <span className="font-semibold">Log defeat{pending > 1 ? ` (${pending} pending)` : ''}</span>
-        <button type="button" onClick={onSkip} aria-label="Skip logging this defeat" className="p-1 rounded-full hover:bg-black/30">
+        {/* Skipping clears every pending defeat of this team. 44px touch target; -my-2 keeps the header compact. */}
+        <button
+          type="button"
+          onClick={onSkip}
+          aria-label={pending > 1 ? 'Skip logging these defeats' : 'Skip logging this defeat'}
+          className="min-w-[44px] min-h-[44px] -my-2 flex items-center justify-center rounded-full hover:bg-black/30"
+        >
           <X size={16} />
         </button>
       </div>
