@@ -138,6 +138,14 @@ describe('VictoryScreen final-round stats (4.1)', () => {
     });
   });
 
+  it('keeps the prompt buttons in a scrolling overlay so small phones can reach them', async () => {
+    renderVictory({ statTrackingActive: true });
+    fireEvent.click(screen.getByText('Throne'));
+    await clickAndFlush(screen.getByText('Save Match Data'));
+    const scroller = screen.getByText('Save Without Them').closest('.overflow-y-auto');
+    expect(scroller?.classList.contains('fixed')).toBe(true);
+  });
+
   it('does not ask when the final round was recorded', async () => {
     renderVictory({ statTrackingActive: true, finalRoundReviewed: true });
     expect(screen.getByText('Final round statistics recorded')).toBeTruthy();

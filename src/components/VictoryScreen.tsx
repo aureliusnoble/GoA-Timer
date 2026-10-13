@@ -177,197 +177,201 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
     setShowStatsCollection(true);
   };
   
+  // The overlay scrolls when its content is taller than the screen (small phones)
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center">
-      {/* Background color based on winning team */}
-      <div 
-        className={`absolute inset-0 ${
-          winningTeam === Team.Titans 
-            ? 'bg-blue-900 bg-opacity-95' 
+    <div className="fixed inset-0 z-50 overflow-y-auto overflow-x-hidden">
+      {/* Background color based on winning team (fixed so it stays put while scrolling) */}
+      <div
+        className={`fixed inset-0 ${
+          winningTeam === Team.Titans
+            ? 'bg-blue-900 bg-opacity-95'
             : 'bg-red-900 bg-opacity-95'
         }`}
       ></div>
-      
-      <div className="relative z-10 text-center">
-        {/* Victory trophy animation */}
-        <div className="mb-8 transform scale-100 animate-bounce">
-          <Trophy size={120} className={`${
-            winningTeam === Team.Titans ? 'text-blue-300' : 'text-red-300'
-          }`} />
-        </div>
-        
-        <h1 className="text-6xl font-bold mb-4 animate-in fade-in">
-          {winningTeam === Team.Titans ? 'Titan' : 'Atlantean'} Victory!
-        </h1>
-        
-        <p className="text-2xl mb-12 opacity-75">
-          The {winningTeam === Team.Titans ? 'Titan' : 'Atlantean'}s have emerged victorious!
-        </p>
-        
-        {/* Animated stars */}
-        <div className="victory-stars">
-          {[...Array(20)].map((_, i) => (
-            <div 
-              key={i}
-              className={`absolute star-${i} text-${winningTeam === Team.Titans ? 'blue' : 'red'}-200`}
-              style={{
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
-                opacity: Math.random() * 0.5 + 0.5,
-                animation: `twinkle ${Math.random() * 2 + 1}s infinite alternate`
-              }}
-            >★</div>
-          ))}
-        </div>
-        
-        {/* Action Buttons */}
-        <div className="flex flex-col md:flex-row gap-4 justify-center mt-4">
-          {/* Return to setup button */}
-          <button
-            onClick={handleReturnClick}
-            className={`px-6 py-3 rounded-lg text-white font-medium flex items-center mx-auto ${
-              animationComplete ? 'opacity-100' : 'opacity-0'
-            } transition-opacity duration-500 ${
-              winningTeam === Team.Titans 
-                ? 'bg-blue-600 hover:bg-blue-500' 
-                : 'bg-red-600 hover:bg-red-500'
-            }`}
-          >
-            <Home size={20} className="mr-2" />
-            Return to Setup
-          </button>
+
+      {/* Centred when it fits; bottom padding keeps the last buttons clear of the feedback bar and sound button */}
+      <div className="relative z-10 flex min-h-full flex-col items-center justify-center px-4 pt-8 pb-28 lg:pb-8">
+        <div className="relative z-10 text-center">
+          {/* Victory trophy animation */}
+          <div className="mb-8 transform scale-100 animate-bounce">
+            <Trophy size={120} className={`${
+              winningTeam === Team.Titans ? 'text-blue-300' : 'text-red-300'
+            }`} />
+          </div>
           
-          {/* NEW: Record Final Round Stats button - only show if not recorded yet */}
-          {!finalRoundStatsRecorded && !matchDataSaved && animationComplete && (
-            <EnhancedTooltip text="Record statistics for the final round before saving">
-              <button
-                onClick={openFinalRoundStats}
-                className={`px-6 py-3 rounded-lg text-white font-medium flex items-center mx-auto ${
-                  winningTeam === Team.Titans 
-                    ? 'bg-blue-700 hover:bg-blue-600' 
-                    : 'bg-red-700 hover:bg-red-600'
-                }`}
-              >
-                <Database size={20} className="mr-2" />
-                Record Final Round Stats
-              </button>
-            </EnhancedTooltip>
-          )}
+          <h1 className="text-6xl font-bold mb-4 animate-in fade-in">
+            {winningTeam === Team.Titans ? 'Titan' : 'Atlantean'} Victory!
+          </h1>
           
-          {/* Save Match Data button - always visible, but color changes when saved */}
-          {animationComplete && (
-            <EnhancedTooltip text={matchDataSaved ? "Match data saved successfully" : "Save match results to your statistics"}>
-              <button
-                onClick={() => handleSaveMatchData()}
-                disabled={isSavingMatchData || matchDataSaved}
-                className={`px-6 py-3 rounded-lg text-white font-medium flex items-center mx-auto
-                  ${matchDataSaved
-                    ? 'bg-green-600 cursor-default'
-                    : winningTeam === Team.Titans
-                      ? 'bg-blue-700 hover:bg-blue-600'
+          <p className="text-2xl mb-12 opacity-75">
+            The {winningTeam === Team.Titans ? 'Titan' : 'Atlantean'}s have emerged victorious!
+          </p>
+          
+          {/* Animated stars */}
+          <div className="victory-stars">
+            {[...Array(20)].map((_, i) => (
+              <div 
+                key={i}
+                className={`absolute star-${i} text-${winningTeam === Team.Titans ? 'blue' : 'red'}-200`}
+                style={{
+                  left: `${Math.random() * 100}%`,
+                  top: `${Math.random() * 100}%`,
+                  opacity: Math.random() * 0.5 + 0.5,
+                  animation: `twinkle ${Math.random() * 2 + 1}s infinite alternate`
+                }}
+              >★</div>
+            ))}
+          </div>
+          
+          {/* Action Buttons */}
+          <div className="flex flex-col md:flex-row gap-4 justify-center mt-4">
+            {/* Return to setup button */}
+            <button
+              onClick={handleReturnClick}
+              className={`px-6 py-3 rounded-lg text-white font-medium flex items-center mx-auto ${
+                animationComplete ? 'opacity-100' : 'opacity-0'
+              } transition-opacity duration-500 ${
+                winningTeam === Team.Titans 
+                  ? 'bg-blue-600 hover:bg-blue-500' 
+                  : 'bg-red-600 hover:bg-red-500'
+              }`}
+            >
+              <Home size={20} className="mr-2" />
+              Return to Setup
+            </button>
+            
+            {/* NEW: Record Final Round Stats button - only show if not recorded yet */}
+            {!finalRoundStatsRecorded && !matchDataSaved && animationComplete && (
+              <EnhancedTooltip text="Record statistics for the final round before saving">
+                <button
+                  onClick={openFinalRoundStats}
+                  className={`px-6 py-3 rounded-lg text-white font-medium flex items-center mx-auto ${
+                    winningTeam === Team.Titans 
+                      ? 'bg-blue-700 hover:bg-blue-600' 
                       : 'bg-red-700 hover:bg-red-600'
-                  } ${isSavingMatchData ? 'opacity-70 cursor-wait' : 'opacity-100'}`}
-              >
-                {isSavingMatchData ? (
-                  <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                    Saving...
-                  </>
-                ) : matchDataSaved ? (
-                  <>
-                    <Database size={20} className="mr-2" />
-                    Saved Successfully
-                  </>
-                ) : (
-                  <>
-                    <Database size={20} className="mr-2" />
-                    Save Match Data
-                  </>
-                )}
-              </button>
-            </EnhancedTooltip>
+                  }`}
+                >
+                  <Database size={20} className="mr-2" />
+                  Record Final Round Stats
+                </button>
+              </EnhancedTooltip>
+            )}
+            
+            {/* Save Match Data button - always visible, but color changes when saved */}
+            {animationComplete && (
+              <EnhancedTooltip text={matchDataSaved ? "Match data saved successfully" : "Save match results to your statistics"}>
+                <button
+                  onClick={() => handleSaveMatchData()}
+                  disabled={isSavingMatchData || matchDataSaved}
+                  className={`px-6 py-3 rounded-lg text-white font-medium flex items-center mx-auto
+                    ${matchDataSaved
+                      ? 'bg-green-600 cursor-default'
+                      : winningTeam === Team.Titans
+                        ? 'bg-blue-700 hover:bg-blue-600'
+                        : 'bg-red-700 hover:bg-red-600'
+                    } ${isSavingMatchData ? 'opacity-70 cursor-wait' : 'opacity-100'}`}
+                >
+                  {isSavingMatchData ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                      Saving...
+                    </>
+                  ) : matchDataSaved ? (
+                    <>
+                      <Database size={20} className="mr-2" />
+                      Saved Successfully
+                    </>
+                  ) : (
+                    <>
+                      <Database size={20} className="mr-2" />
+                      Save Match Data
+                    </>
+                  )}
+                </button>
+              </EnhancedTooltip>
+            )}
+          </div>
+
+          {/* Victory Type Selection - Show before save button, hidden once saved */}
+          {animationComplete && !matchDataSaved && (
+            <div className="mt-6 p-4 bg-gray-800/80 rounded-lg max-w-md mx-auto">
+              <VictoryTypeSelector
+                value={victoryType}
+                onChange={(type) => {
+                  setVictoryType(type);
+                  setVictoryTypeError(null);
+                  playSound('buttonClick');
+                }}
+                required={true}
+              />
+              {initialSuggestion && victoryType === initialSuggestion.type && (
+                <p className="mt-2 text-xs text-gray-400">
+                  {initialSuggestion.reason === 'no-lives'
+                    ? `Pre-selected because the ${winningTeam === Team.Titans ? 'Atlanteans' : 'Titans'} had no lives left — change it if needed.`
+                    : 'Pre-selected because the final minion wave was in play — change it if the win was by Throne or Kills.'}
+                </p>
+              )}
+              {victoryTypeError && (
+                <div className="mt-2 text-red-400 text-sm flex items-center justify-center">
+                  <AlertTriangle size={14} className="mr-1" />
+                  {victoryTypeError}
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Saving while the final round was never recorded */}
+          {showFinalRoundPrompt && !matchDataSaved && (
+            <div className="mt-4 p-4 bg-amber-900/80 border border-amber-500 rounded-lg max-w-md mx-auto text-left" role="alertdialog" aria-label="Final round stats not recorded">
+              <p className="font-semibold text-amber-100 flex items-center">
+                <AlertTriangle size={16} className="mr-2" />
+                Final round stats not recorded
+              </p>
+              <p className="text-sm text-amber-200 mt-1">
+                You were tracking stats, but the final round hasn't been recorded. Anything not logged for it will be missing from this match.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2 mt-3">
+                <button
+                  onClick={openFinalRoundStats}
+                  className="flex-1 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 text-white font-medium"
+                >
+                  Record Final Round
+                </button>
+                <button
+                  onClick={() => handleSaveMatchData(true)}
+                  className="flex-1 px-4 py-2 rounded-lg bg-gray-600 hover:bg-gray-500 text-white font-medium"
+                >
+                  Save Without Them
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Match Data Saved Confirmation - shown below the buttons */}
+
+          
+          {/* NEW: Final Round Stats Recorded Confirmation */}
+          {finalRoundStatsRecorded && animationComplete && (
+            <div className="mt-4 px-5 py-3 bg-green-800/70 rounded-lg inline-block">
+              <p className="flex items-center text-green-200">
+                <CheckCircle size={16} className="mr-2" />
+                Final round statistics recorded
+              </p>
+            </div>
+          )}
+          
+          {/* Error Message */}
+          {saveError && (
+            <div className="mt-4 px-5 py-3 bg-red-800/70 rounded-lg inline-block">
+              <p className="flex items-center text-red-200">
+                <AlertTriangle size={16} className="mr-2" />
+                {saveError}
+              </p>
+            </div>
           )}
         </div>
-
-        {/* Victory Type Selection - Show before save button, hidden once saved */}
-        {animationComplete && !matchDataSaved && (
-          <div className="mt-6 p-4 bg-gray-800/80 rounded-lg max-w-md mx-auto">
-            <VictoryTypeSelector
-              value={victoryType}
-              onChange={(type) => {
-                setVictoryType(type);
-                setVictoryTypeError(null);
-                playSound('buttonClick');
-              }}
-              required={true}
-            />
-            {initialSuggestion && victoryType === initialSuggestion.type && (
-              <p className="mt-2 text-xs text-gray-400">
-                {initialSuggestion.reason === 'no-lives'
-                  ? `Pre-selected because the ${winningTeam === Team.Titans ? 'Atlanteans' : 'Titans'} had no lives left — change it if needed.`
-                  : 'Pre-selected because the final minion wave was in play — change it if the win was by Throne or Kills.'}
-              </p>
-            )}
-            {victoryTypeError && (
-              <div className="mt-2 text-red-400 text-sm flex items-center justify-center">
-                <AlertTriangle size={14} className="mr-1" />
-                {victoryTypeError}
-              </div>
-            )}
-          </div>
-        )}
-        
-        {/* Saving while the final round was never recorded */}
-        {showFinalRoundPrompt && !matchDataSaved && (
-          <div className="mt-4 p-4 bg-amber-900/80 border border-amber-500 rounded-lg max-w-md mx-auto text-left" role="alertdialog" aria-label="Final round stats not recorded">
-            <p className="font-semibold text-amber-100 flex items-center">
-              <AlertTriangle size={16} className="mr-2" />
-              Final round stats not recorded
-            </p>
-            <p className="text-sm text-amber-200 mt-1">
-              You were tracking stats, but the final round hasn't been recorded. Anything not logged for it will be missing from this match.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-2 mt-3">
-              <button
-                onClick={openFinalRoundStats}
-                className="flex-1 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 text-white font-medium"
-              >
-                Record Final Round
-              </button>
-              <button
-                onClick={() => handleSaveMatchData(true)}
-                className="flex-1 px-4 py-2 rounded-lg bg-gray-600 hover:bg-gray-500 text-white font-medium"
-              >
-                Save Without Them
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Match Data Saved Confirmation - shown below the buttons */}
-
-        
-        {/* NEW: Final Round Stats Recorded Confirmation */}
-        {finalRoundStatsRecorded && animationComplete && (
-          <div className="mt-4 px-5 py-3 bg-green-800/70 rounded-lg inline-block">
-            <p className="flex items-center text-green-200">
-              <CheckCircle size={16} className="mr-2" />
-              Final round statistics recorded
-            </p>
-          </div>
-        )}
-        
-        {/* Error Message */}
-        {saveError && (
-          <div className="mt-4 px-5 py-3 bg-red-800/70 rounded-lg inline-block">
-            <p className="flex items-center text-red-200">
-              <AlertTriangle size={16} className="mr-2" />
-              {saveError}
-            </p>
-          </div>
-        )}
       </div>
-      
+
       {/* NEW: End of Round Assistant for final round stats collection */}
       <EndOfRoundAssistant
         players={players}
@@ -399,6 +403,7 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
         .victory-stars div {
           position: absolute;
           font-size: 1.5rem;
+          pointer-events: none; /* decorative: never block a tap on the buttons */
         }
       `}</style>
     </div>

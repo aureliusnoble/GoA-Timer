@@ -284,12 +284,12 @@ const EditMatchModal: React.FC<EditMatchModalProps> = ({
 
   return (
     <div 
-      className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+      className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 pb-20 sm:pb-4 backdrop-blur-sm"
       onClick={handleBackdropClick}
     >
       <div 
         ref={modalRef}
-        className="max-w-6xl w-full max-h-[90vh] bg-gray-800 rounded-lg border border-gray-600 overflow-hidden"
+        className="max-w-6xl w-full max-h-full sm:max-h-[90vh] flex flex-col bg-gray-800 rounded-lg border border-gray-600 overflow-hidden"
       >
         {/* Modal Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-700">
@@ -315,7 +315,7 @@ const EditMatchModal: React.FC<EditMatchModalProps> = ({
         </div>
 
         {/* Modal Content */}
-        <div className="overflow-y-auto max-h-[calc(90vh-180px)]">
+        <div className="overflow-y-auto min-h-0">
           {loading ? (
             <div className="flex items-center justify-center h-64">
               <div className="flex items-center">
@@ -528,7 +528,7 @@ const EditMatchModal: React.FC<EditMatchModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="flex items-center justify-between p-6 border-t border-gray-700">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-6 border-t border-gray-700">
           <div className="flex items-center space-x-4">
             {hasUnsavedChanges && (
               <div className="flex items-center text-amber-400 text-sm">
@@ -538,12 +538,12 @@ const EditMatchModal: React.FC<EditMatchModalProps> = ({
             )}
           </div>
           
-          <div className="flex items-center space-x-3">
-            <EnhancedTooltip text="Reset all changes to original values">
+          <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3 w-full sm:w-auto">
+            <EnhancedTooltip text="Reset all changes to original values" className="grow sm:grow-0">
               <button
                 onClick={handleReset}
                 disabled={saving || !hasUnsavedChanges}
-                className={`px-4 py-2 rounded-lg flex items-center ${
+                className={`w-full px-4 py-2 rounded-lg flex items-center justify-center ${
                   hasUnsavedChanges 
                     ? 'bg-gray-600 hover:bg-gray-500' 
                     : 'bg-gray-700 cursor-not-allowed opacity-50'
@@ -557,7 +557,7 @@ const EditMatchModal: React.FC<EditMatchModalProps> = ({
             <button
               onClick={handleClose}
               disabled={saving}
-              className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg"
+              className="grow sm:grow-0 px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg"
             >
               Cancel
             </button>
@@ -570,11 +570,12 @@ const EditMatchModal: React.FC<EditMatchModalProps> = ({
                     ? "No changes to save"
                     : "Save all changes and recalculate ratings"
               }
+              className="grow sm:grow-0"
             >
               <button
                 onClick={handleSave}
                 disabled={saving || !validation.isValid || !hasUnsavedChanges}
-                className={`px-4 py-2 rounded-lg flex items-center ${
+                className={`w-full px-4 py-2 rounded-lg flex items-center justify-center ${
                   validation.isValid && hasUnsavedChanges
                     ? 'bg-blue-600 hover:bg-blue-500' 
                     : 'bg-gray-700 cursor-not-allowed opacity-50'
