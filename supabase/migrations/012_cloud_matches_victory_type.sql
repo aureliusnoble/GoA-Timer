@@ -5,9 +5,19 @@
 -- the schema reproducible. Idempotent: safe on databases that already have it.
 -- Older app versions keep working: the column is nullable and they either send
 -- a valid value, NULL, or nothing.
+--
+-- Apply order: if the live database does not have cloud_matches.victory_type yet,
+-- apply 012 BEFORE 011 (011's view reads the column).
+-- After applying migrations, make PostgREST see the new schema:
+--   NOTIFY pgrst, 'reload schema';
 
 ALTER TABLE cloud_matches
   ADD COLUMN IF NOT EXISTS victory_type TEXT;
+
+-- A hand-added column may have been created NOT NULL; untracked victory types are NULL.
+-- Idempotent: a no-op when the column is already nullable.
+ALTER TABLE cloud_matches
+  ALTER COLUMN victory_type DROP NOT NULL;
 
 DO $$
 BEGIN
