@@ -10,6 +10,7 @@ import EditMatchModal from './EditMatchModal';
 import { useDataSource } from '../../hooks/useDataSource';
 import { getVictoryTypeDisplay } from '../common/VictoryTypeSelector';
 import MatchPlayerStatLine from './MatchPlayerStatLine';
+import RoundLogTable from './RoundLogTable';
 import { getTrackedStatKeys } from '../../shared/utils/matchStatDisplay';
 
 interface MatchHistoryProps {
@@ -495,6 +496,9 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ onBack }) => {
                           </div>
                         </div>
                       </div>
+
+                      {/* Round-by-round log (only when this match has one) */}
+                      <RoundLogTable players={match.players} />
                       
                       {/* Edit and Delete Buttons - hidden in view mode */}
                       {!isViewMode && (
