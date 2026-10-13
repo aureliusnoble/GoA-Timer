@@ -2216,7 +2216,6 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
           onUpdatePlayerStats={handleCommitRoundStats}
           onSaveRoundDraft={handleSaveRoundDraft}
           trackingSettings={statTracking}
-          onTrackingSettingsChange={setStatTracking}
           onMatchSaved={handleMatchRecorded}
         />
       )}

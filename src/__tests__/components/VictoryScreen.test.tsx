@@ -34,7 +34,6 @@ function renderVictory(overrides: Partial<Props> = {}) {
     finalRoundReviewed: false,
     statTrackingActive: false,
     trackingSettings: defaultStatTrackingSettings(),
-    onTrackingSettingsChange: vi.fn(),
     onUpdatePlayerStats: vi.fn(),
     onSaveRoundDraft: vi.fn(),
     onMatchSaved: vi.fn(),
@@ -78,6 +77,19 @@ describe('VictoryScreen final-round stats (4.1)', () => {
     fireEvent.click(screen.getAllByText('Got Kill')[0]);
     fireEvent.click(screen.getByLabelText('Close'));
     expect(props.onSaveRoundDraft).toHaveBeenCalledWith(3, { 1: { kills: 1 }, 2: { kills: 0 } });
+  });
+
+  it('category changes in the final-round assistant are saved for that round only (4.2)', () => {
+    const { props } = renderVictory({
+      trackingSettings: { enabled: true, categories: { ...defaultStatTrackingSettings().categories, kills: true } },
+    });
+    fireEvent.click(screen.getByText('Record Final Round Stats'));
+    fireEvent.click(screen.getByRole('button', { name: 'Deaths' }));
+    fireEvent.click(screen.getByText('Save Final Round Stats'));
+    expect(props.onUpdatePlayerStats).toHaveBeenCalledWith(3, {
+      1: { kills: 0, deaths: 0 },
+      2: { kills: 0, deaths: 0 },
+    });
   });
 
   it('hides "Record Final Round Stats" once the match is saved', async () => {

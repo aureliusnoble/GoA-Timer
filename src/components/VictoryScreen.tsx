@@ -29,9 +29,8 @@ interface VictoryScreenProps {
   onUpdatePlayerStats?: (round: number, values: RoundValues) => void;
   /** Keep values entered in a review closed with X (not counted as recorded). */
   onSaveRoundDraft?: (round: number, values: RoundValues) => void;
-  /** Remembered stat-tracking settings (logging switch + categories). */
+  /** Remembered stat-tracking settings (read only: final-round changes are not remembered). */
   trackingSettings: StatTrackingSettings;
-  onTrackingSettingsChange?: (settings: StatTrackingSettings) => void;
   /** Called once the match has been written to the database. */
   onMatchSaved?: () => void;
 }
@@ -49,7 +48,6 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
   onUpdatePlayerStats,
   onSaveRoundDraft,
   trackingSettings,
-  onTrackingSettingsChange,
   onMatchSaved
 }) => {
   const [animationComplete, setAnimationComplete] = useState(false);
@@ -366,7 +364,6 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
         isVisible={showStatsCollection}
         mode="finalRound"
         trackingSettings={{ enabled: true, categories: getCategoriesInUse(statLog, trackingSettings) }}
-        onTrackingSettingsChange={onTrackingSettingsChange}
       />
       
       {/* Add CSS animation */}

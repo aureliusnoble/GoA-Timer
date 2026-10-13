@@ -127,6 +127,16 @@ describe('EndOfRoundAssistant - final-round mode (4.2)', () => {
     expect(props.onComplete).toHaveBeenCalledWith({ 1: { kills: 0 }, 2: { kills: 0 }, 3: { kills: 1 } });
   });
 
+  it('category changes apply to this review only and are not remembered', () => {
+    const { props } = renderAssistant({ mode: 'finalRound', trackingSettings: tracking({ kills: true }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Deaths' }));
+    fireEvent.click(screen.getByText('Save Final Round Stats'));
+    expect(props.onTrackingSettingsChange).not.toHaveBeenCalled();
+    expect(props.onComplete).toHaveBeenCalledWith({
+      1: { kills: 0, deaths: 0 }, 2: { kills: 0, deaths: 0 }, 3: { kills: 0, deaths: 0 },
+    });
+  });
+
   it('end-of-round mode still shows the checklist', () => {
     renderAssistant();
     expect(screen.getByText('End of Round Checklist')).toBeTruthy();

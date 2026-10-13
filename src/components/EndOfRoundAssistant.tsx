@@ -43,7 +43,7 @@ interface EndOfRoundAssistantProps {
   onDismiss?: (draft?: RoundValues) => void;
   /** Logging switch + categories to start from when the assistant opens. */
   trackingSettings: StatTrackingSettings;
-  /** Called whenever the user changes the logging switch or a category. */
+  /** Called whenever the user changes the logging switch or a category (never in final-round mode). */
   onTrackingSettingsChange?: (settings: StatTrackingSettings) => void;
   /** 'finalRound' (victory screen): no checklist, logging always on. */
   mode?: 'endOfRound' | 'finalRound';
@@ -171,7 +171,8 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
     playSound('toggleSwitch');
     const next = { ...enabledStats, [statKey]: enabled };
     setEnabledStats(next);
-    onTrackingSettingsChange?.({ enabled: loggingEnabled, categories: next });
+    // Final round: the choice applies to this review only, never to the remembered settings
+    if (!isFinalRound) onTrackingSettingsChange?.({ enabled: loggingEnabled, categories: next });
   };
 
   // NEW: Handle checking all checklist items at once
