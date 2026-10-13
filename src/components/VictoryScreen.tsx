@@ -7,7 +7,7 @@ import dbService from '../services/DatabaseService';
 import EnhancedTooltip from './common/EnhancedTooltip';
 import EndOfRoundAssistant from './EndOfRoundAssistant';
 import { GameStatLog, RoundValues, buildReviewValues } from '../shared/utils/gameStatLog';
-import { StatTrackingSettings } from '../shared/utils/statTrackingSettings';
+import { StatTrackingSettings, getCategoriesInUse } from '../shared/utils/statTrackingSettings';
 import VictoryTypeSelector from './common/VictoryTypeSelector';
 import { NO_HERO_ID } from '../shared/utils/heroIds';
 
@@ -58,8 +58,6 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
   const [saveError, setSaveError] = useState<string | null>(null);
   // NEW: State for managing final round stats collection
   const [showStatsCollection, setShowStatsCollection] = useState<boolean>(false);
-  // The user finished the final-round assistant with logging switched off
-  const [finalRoundDeclined, setFinalRoundDeclined] = useState<boolean>(false);
   // Shown when saving while the final round's stats were never recorded
   const [showFinalRoundPrompt, setShowFinalRoundPrompt] = useState<boolean>(false);
   const finalRoundStatsRecorded = finalRoundReviewed;
@@ -97,7 +95,7 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
     }
 
     // Never drop the final round silently
-    if (!skipFinalRoundCheck && statTrackingActive && !finalRoundStatsRecorded && !finalRoundDeclined) {
+    if (!skipFinalRoundCheck && statTrackingActive && !finalRoundStatsRecorded) {
       playSound('buttonClick');
       setShowFinalRoundPrompt(true);
       return;
@@ -150,13 +148,11 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
     }
   };
 
-  // Final-round assistant saved
+  // Final-round assistant saved (final-round mode always logs, so stats is set)
   const handleFinalRoundStats = (stats?: RoundValues) => {
     playSound('buttonClick');
     if (stats && onUpdatePlayerStats) {
       onUpdatePlayerStats(finalRound, stats);
-    } else if (!stats) {
-      setFinalRoundDeclined(true);
     }
     setShowStatsCollection(false);
     playSound('phaseChange');
@@ -368,7 +364,8 @@ const VictoryScreen: React.FC<VictoryScreenProps> = ({
         onComplete={handleFinalRoundStats}
         onDismiss={handleFinalRoundDismiss}
         isVisible={showStatsCollection}
-        trackingSettings={trackingSettings}
+        mode="finalRound"
+        trackingSettings={{ enabled: true, categories: getCategoriesInUse(statLog, trackingSettings) }}
         onTrackingSettingsChange={onTrackingSettingsChange}
       />
       

@@ -8,7 +8,7 @@ vi.mock('../../services/DatabaseService', () => ({ default: { recordMatch } }));
 
 import VictoryScreen from '../../components/VictoryScreen';
 import { GameLength, Hero, Player, Team } from '../../types';
-import { createEmptyStatLog } from '../../shared/utils/gameStatLog';
+import { commitRound, createEmptyStatLog } from '../../shared/utils/gameStatLog';
 import { defaultStatTrackingSettings } from '../../shared/utils/statTrackingSettings';
 
 const hero = (id: number, name: string): Hero => ({
@@ -109,14 +109,21 @@ describe('VictoryScreen final-round stats (4.1)', () => {
     expect(screen.queryByText('Final round stats not recorded')).toBeNull();
   });
 
-  it('does not ask after the final-round assistant was finished with logging off', async () => {
-    renderVictory({ statTrackingActive: true });
+  it('opens the assistant in final-round mode with the categories in use this game (4.2)', () => {
+    // kills switched on now; deaths only logged in an earlier round
+    const statLog = commitRound(createEmptyStatLog(), 2, { 1: { deaths: 1 }, 2: { deaths: 0 } });
+    const { props } = renderVictory({
+      statLog,
+      trackingSettings: { enabled: true, categories: { ...defaultStatTrackingSettings().categories, kills: true } },
+    });
     fireEvent.click(screen.getByText('Record Final Round Stats'));
-    fireEvent.click(screen.getByText('Continue'));
-    fireEvent.click(screen.getByText('Throne'));
-    await clickAndFlush(screen.getByText('Save Match Data'));
-    expect(screen.queryByText('Final round stats not recorded')).toBeNull();
-    expect(recordMatch).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Final Round Stats')).toBeTruthy();
+    expect(screen.queryByText('End of Round Checklist')).toBeNull();
+    fireEvent.click(screen.getByText('Save Final Round Stats'));
+    expect(props.onUpdatePlayerStats).toHaveBeenCalledWith(3, {
+      1: { kills: 0, deaths: 0 },
+      2: { kills: 0, deaths: 0 },
+    });
   });
 
   it('does not ask when the final round was recorded', async () => {

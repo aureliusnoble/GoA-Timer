@@ -115,3 +115,20 @@ describe('EndOfRoundAssistant - assists (4.5)', () => {
     expect(props.onComplete).toHaveBeenCalledWith({ 1: { kills: 1 }, 2: { kills: 0 }, 3: { kills: 0 } });
   });
 });
+
+describe('EndOfRoundAssistant - final-round mode (4.2)', () => {
+  it('hides the checklist, has logging on and the in-use categories selected', () => {
+    const { props } = renderAssistant({ mode: 'finalRound', trackingSettings: tracking({ kills: true }, false) });
+    expect(screen.queryByText('End of Round Checklist')).toBeNull();
+    expect(screen.queryByLabelText('Log Player Stats (Optional)')).toBeNull();
+    expect(screen.getByText('Final Round Stats')).toBeTruthy();
+    fireEvent.click(screen.getAllByText('Got Kill')[2]);
+    fireEvent.click(screen.getByText('Save Final Round Stats'));
+    expect(props.onComplete).toHaveBeenCalledWith({ 1: { kills: 0 }, 2: { kills: 0 }, 3: { kills: 1 } });
+  });
+
+  it('end-of-round mode still shows the checklist', () => {
+    renderAssistant();
+    expect(screen.getByText('End of Round Checklist')).toBeTruthy();
+  });
+});

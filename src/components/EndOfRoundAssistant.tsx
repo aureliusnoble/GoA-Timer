@@ -45,6 +45,8 @@ interface EndOfRoundAssistantProps {
   trackingSettings: StatTrackingSettings;
   /** Called whenever the user changes the logging switch or a category. */
   onTrackingSettingsChange?: (settings: StatTrackingSettings) => void;
+  /** 'finalRound' (victory screen): no checklist, logging always on. */
+  mode?: 'endOfRound' | 'finalRound';
 }
 
 // Enum for stat tracking tabs - Updated to include Level
@@ -65,12 +67,14 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
   round,
   initialValues,
   trackingSettings,
-  onTrackingSettingsChange
+  onTrackingSettingsChange,
+  mode = 'endOfRound'
 }) => {
+  const isFinalRound = mode === 'finalRound';
   const { playSound } = useSound();
   
-  // State for tracking if logging is enabled
-  const [loggingEnabled, setLoggingEnabled] = useState<boolean>(trackingSettings.enabled);
+  // State for tracking if logging is enabled (always on for the final round)
+  const [loggingEnabled, setLoggingEnabled] = useState<boolean>(isFinalRound || trackingSettings.enabled);
   
   // State for individual stat category toggles
   const [enabledStats, setEnabledStats] = useState<StatCategories>({ ...trackingSettings.categories });
@@ -107,8 +111,8 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
       setPlayerStats(initialStats);
       setKillEvents([]);
 
-      // Start from the remembered tracking settings
-      setLoggingEnabled(trackingSettings.enabled);
+      // Start from the remembered tracking settings (final round: logging always on)
+      setLoggingEnabled(isFinalRound ? true : trackingSettings.enabled);
       setEnabledStats({ ...trackingSettings.categories });
 
       // Reset checklist
@@ -128,7 +132,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
       playSound('phaseChange');
     }
     wasVisibleRef.current = isVisible;
-  }, [isVisible, players, initialValues, trackingSettings, playSound]);
+  }, [isVisible, players, initialValues, trackingSettings, playSound, isFinalRound]);
 
   // Handle stat changes with increment/decrement
   const adjustStat = (playerId: number, statName: StatKey, delta: number) => {
@@ -296,7 +300,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
       <div className="bg-gray-800 rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
           <div>
-            <h2 className="text-2xl font-bold">End of Round Assistant</h2>
+            <h2 className="text-2xl font-bold">{isFinalRound ? 'Final Round Stats' : 'End of Round Assistant'}</h2>
             <p className="text-sm text-gray-400">Round {round}</p>
           </div>
           <button
@@ -309,137 +313,141 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
         </div>
         
         {/* Checklist of actions */}
-        <div className="mb-6">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="text-xl font-semibold">End of Round Checklist</h3>
+        {!isFinalRound && (
+          <div className="mb-6">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-xl font-semibold">End of Round Checklist</h3>
             
-            {/* NEW: Check All button */}
-            <button
-              onClick={checkAllItems}
-              className="px-4 py-1 bg-green-600 hover:bg-green-500 rounded-lg flex items-center text-sm"
-            >
-              <CheckSquare size={16} className="mr-2" />
-              Check All Items
-            </button>
-          </div>
+              {/* NEW: Check All button */}
+              <button
+                onClick={checkAllItems}
+                className="px-4 py-1 bg-green-600 hover:bg-green-500 rounded-lg flex items-center text-sm"
+              >
+                <CheckSquare size={16} className="mr-2" />
+                Check All Items
+              </button>
+            </div>
           
-          <div className="bg-gray-700/50 p-4 rounded-lg space-y-3">
-            <div 
-              className={`flex items-start p-3 rounded cursor-pointer ${
-                checklistItems.minionBattle ? 'bg-blue-900/30' : 'hover:bg-gray-600/50'
-              }`}
-              onClick={() => toggleChecklistItem('minionBattle')}
-            >
-              <div className={`flex-shrink-0 rounded-full w-6 h-6 flex items-center justify-center mr-3 ${
-                checklistItems.minionBattle ? 'bg-green-600' : 'bg-gray-600'
-              }`}>
-                {checklistItems.minionBattle ? <CheckCircle size={16} /> : <span>1</span>}
+            <div className="bg-gray-700/50 p-4 rounded-lg space-y-3">
+              <div 
+                className={`flex items-start p-3 rounded cursor-pointer ${
+                  checklistItems.minionBattle ? 'bg-blue-900/30' : 'hover:bg-gray-600/50'
+                }`}
+                onClick={() => toggleChecklistItem('minionBattle')}
+              >
+                <div className={`flex-shrink-0 rounded-full w-6 h-6 flex items-center justify-center mr-3 ${
+                  checklistItems.minionBattle ? 'bg-green-600' : 'bg-gray-600'
+                }`}>
+                  {checklistItems.minionBattle ? <CheckCircle size={16} /> : <span>1</span>}
+                </div>
+                <div>
+                  <p className="font-medium">Minion Battle</p>
+                  <p className="text-sm text-gray-300">Count minions in Battle Zone. Team with fewer minions removes the difference.</p>
+                </div>
               </div>
-              <div>
-                <p className="font-medium">Minion Battle</p>
-                <p className="text-sm text-gray-300">Count minions in Battle Zone. Team with fewer minions removes the difference.</p>
-              </div>
-            </div>
             
-            <div 
-              className={`flex items-start p-3 rounded cursor-pointer ${
-                checklistItems.pushLane ? 'bg-blue-900/30' : 'hover:bg-gray-600/50'
-              }`}
-              onClick={() => toggleChecklistItem('pushLane')}
-            >
-              <div className={`flex-shrink-0 rounded-full w-6 h-6 flex items-center justify-center mr-3 ${
-                checklistItems.pushLane ? 'bg-green-600' : 'bg-gray-600'
-              }`}>
-                {checklistItems.pushLane ? <CheckCircle size={16} /> : <span>2</span>}
+              <div 
+                className={`flex items-start p-3 rounded cursor-pointer ${
+                  checklistItems.pushLane ? 'bg-blue-900/30' : 'hover:bg-gray-600/50'
+                }`}
+                onClick={() => toggleChecklistItem('pushLane')}
+              >
+                <div className={`flex-shrink-0 rounded-full w-6 h-6 flex items-center justify-center mr-3 ${
+                  checklistItems.pushLane ? 'bg-green-600' : 'bg-gray-600'
+                }`}>
+                  {checklistItems.pushLane ? <CheckCircle size={16} /> : <span>2</span>}
+                </div>
+                <div>
+                  <p className="font-medium">Push the Lane <span className="text-gray-400 font-normal">(if applicable)</span></p>
+                  <p className="text-sm text-gray-300">Flip Wave counter, move Battle Zone, respawn minions.</p>
+                </div>
               </div>
-              <div>
-                <p className="font-medium">Push the Lane <span className="text-gray-400 font-normal">(if applicable)</span></p>
-                <p className="text-sm text-gray-300">Flip Wave counter, move Battle Zone, respawn minions.</p>
-              </div>
-            </div>
             
-            <div 
-              className={`flex items-start p-3 rounded cursor-pointer ${
-                checklistItems.removeTokens ? 'bg-blue-900/30' : 'hover:bg-gray-600/50'
-              }`}
-              onClick={() => toggleChecklistItem('removeTokens')}
-            >
-              <div className={`flex-shrink-0 rounded-full w-6 h-6 flex items-center justify-center mr-3 ${
-                checklistItems.removeTokens ? 'bg-green-600' : 'bg-gray-600'
-              }`}>
-                {checklistItems.removeTokens ? <CheckCircle size={16} /> : <span>3</span>}
+              <div 
+                className={`flex items-start p-3 rounded cursor-pointer ${
+                  checklistItems.removeTokens ? 'bg-blue-900/30' : 'hover:bg-gray-600/50'
+                }`}
+                onClick={() => toggleChecklistItem('removeTokens')}
+              >
+                <div className={`flex-shrink-0 rounded-full w-6 h-6 flex items-center justify-center mr-3 ${
+                  checklistItems.removeTokens ? 'bg-green-600' : 'bg-gray-600'
+                }`}>
+                  {checklistItems.removeTokens ? <CheckCircle size={16} /> : <span>3</span>}
+                </div>
+                <div>
+                  <p className="font-medium">Remove Tokens, Return Markers</p>
+                  <p className="text-sm text-gray-300">Clear the board of all tokens and return markers.</p>
+                </div>
               </div>
-              <div>
-                <p className="font-medium">Remove Tokens, Return Markers</p>
-                <p className="text-sm text-gray-300">Clear the board of all tokens and return markers.</p>
-              </div>
-            </div>
             
-            <div 
-              className={`flex items-start p-3 rounded cursor-pointer ${
-                checklistItems.retrieveCards ? 'bg-blue-900/30' : 'hover:bg-gray-600/50'
-              }`}
-              onClick={() => toggleChecklistItem('retrieveCards')}
-            >
-              <div className={`flex-shrink-0 rounded-full w-6 h-6 flex items-center justify-center mr-3 ${
-                checklistItems.retrieveCards ? 'bg-green-600' : 'bg-gray-600'
-              }`}>
-                {checklistItems.retrieveCards ? <CheckCircle size={16} /> : <span>4</span>}
+              <div 
+                className={`flex items-start p-3 rounded cursor-pointer ${
+                  checklistItems.retrieveCards ? 'bg-blue-900/30' : 'hover:bg-gray-600/50'
+                }`}
+                onClick={() => toggleChecklistItem('retrieveCards')}
+              >
+                <div className={`flex-shrink-0 rounded-full w-6 h-6 flex items-center justify-center mr-3 ${
+                  checklistItems.retrieveCards ? 'bg-green-600' : 'bg-gray-600'
+                }`}>
+                  {checklistItems.retrieveCards ? <CheckCircle size={16} /> : <span>4</span>}
+                </div>
+                <div>
+                  <p className="font-medium">Retrieve Cards</p>
+                  <p className="text-sm text-gray-300">Take back all resolved and discarded cards into hand.</p>
+                </div>
               </div>
-              <div>
-                <p className="font-medium">Retrieve Cards</p>
-                <p className="text-sm text-gray-300">Take back all resolved and discarded cards into hand.</p>
-              </div>
-            </div>
             
-            <div 
-              className={`flex items-start p-3 rounded cursor-pointer ${
-                checklistItems.levelUp ? 'bg-blue-900/30' : 'hover:bg-gray-600/50'
-              }`}
-              onClick={() => toggleChecklistItem('levelUp')}
-            >
-              <div className={`flex-shrink-0 rounded-full w-6 h-6 flex items-center justify-center mr-3 ${
-                checklistItems.levelUp ? 'bg-green-600' : 'bg-gray-600'
-              }`}>
-                {checklistItems.levelUp ? <CheckCircle size={16} /> : <span>5</span>}
+              <div 
+                className={`flex items-start p-3 rounded cursor-pointer ${
+                  checklistItems.levelUp ? 'bg-blue-900/30' : 'hover:bg-gray-600/50'
+                }`}
+                onClick={() => toggleChecklistItem('levelUp')}
+              >
+                <div className={`flex-shrink-0 rounded-full w-6 h-6 flex items-center justify-center mr-3 ${
+                  checklistItems.levelUp ? 'bg-green-600' : 'bg-gray-600'
+                }`}>
+                  {checklistItems.levelUp ? <CheckCircle size={16} /> : <span>5</span>}
+                </div>
+                <div>
+                  <p className="font-medium">Level Up</p>
+                  <p className="text-sm text-gray-300">If you have enough coins, purchase level up(s). This is mandatory!</p>
+                </div>
               </div>
-              <div>
-                <p className="font-medium">Level Up</p>
-                <p className="text-sm text-gray-300">If you have enough coins, purchase level up(s). This is mandatory!</p>
-              </div>
-            </div>
             
-            <div 
-              className={`flex items-start p-3 rounded cursor-pointer ${
-                checklistItems.pityCoins ? 'bg-blue-900/30' : 'hover:bg-gray-600/50'
-              }`}
-              onClick={() => toggleChecklistItem('pityCoins')}
-            >
-              <div className={`flex-shrink-0 rounded-full w-6 h-6 flex items-center justify-center mr-3 ${
-                checklistItems.pityCoins ? 'bg-green-600' : 'bg-gray-600'
-              }`}>
-                {checklistItems.pityCoins ? <CheckCircle size={16} /> : <span>6</span>}
-              </div>
-              <div>
-                <p className="font-medium">Collect Pity Coin</p>
-                <p className="text-sm text-gray-300">Players who did NOT level up collect 1 coin.</p>
+              <div 
+                className={`flex items-start p-3 rounded cursor-pointer ${
+                  checklistItems.pityCoins ? 'bg-blue-900/30' : 'hover:bg-gray-600/50'
+                }`}
+                onClick={() => toggleChecklistItem('pityCoins')}
+              >
+                <div className={`flex-shrink-0 rounded-full w-6 h-6 flex items-center justify-center mr-3 ${
+                  checklistItems.pityCoins ? 'bg-green-600' : 'bg-gray-600'
+                }`}>
+                  {checklistItems.pityCoins ? <CheckCircle size={16} /> : <span>6</span>}
+                </div>
+                <div>
+                  <p className="font-medium">Collect Pity Coin</p>
+                  <p className="text-sm text-gray-300">Players who did NOT level up collect 1 coin.</p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
         
         {/* Optional Logging */}
         <div className="mb-6">
-          <div className="flex items-center mb-4">
-            <input 
-              type="checkbox" 
-              id="enableLogging" 
-              checked={loggingEnabled} 
-              onChange={e => handleLoggingToggle(e.target.checked)}
-              className="mr-3 h-5 w-5"
-            />
-            <label htmlFor="enableLogging" className="text-xl font-medium">Log Player Stats (Optional)</label>
-          </div>
+          {!isFinalRound && (
+            <div className="flex items-center mb-4">
+              <input 
+                type="checkbox" 
+                id="enableLogging" 
+                checked={loggingEnabled} 
+                onChange={e => handleLoggingToggle(e.target.checked)}
+                className="mr-3 h-5 w-5"
+              />
+              <label htmlFor="enableLogging" className="text-xl font-medium">Log Player Stats (Optional)</label>
+            </div>
+          )}
           
           {loggingEnabled && (
             <div className="space-y-4">
@@ -1214,9 +1222,11 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
         </div>
         
         <div className="flex justify-between items-center">
-          <div className={`text-${allItemsChecked ? 'green' : 'yellow'}-400 font-medium`}>
-            {allItemsChecked ? 'All steps completed!' : 'Please complete all steps'}
-          </div>
+          {isFinalRound ? <div /> : (
+            <div className={`text-${allItemsChecked ? 'green' : 'yellow'}-400 font-medium`}>
+              {allItemsChecked ? 'All steps completed!' : 'Please complete all steps'}
+            </div>
+          )}
           
           <button 
             onClick={handleComplete}
@@ -1226,7 +1236,7 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
                 : 'bg-blue-600 hover:bg-blue-500'
             }`}
           >
-            {loggingEnabled ? "Save Stats & Continue" : "Continue"}
+            {isFinalRound ? 'Save Final Round Stats' : loggingEnabled ? 'Save Stats & Continue' : 'Continue'}
           </button>
         </div>
       </div>
