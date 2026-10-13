@@ -20,6 +20,8 @@ import ViewModeBanner from './components/common/ViewModeBanner';
 import {
   GameStatLog,
   RoundValues,
+  StatChange,
+  applyStatChanges,
   applyTotalsToPlayers,
   commitRound,
   createEmptyStatLog,
@@ -1822,6 +1824,11 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
     setStatLog(prev => saveRoundDraft(prev, round, values));
   };
 
+  // Live quick-log on the timer screen (and its undo)
+  const handleLiveStatChanges = (round: number, changes: StatChange[]) => {
+    setStatLog(prev => applyStatChanges(prev, round, changes));
+  };
+
   // Handle strategy timer
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -2197,6 +2204,7 @@ const startGameWithPlayers = (playersToUse: Player[]) => {
           onSaveRoundDraft={handleSaveRoundDraft}
           trackingSettings={statTracking}
           onTrackingSettingsChange={setStatTracking}
+          onLiveStatChanges={handleLiveStatChanges}
         />
       )}
       </Suspense>

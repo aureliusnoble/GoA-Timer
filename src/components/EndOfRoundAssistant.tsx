@@ -47,6 +47,8 @@ interface EndOfRoundAssistantProps {
   onTrackingSettingsChange?: (settings: StatTrackingSettings) => void;
   /** 'finalRound' (victory screen): no checklist, logging always on. */
   mode?: 'endOfRound' | 'finalRound';
+  /** Show a note that values were pre-filled from live tallies. */
+  prefilledFromLive?: boolean;
 }
 
 // Enum for stat tracking tabs - Updated to include Level
@@ -68,7 +70,8 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
   initialValues,
   trackingSettings,
   onTrackingSettingsChange,
-  mode = 'endOfRound'
+  mode = 'endOfRound',
+  prefilledFromLive = false
 }) => {
   const isFinalRound = mode === 'finalRound';
   const { playSound } = useSound();
@@ -453,6 +456,9 @@ const EndOfRoundAssistant: React.FC<EndOfRoundAssistantProps> = ({
           {loggingEnabled && (
             <div className="space-y-4">
               <p className="text-gray-300 italic">Enter stats for this round only. You only need to enter the stats you are interested in tracking.</p>
+              {prefilledFromLive && (
+                <p className="text-sm text-green-300">Pre-filled with the stats logged live during this round — adjust anything that's off.</p>
+              )}
               
               {/* Individual Stat Category Toggles */}
               <div className="mb-4 p-3 bg-gray-700/50 rounded-lg">

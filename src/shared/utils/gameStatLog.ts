@@ -291,3 +291,52 @@ export function toMatchRoundStats(log: GameStatLog, playerId: number): RoundStat
   }
   return entries.length > 0 ? entries : undefined;
 }
+
+export interface StatChange {
+  playerId: number;
+  stat: CountStatKey;
+  delta: number;
+}
+
+/** Apply live quick-log changes to a round (clamped at 0). Keeps the reviewed flag. */
+export function applyStatChanges(log: GameStatLog, round: number, changes: ReadonlyArray<StatChange>): GameStatLog {
+  if (changes.length === 0) return log;
+  const existing = getRoundEntry(log, round);
+  const players: RoundValues = { ...(existing?.players ?? {}) };
+  for (const change of changes) {
+    const previous = players[change.playerId] ?? {};
+    players[change.playerId] = {
+      ...previous,
+      [change.stat]: Math.max(0, (previous[change.stat] ?? 0) + change.delta),
+    };
+  }
+  return upsertRound(log, { round, reviewed: existing?.reviewed ?? false, players });
+}
+
+export function invertStatChanges(changes: ReadonlyArray<StatChange>): StatChange[] {
+  return changes.map(change => ({ ...change, delta: -change.delta }));
+}
+
+/**
+ * Changes for "this player defeated an enemy hero": +1 kill when kills are
+ * tracked and, when assists are tracked, +1 assist for each teammate (the same
+ * rule as "Got Kill" in the end-of-round review).
+ */
+export function buildKillChanges(
+  players: ReadonlyArray<Pick<Player, 'id' | 'team'>>,
+  killerId: number,
+  categories: StatCategories
+): StatChange[] {
+  const changes: StatChange[] = [];
+  const killer = players.find(player => player.id === killerId);
+  if (!killer) return changes;
+  if (categories.kills) changes.push({ playerId: killerId, stat: 'kills', delta: 1 });
+  if (categories.assists) {
+    for (const teammate of players) {
+      if (teammate.team === killer.team && teammate.id !== killerId) {
+        changes.push({ playerId: teammate.id, stat: 'assists', delta: 1 });
+      }
+    }
+  }
+  return changes;
+}

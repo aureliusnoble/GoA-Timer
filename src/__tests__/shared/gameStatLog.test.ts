@@ -14,6 +14,9 @@ import {
   saveRoundDraft,
   getFinalRoundStatus,
   toMatchRoundStats,
+  applyStatChanges,
+  invertStatChanges,
+  buildKillChanges,
   STAT_KEYS,
   GameStatLog,
   StatCategories,
@@ -201,5 +204,44 @@ describe('toMatchRoundStats', () => {
     for (const entry of entries) {
       expect(Object.keys(entry).filter(key => !allowedKeys.includes(key))).toEqual([]);
     }
+  });
+});
+
+describe('live changes', () => {
+  it('live tallies then a review of the same round are not double counted', () => {
+    let log = applyStatChanges(createEmptyStatLog(), 1, [{ playerId: 1, stat: 'kills', delta: 1 }]);
+    log = applyStatChanges(log, 1, [{ playerId: 1, stat: 'kills', delta: 1 }]);
+    const review = buildReviewValues(log, 1, [{ id: 1 }]);
+    expect(review[1].kills).toBe(2);
+    log = commitRound(log, 1, filterValuesToCategories(review, { ...NO_CATEGORIES, kills: true }));
+    expect(deriveTotals(log, 1)).toEqual({ totalKills: 2 });
+  });
+
+  it('undo with inverted changes restores the previous values, never below 0', () => {
+    const changes = [{ playerId: 1, stat: 'deaths' as const, delta: 1 }];
+    let log = applyStatChanges(createEmptyStatLog(), 1, changes);
+    log = applyStatChanges(log, 1, invertStatChanges(changes));
+    expect(getRoundEntry(log, 1)?.players[1]).toEqual({ deaths: 0 });
+    log = applyStatChanges(log, 1, invertStatChanges(changes));
+    expect(getRoundEntry(log, 1)?.players[1]).toEqual({ deaths: 0 });
+  });
+
+  it('live changes keep the round unreviewed', () => {
+    const log = applyStatChanges(createEmptyStatLog(), 1, [{ playerId: 1, stat: 'goldEarned', delta: 1 }]);
+    expect(isRoundReviewed(log, 1)).toBe(false);
+  });
+
+  it('buildKillChanges gives teammates assists only when assists are tracked', () => {
+    const players = [
+      makePlayer(1, Team.Titans), makePlayer(2, Team.Titans), makePlayer(3, Team.Atlanteans),
+    ];
+    expect(buildKillChanges(players, 1, { ...NO_CATEGORIES, kills: true })).toEqual([
+      { playerId: 1, stat: 'kills', delta: 1 },
+    ]);
+    expect(buildKillChanges(players, 1, { ...NO_CATEGORIES, kills: true, assists: true })).toEqual([
+      { playerId: 1, stat: 'kills', delta: 1 },
+      { playerId: 2, stat: 'assists', delta: 1 },
+    ]);
+    expect(buildKillChanges(players, 99, { ...NO_CATEGORIES, kills: true })).toEqual([]);
   });
 });

@@ -1,6 +1,6 @@
 // src/shared/utils/statTrackingSettings.ts
 // Which in-game stats the user tracks. Remembered between games in localStorage.
-import { STAT_KEYS, GameStatLog, StatCategories } from './gameStatLog';
+import { COUNT_STAT_KEYS, STAT_KEYS, GameStatLog, StatCategories } from './gameStatLog';
 
 export const STAT_TRACKING_STORAGE_KEY = 'goa-stat-tracking';
 
@@ -83,4 +83,9 @@ export function getCategoriesInUse(log: GameStatLog, settings: StatTrackingSetti
 
 export function isStatTrackingInUse(log: GameStatLog, settings: StatTrackingSettings): boolean {
   return Object.values(getCategoriesInUse(log, settings)).some(Boolean);
+}
+
+/** Live quick-log is shown when logging is on and at least one count stat is tracked. */
+export function isLiveTrackingOn(settings: StatTrackingSettings): boolean {
+  return settings.enabled && COUNT_STAT_KEYS.some(key => settings.categories[key]);
 }

@@ -8,6 +8,7 @@ import {
   defaultStatTrackingSettings,
   getCategoriesInUse,
   isStatTrackingInUse,
+  isLiveTrackingOn,
   STAT_TRACKING_STORAGE_KEY,
   StatTrackingSettings,
 } from '../../shared/utils/statTrackingSettings';
@@ -65,5 +66,13 @@ describe('categories in use', () => {
     expect(inUse.kills).toBe(false);
     expect(isStatTrackingInUse(log, defaultStatTrackingSettings())).toBe(true);
     expect(isStatTrackingInUse(createEmptyStatLog(), defaultStatTrackingSettings())).toBe(false);
+  });
+});
+
+describe('isLiveTrackingOn', () => {
+  it('needs logging on and at least one count category', () => {
+    expect(isLiveTrackingOn(KILLS_ON)).toBe(true);
+    expect(isLiveTrackingOn({ ...KILLS_ON, enabled: false })).toBe(false);
+    expect(isLiveTrackingOn({ enabled: true, categories: { ...KILLS_ON.categories, kills: false, level: true } })).toBe(false);
   });
 });

@@ -15,12 +15,27 @@ import {
   Bot, 
   Coins,
   Shield, // New icon for player level
+  ChartColumn,
+  Undo2,
 } from 'lucide-react';
 import EnhancedTooltip from './common/EnhancedTooltip';
 import { useSound } from '../context/SoundContext';
 import EndOfRoundAssistant from './EndOfRoundAssistant';
-import { GameStatLog, RoundValues, buildReviewValues } from '../shared/utils/gameStatLog';
-import { StatTrackingSettings } from '../shared/utils/statTrackingSettings';
+import LiveStatChips, { LIVE_STAT_LABELS } from './LiveStatChips';
+import StatCategoryToggles from './common/StatCategoryToggles';
+import {
+  COUNT_STAT_KEYS,
+  CountStatKey,
+  GameStatLog,
+  RoundValues,
+  StatChange,
+  buildKillChanges,
+  buildReviewValues,
+  getRoundEntry,
+  invertStatChanges,
+} from '../shared/utils/gameStatLog';
+import { StatTrackingSettings, isLiveTrackingOn } from '../shared/utils/statTrackingSettings';
+import { isTrackedStat } from '../shared/utils/statValues';
 
 interface GameTimerProps {
   gameState: GameState;
@@ -58,7 +73,20 @@ interface GameTimerProps {
   /** Remembered stat-tracking settings (logging switch + categories). */
   trackingSettings: StatTrackingSettings;
   onTrackingSettingsChange: (settings: StatTrackingSettings) => void;
+  /** Live quick-log (and its undo). */
+  onLiveStatChanges?: (round: number, changes: StatChange[]) => void;
 }
+
+/** One undoable live-log action. */
+interface LiveAction {
+  round: number;
+  label: string;
+  changes: StatChange[];
+}
+
+/** Game totals shown on the player cards (level is shown next to the hero name). */
+type CardTotalKey = 'totalKills' | 'totalDeaths' | 'totalAssists' | 'totalMinionKills' | 'totalGoldEarned';
+const CARD_TOTAL_KEYS: readonly CardTotalKey[] = ['totalKills', 'totalDeaths', 'totalAssists', 'totalMinionKills', 'totalGoldEarned'];
 
 const GameTimer: React.FC<GameTimerProps> = ({
   gameState,
@@ -91,13 +119,72 @@ const GameTimer: React.FC<GameTimerProps> = ({
   onSavePlayerStats,
   onSaveRoundDraft,
   trackingSettings,
-  onTrackingSettingsChange
+  onTrackingSettingsChange,
+  onLiveStatChanges
 }) => {
   const { playSound } = useSound();
   
   // New state for end of round assistant
   const [showEndOfRoundAssistant, setShowEndOfRoundAssistant] = useState<boolean>(false);
-  
+
+  // Live stat tracking (never touches the timers)
+  const liveOn = isLiveTrackingOn(trackingSettings) && !!onLiveStatChanges;
+  const currentRoundEntry = getRoundEntry(statLog, gameState.round);
+  const [showStatsPanel, setShowStatsPanel] = useState<boolean>(false);
+  const [undoStack, setUndoStack] = useState<LiveAction[]>([]);
+  const [undoVisible, setUndoVisible] = useState<boolean>(false);
+
+  // Undo only covers the current round
+  useEffect(() => {
+    setUndoStack([]);
+    setUndoVisible(false);
+  }, [gameState.round]);
+
+  // The undo bar hides 5 s after the last live action
+  useEffect(() => {
+    if (!undoVisible) return;
+    const timeout = setTimeout(() => setUndoVisible(false), 5000);
+    return () => clearTimeout(timeout);
+  }, [undoVisible, undoStack]);
+
+  const heroLabel = (playerId: number) => {
+    const player = players.find(p => p.id === playerId);
+    return player?.hero?.name || player?.name || `Player ${playerId}`;
+  };
+
+  const logLive = (changes: StatChange[], label: string) => {
+    if (!onLiveStatChanges || changes.length === 0) return;
+    playSound('buttonClick');
+    onLiveStatChanges(gameState.round, changes);
+    setUndoStack(prev => [...prev.slice(-19), { round: gameState.round, label, changes }]);
+    setUndoVisible(true);
+  };
+
+  const handleLiveAdd = (player: Player, stat: CountStatKey) => {
+    const changes: StatChange[] =
+      stat === 'kills'
+        ? buildKillChanges(players, player.id, trackingSettings.categories)
+        : [{ playerId: player.id, stat, delta: 1 }];
+    const assists = changes.filter(change => change.stat === 'assists').length;
+    const label = `+1 ${LIVE_STAT_LABELS[stat]} · ${heroLabel(player.id)}${assists > 0 ? ` (+${assists} assist${assists > 1 ? 's' : ''})` : ''}`;
+    logLive(changes, label);
+  };
+
+  const handleUndo = () => {
+    const last = undoStack[undoStack.length - 1];
+    if (!last || !onLiveStatChanges) return;
+    playSound('buttonClick');
+    onLiveStatChanges(last.round, invertStatChanges(last.changes));
+    const rest = undoStack.slice(0, -1);
+    setUndoStack(rest);
+    setUndoVisible(rest.length > 0);
+  };
+
+  const prefilledFromLive =
+    !!currentRoundEntry &&
+    !currentRoundEntry.reviewed &&
+    Object.values(currentRoundEntry.players).some(values => COUNT_STAT_KEYS.some(key => (values[key] ?? 0) > 0));
+
   const formatTime = (seconds: number): string => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
@@ -137,29 +224,12 @@ const GameTimer: React.FC<GameTimerProps> = ({
     }
   }, [moveTimeRemaining, moveTimerActive, moveTimerEnabled, playSound]);
 
-  // Helper function to check if ANY player has logged stats
-  const hasAnyPlayerLoggedStats = (): boolean => {
-    return players.some(player => 
-      player.stats && (
-        (player.stats.totalKills ?? 0) > 0 ||
-        (player.stats.totalAssists ?? 0) > 0 ||
-        (player.stats.totalDeaths ?? 0) > 0 ||
-        (player.stats.totalMinionKills ?? 0) > 0 ||
-        (player.stats.totalGoldEarned ?? 0) > 0 ||
-        player.stats.level !== undefined
-      )
-    );
-  };
+  // Helper function to check if ANY player has a specific stat tracked (0 is a tracked value)
+  const hasAnyPlayerLoggedStat = (statName: CardTotalKey): boolean =>
+    players.some(player => isTrackedStat(player.stats?.[statName]));
 
-  // Helper function to check if ANY player has a specific stat
-  const hasAnyPlayerLoggedStat = (statName: 'totalKills' | 'totalDeaths' | 'totalAssists' | 'totalMinionKills' | 'totalGoldEarned' | 'level'): boolean => {
-    return players.some(player => 
-      player.stats && 
-      (statName === 'level' 
-        ? player.stats[statName] !== undefined 
-        : (player.stats[statName] ?? 0) > 0)
-    );
-  };
+  // Helper function to check if ANY player has a total to show on the cards
+  const hasAnyPlayerLoggedStats = (): boolean => CARD_TOTAL_KEYS.some(hasAnyPlayerLoggedStat);
 
   // Button click handlers with sound
   const handleButtonClick = () => {
@@ -210,6 +280,9 @@ const GameTimer: React.FC<GameTimerProps> = ({
   const handleStartNextTurn = () => {
     // Show the end of round assistant if this is the end of turn 4
     if (gameState.turn === 4) {
+      // The review takes over corrections for this round: live undo ends here
+      setUndoStack([]);
+      setUndoVisible(false);
       setShowEndOfRoundAssistant(true);
     } else {
       // Otherwise just start the next turn as usual
@@ -690,14 +763,53 @@ const GameTimer: React.FC<GameTimerProps> = ({
         )}
       </div>
       
-      {/* Player Selection Grid - Improved layout with larger cards */}
-      {gameState.currentPhase !== 'turn-end' && (
+      {/* Player Selection Grid - Improved layout with larger cards (kept at turn end while live tracking is on) */}
+      {(gameState.currentPhase !== 'turn-end' || liveOn) && (
         <div className="mt-6">
-          <h3 className="text-xl font-bold mb-3">
-            {gameState.currentPhase === 'strategy' 
-              ? 'Players (waiting for strategy phase to end)' 
-              : 'Select Player'}
-          </h3>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h3 className="text-xl font-bold">
+              {gameState.currentPhase === 'strategy' 
+                ? 'Players (waiting for strategy phase to end)' 
+                : gameState.currentPhase === 'turn-end'
+                ? 'Players'
+                : 'Select Player'}
+            </h3>
+            <button
+              type="button"
+              onClick={() => setShowStatsPanel(open => !open)}
+              aria-expanded={showStatsPanel}
+              className="flex-shrink-0 flex items-center text-sm px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600"
+            >
+              <ChartColumn size={16} className="mr-1" />
+              {liveOn ? 'Stats' : 'Track stats'}
+            </button>
+          </div>
+
+          {/* Tracking settings (not while the end-of-round review, which has its own copy, is open) */}
+          {showStatsPanel && !showEndOfRoundAssistant && (
+            <div className="mb-3 p-3 bg-gray-800 rounded-lg">
+              <label className="flex items-center mb-2 font-medium">
+                <input
+                  type="checkbox"
+                  checked={trackingSettings.enabled}
+                  onChange={e => onTrackingSettingsChange({ ...trackingSettings, enabled: e.target.checked })}
+                  className="mr-2 h-5 w-5"
+                />
+                Log player stats
+              </label>
+              {trackingSettings.enabled && (
+                <StatCategoryToggles
+                  categories={trackingSettings.categories}
+                  onToggle={(key, enabled) =>
+                    onTrackingSettingsChange({
+                      ...trackingSettings,
+                      categories: { ...trackingSettings.categories, [key]: enabled },
+                    })
+                  }
+                />
+              )}
+            </div>
+          )}
           
           {/* Display all players in a grid with larger tiles */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -708,6 +820,24 @@ const GameTimer: React.FC<GameTimerProps> = ({
         </div>
       )}
       
+      {/* Live-log undo bar (only after a live action, hides after 5 s) */}
+      {liveOn && undoVisible && undoStack.length > 0 && (
+        <div
+          role="status"
+          className="fixed bottom-14 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 max-w-[calc(100%-2rem)] bg-gray-900/95 border border-gray-600 rounded-full pl-4 pr-2 py-2 shadow-lg text-sm"
+        >
+          <span className="truncate">{undoStack[undoStack.length - 1].label}</span>
+          <button
+            type="button"
+            onClick={handleUndo}
+            className="flex-shrink-0 flex items-center px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 font-medium"
+          >
+            <Undo2 size={14} className="mr-1" />
+            Undo
+          </button>
+        </div>
+      )}
+
       {/* End of Round Assistant */}
       <EndOfRoundAssistant
         players={players}
@@ -718,6 +848,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
         onDismiss={handleEndOfRoundDismiss}
         trackingSettings={trackingSettings}
         onTrackingSettingsChange={onTrackingSettingsChange}
+        prefilledFromLive={prefilledFromLive}
       />
     </div>
   );
@@ -727,18 +858,6 @@ const GameTimer: React.FC<GameTimerProps> = ({
     const isActive = gameState.activeHeroIndex === index;
     const hasCompleted = gameState.completedTurns.includes(index);
     const isSelectable = gameState.currentPhase === 'move' && !hasCompleted && !isActive;
-    
-
-    
-    // Check if this player has any stats
-    const playerHasStats = player.stats && (
-      (player.stats.totalKills ?? 0) > 0 ||
-      (player.stats.totalAssists ?? 0) > 0 ||
-      (player.stats.totalDeaths ?? 0) > 0 ||
-      (player.stats.totalMinionKills ?? 0) > 0 ||
-      (player.stats.totalGoldEarned ?? 0) > 0 ||
-      player.stats.level !== undefined
-    );
     
     return (
       <div
@@ -812,10 +931,19 @@ const GameTimer: React.FC<GameTimerProps> = ({
               </div>
             )}
 
-            {/* Only show stats if they've been logged and at least one stat exists */}
-            {playerHasStats && hasAnyPlayerLoggedStats() && (
+            {liveOn && !showEndOfRoundAssistant && (
+              <LiveStatChips
+                playerName={player.hero?.name || player.name}
+                categories={trackingSettings.categories}
+                roundValues={currentRoundEntry?.players[player.id]}
+                onAdd={stat => handleLiveAdd(player, stat)}
+              />
+            )}
+
+            {/* Game totals: a stat shows once any player has it tracked; a tracked 0 shows as 0 */}
+            {hasAnyPlayerLoggedStats() && (
               <div className="mt-1 sm:mt-2 grid grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-1 sm:gap-y-2 text-xs sm:text-base bg-black/20 p-1.5 sm:p-2 rounded">
-                {/* Only show kills stat if at least one player has kills */}
+                {/* Only show kills if at least one player has kills tracked */}
                 {hasAnyPlayerLoggedStat('totalKills') && (
                   <span className="flex items-center" title="Kills">
                     <Swords size={18} className="mr-2 text-blue-400" /> 
@@ -823,7 +951,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
                   </span>
                 )}
                 
-                {/* Only show deaths stat if at least one player has deaths */}
+                {/* Only show deaths if at least one player has deaths tracked */}
                 {hasAnyPlayerLoggedStat('totalDeaths') && (
                   <span className="flex items-center" title="Deaths">
                     <Skull size={18} className="mr-2 text-red-400" /> 
@@ -831,7 +959,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
                   </span>
                 )}
                 
-                {/* Only show assists stat if at least one player has assists */}
+                {/* Only show assists if at least one player has assists tracked */}
                 {hasAnyPlayerLoggedStat('totalAssists') && (
                   <span className="flex items-center" title="Assists">
                     <Users size={18} className="mr-2 text-green-400" /> 
@@ -839,7 +967,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
                   </span>
                 )}
                 
-                {/* Only show minion kills stat if at least one player has minion kills */}
+                {/* Only show minion kills if at least one player has minion kills tracked */}
                 {hasAnyPlayerLoggedStat('totalMinionKills') && (
                   <span className="flex items-center" title="Minion Kills">
                     <Bot size={18} className="mr-2 text-yellow-400" /> 
@@ -847,7 +975,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
                   </span>
                 )}
                 
-                {/* Only show gold earned stat if at least one player has gold */}
+                {/* Only show gold earned if at least one player has gold tracked */}
                 {hasAnyPlayerLoggedStat('totalGoldEarned') && (
                   <span className="flex items-center col-span-2 mt-1 justify-center bg-amber-900/30 py-1 px-2 rounded" title="Total Gold Earned">
                     <Coins size={18} className="mr-2 text-amber-400" /> 
