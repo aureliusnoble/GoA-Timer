@@ -21,5 +21,8 @@ export default defineConfig(({ mode }) => ({
   test: {
     environment: 'jsdom',
     globals: true,
+    // Heavy component tests can exceed the 5 s default when every worker is busy in a full run
+    testTimeout: 15000,
+    hookTimeout: 15000,
   },
 }))

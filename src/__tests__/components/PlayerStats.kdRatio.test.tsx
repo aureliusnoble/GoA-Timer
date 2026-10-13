@@ -55,12 +55,19 @@ vi.mock('../../components/matches/PlayerRelationshipGraph', () => ({ default: ()
 
 const NAMES = ['Ana', 'Ben', 'Cleo'];
 
+// Plain DOM / text queries: role queries compute accessible names for the whole (large) page,
+// which made this test slow enough to time out under a loaded full-suite run.
+
 /** Player names in card order. */
-function cardOrder(): string[] {
-  return screen
-    .getAllByRole('heading', { level: 3 })
+function cardOrder(container: HTMLElement): string[] {
+  return Array.from(container.querySelectorAll('h3'))
     .map(h => h.textContent ?? '')
     .filter(name => NAMES.includes(name));
+}
+
+/** The "KD" sort button ("KD", "KD ↓" or "KD ↑"). */
+function kdSortButton(): HTMLElement {
+  return screen.getByText(/^KD( [↑↓])?$/);
 }
 
 /** KD Ratio values in card order. */
@@ -74,15 +81,15 @@ beforeEach(() => {
 
 describe('PlayerStats K/D ratio when deaths were never tracked', () => {
   it('shows N/A and sorts the player as the lowest K/D', async () => {
-    render(<PlayerStats onBack={() => {}} onViewSkillOverTime={() => {}} onViewPlayerDetails={() => {}} />);
+    const { container } = render(<PlayerStats onBack={() => {}} onViewSkillOverTime={() => {}} onViewPlayerDetails={() => {}} />);
     await screen.findByText('Ana');
-    expect(cardOrder()).toEqual(['Ana', 'Ben', 'Cleo']); // default: by skill
+    expect(cardOrder(container)).toEqual(['Ana', 'Ben', 'Cleo']); // default: by skill
 
-    fireEvent.click(screen.getByRole('button', { name: /^KD/ }));
-    expect(cardOrder()).toEqual(['Ben', 'Cleo', 'Ana']); // descending: untracked last
+    fireEvent.click(kdSortButton());
+    expect(cardOrder(container)).toEqual(['Ben', 'Cleo', 'Ana']); // descending: untracked last
     expect(kdValues()).toEqual(['2', '0.5', 'N/A']);
 
-    fireEvent.click(screen.getByRole('button', { name: /^KD/ }));
-    expect(cardOrder()).toEqual(['Ana', 'Cleo', 'Ben']); // ascending: untracked is the lowest
+    fireEvent.click(kdSortButton());
+    expect(cardOrder(container)).toEqual(['Ana', 'Cleo', 'Ben']); // ascending: untracked is the lowest
   });
 });
