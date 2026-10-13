@@ -22,6 +22,7 @@ import EnhancedTooltip from './common/EnhancedTooltip';
 import { useSound } from '../context/SoundContext';
 import EndOfRoundAssistant from './EndOfRoundAssistant';
 import LiveStatChips, { LIVE_STAT_LABELS } from './LiveStatChips';
+import DefeatPrompt from './DefeatPrompt';
 import StatCategoryToggles from './common/StatCategoryToggles';
 import {
   COUNT_STAT_KEYS,
@@ -88,6 +89,9 @@ interface LiveAction {
 type CardTotalKey = 'totalKills' | 'totalDeaths' | 'totalAssists' | 'totalMinionKills' | 'totalGoldEarned';
 const CARD_TOTAL_KEYS: readonly CardTotalKey[] = ['totalKills', 'totalDeaths', 'totalAssists', 'totalMinionKills', 'totalGoldEarned'];
 
+/** Lost lives still waiting to be logged as defeats, per team. */
+const NO_PENDING_DEFEATS: Record<Team, number> = { [Team.Titans]: 0, [Team.Atlanteans]: 0 };
+
 const GameTimer: React.FC<GameTimerProps> = ({
   gameState,
   players,
@@ -133,12 +137,20 @@ const GameTimer: React.FC<GameTimerProps> = ({
   const [showStatsPanel, setShowStatsPanel] = useState<boolean>(false);
   const [undoStack, setUndoStack] = useState<LiveAction[]>([]);
   const [undoVisible, setUndoVisible] = useState<boolean>(false);
+  const [pendingDefeats, setPendingDefeats] = useState<Record<Team, number>>(NO_PENDING_DEFEATS);
+  const defeatPromptOn = liveOn && (trackingSettings.categories.kills || trackingSettings.categories.deaths);
 
-  // Undo only covers the current round
+  // Undo (and logging a lost life) only covers the current round
   useEffect(() => {
     setUndoStack([]);
     setUndoVisible(false);
+    setPendingDefeats(NO_PENDING_DEFEATS);
   }, [gameState.round]);
+
+  // Switching kills/deaths tracking off drops defeats still waiting to be logged
+  useEffect(() => {
+    if (!defeatPromptOn) setPendingDefeats(NO_PENDING_DEFEATS);
+  }, [defeatPromptOn]);
 
   // The undo bar hides 5 s after the last live action
   useEffect(() => {
@@ -178,6 +190,19 @@ const GameTimer: React.FC<GameTimerProps> = ({
     const rest = undoStack.slice(0, -1);
     setUndoStack(rest);
     setUndoVisible(rest.length > 0);
+  };
+
+  const handleDefeatLogged = (team: Team, victimId: number | undefined, killerId: number | undefined) => {
+    const changes: StatChange[] = [];
+    if (victimId !== undefined && trackingSettings.categories.deaths) {
+      changes.push({ playerId: victimId, stat: 'deaths', delta: 1 });
+    }
+    if (killerId !== undefined) {
+      changes.push(...buildKillChanges(players, killerId, trackingSettings.categories));
+    }
+    const victim = victimId !== undefined ? heroLabel(victimId) : 'Hero';
+    logLive(changes, `Defeat: ${victim}${killerId !== undefined ? ` by ${heroLabel(killerId)}` : ''}`);
+    setPendingDefeats(prev => ({ ...prev, [team]: Math.max(0, prev[team] - 1) }));
   };
 
   const prefilledFromLive =
@@ -280,9 +305,10 @@ const GameTimer: React.FC<GameTimerProps> = ({
   const handleStartNextTurn = () => {
     // Show the end of round assistant if this is the end of turn 4
     if (gameState.turn === 4) {
-      // The review takes over corrections for this round: live undo ends here
+      // The review takes over corrections for this round: live undo and unlogged defeats end here
       setUndoStack([]);
       setUndoVisible(false);
+      setPendingDefeats(NO_PENDING_DEFEATS);
       setShowEndOfRoundAssistant(true);
     } else {
       // Otherwise just start the next turn as usual
@@ -326,6 +352,14 @@ const GameTimer: React.FC<GameTimerProps> = ({
   
   const handleAdjustTeamLife = (team: Team, delta: number) => {
     playSound('lifeChange');
+    // A lost life is a defeated hero: offer to log it (only when it really drops)
+    if (defeatPromptOn) {
+      if (delta < 0 && gameState.teamLives[team] > 0) {
+        setPendingDefeats(prev => ({ ...prev, [team]: prev[team] + 1 }));
+      } else if (delta > 0) {
+        setPendingDefeats(prev => ({ ...prev, [team]: Math.max(0, prev[team] - 1) }));
+      }
+    }
     onAdjustTeamLife(team, delta);
   };
 
@@ -339,6 +373,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
             <button 
               className="bg-blue-700 hover:bg-blue-600 rounded-full w-10 h-10 flex items-center justify-center text-2xl font-bold"
               onClick={() => handleAdjustTeamLife(Team.Titans, -1)}
+              aria-label="Remove a Titans life"
             >
               -
             </button>
@@ -346,10 +381,22 @@ const GameTimer: React.FC<GameTimerProps> = ({
             <button 
               className="bg-blue-700 hover:bg-blue-600 rounded-full w-10 h-10 flex items-center justify-center text-2xl font-bold"
               onClick={() => handleAdjustTeamLife(Team.Titans, 1)}
+              aria-label="Add a Titans life"
             >
               +
             </button>
           </div>
+
+          {defeatPromptOn && pendingDefeats[Team.Titans] > 0 && (
+            <DefeatPrompt
+              team={Team.Titans}
+              pending={pendingDefeats[Team.Titans]}
+              players={players}
+              categories={trackingSettings.categories}
+              onLog={(victimId, killerId) => handleDefeatLogged(Team.Titans, victimId, killerId)}
+              onSkip={() => setPendingDefeats(prev => ({ ...prev, [Team.Titans]: 0 }))}
+            />
+          )}
           
           {/* New: Titans Victory Button */}
           <button
@@ -568,6 +615,7 @@ const GameTimer: React.FC<GameTimerProps> = ({
             <button 
               className="bg-red-700 hover:bg-red-600 rounded-full w-10 h-10 flex items-center justify-center text-2xl font-bold"
               onClick={() => handleAdjustTeamLife(Team.Atlanteans, -1)}
+              aria-label="Remove an Atlanteans life"
             >
               -
             </button>
@@ -575,10 +623,22 @@ const GameTimer: React.FC<GameTimerProps> = ({
             <button 
               className="bg-red-700 hover:bg-red-600 rounded-full w-10 h-10 flex items-center justify-center text-2xl font-bold"
               onClick={() => handleAdjustTeamLife(Team.Atlanteans, 1)}
+              aria-label="Add an Atlanteans life"
             >
               +
             </button>
           </div>
+
+          {defeatPromptOn && pendingDefeats[Team.Atlanteans] > 0 && (
+            <DefeatPrompt
+              team={Team.Atlanteans}
+              pending={pendingDefeats[Team.Atlanteans]}
+              players={players}
+              categories={trackingSettings.categories}
+              onLog={(victimId, killerId) => handleDefeatLogged(Team.Atlanteans, victimId, killerId)}
+              onSkip={() => setPendingDefeats(prev => ({ ...prev, [Team.Atlanteans]: 0 }))}
+            />
+          )}
           
           {/* New: Atlanteans Victory Button */}
           <button

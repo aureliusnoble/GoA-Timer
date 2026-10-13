@@ -257,3 +257,87 @@ describe('GameTimer player card totals', () => {
     expect(screen.queryByTitle('Total Gold Earned')).toBeNull();
   });
 });
+
+describe('GameTimer defeat prompt on lives "-" (4.8)', () => {
+  it('asks who was defeated and by whom, then logs one undoable action', () => {
+    const { props } = renderTimer({ trackingSettings: tracking({ kills: true, deaths: true }) });
+    fireEvent.click(screen.getByLabelText('Remove an Atlanteans life'));
+    expect(props.onAdjustTeamLife).toHaveBeenCalledWith(Team.Atlanteans, -1);
+    const prompt = screen.getByRole('group', { name: 'Log defeat' });
+    fireEvent.click(prompt.querySelector('button[title="Cat"]') as HTMLElement);
+    fireEvent.click(prompt.querySelector('button[title="Ann"]') as HTMLElement);
+    expect(props.onLiveStatChanges).toHaveBeenCalledWith(2, [
+      { playerId: 3, stat: 'deaths', delta: 1 },
+      { playerId: 1, stat: 'kills', delta: 1 },
+    ]);
+    expect(screen.queryByRole('group', { name: 'Log defeat' })).toBeNull();
+    expect(screen.getByText('Defeat: Tigerclaw by Arien')).toBeTruthy();
+  });
+
+  it('can be skipped', () => {
+    renderTimer({ trackingSettings: tracking({ kills: true }) });
+    fireEvent.click(screen.getByLabelText('Remove a Titans life'));
+    fireEvent.click(screen.getByLabelText('Skip logging this defeat'));
+    expect(screen.queryByRole('group', { name: 'Log defeat' })).toBeNull();
+  });
+
+  it('does not appear when the team has no lives left to lose', () => {
+    renderTimer({
+      gameState: gameState({ teamLives: { [Team.Titans]: 0, [Team.Atlanteans]: 4 } }),
+      trackingSettings: tracking({ deaths: true }),
+    });
+    fireEvent.click(screen.getByLabelText('Remove a Titans life'));
+    expect(screen.queryByRole('group', { name: 'Log defeat' })).toBeNull();
+  });
+
+  it('"+" on the same team withdraws a pending defeat (a correction, not a death)', () => {
+    renderTimer({ trackingSettings: tracking({ deaths: true }) });
+    fireEvent.click(screen.getByLabelText('Remove a Titans life'));
+    expect(screen.getByRole('group', { name: 'Log defeat' })).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Add a Titans life'));
+    expect(screen.queryByRole('group', { name: 'Log defeat' })).toBeNull();
+  });
+
+  it('does not appear when only gold is tracked', () => {
+    renderTimer({ trackingSettings: tracking({ goldEarned: true }) });
+    fireEvent.click(screen.getByLabelText('Remove a Titans life'));
+    expect(screen.queryByRole('group', { name: 'Log defeat' })).toBeNull();
+  });
+
+  it('several lost lives are logged one at a time, without touching the timers', () => {
+    const { props } = renderTimer({ moveTimerActive: true, trackingSettings: tracking({ deaths: true }) });
+    fireEvent.click(screen.getByLabelText('Remove an Atlanteans life'));
+    fireEvent.click(screen.getByLabelText('Remove an Atlanteans life'));
+    expect(screen.getByText('Log defeat (2 pending)')).toBeTruthy();
+    fireEvent.click(screen.getByRole('group', { name: 'Log defeat' }).querySelector('button[title="Cat"]') as HTMLElement);
+    expect(screen.getByText('Log defeat')).toBeTruthy();
+    fireEvent.click(screen.getByRole('group', { name: 'Log defeat' }).querySelector('button[title="Cat"]') as HTMLElement);
+    expect(props.onLiveStatChanges).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('group', { name: 'Log defeat' })).toBeNull();
+    expect(props.onPauseMoveTimer).not.toHaveBeenCalled();
+    expect(props.onResetMoveTimer).not.toHaveBeenCalled();
+  });
+
+  it('a new round drops defeats still waiting to be logged', () => {
+    const { props, rerender } = renderTimer({ trackingSettings: tracking({ deaths: true }) });
+    fireEvent.click(screen.getByLabelText('Remove a Titans life'));
+    rerender(<GameTimer {...props} gameState={gameState({ round: 3, turn: 1, currentPhase: 'strategy' })} />);
+    expect(screen.queryByRole('group', { name: 'Log defeat' })).toBeNull();
+  });
+
+  it('switching tracking off drops pending defeats (they do not come back when it is switched on again)', () => {
+    const { props, rerender } = renderTimer({ trackingSettings: tracking({ deaths: true }) });
+    fireEvent.click(screen.getByLabelText('Remove a Titans life'));
+    rerender(<GameTimer {...props} trackingSettings={tracking({ deaths: true }, false)} />);
+    rerender(<GameTimer {...props} trackingSettings={tracking({ deaths: true })} />);
+    expect(screen.queryByRole('group', { name: 'Log defeat' })).toBeNull();
+  });
+
+  it('End Round hands pending defeats over to the review (no prompt after closing it)', () => {
+    renderTimer({ gameState: gameState({ turn: 4, currentPhase: 'turn-end' }), trackingSettings: tracking({ deaths: true }) });
+    fireEvent.click(screen.getByLabelText('Remove a Titans life'));
+    fireEvent.click(screen.getByText('End Round'));
+    fireEvent.click(screen.getByLabelText('Close'));
+    expect(screen.queryByRole('group', { name: 'Log defeat' })).toBeNull();
+  });
+});
